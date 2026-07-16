@@ -322,15 +322,16 @@ export function TasksPage() {
             }}
           >
             <div style={{ width: 28, flexShrink: 0 }} />
-            <div style={{ flex: '0 1 640px', minWidth: 120, paddingRight: 8 }}>
+            <div style={{ flex: '0 1 460px', minWidth: 120, paddingRight: 8 }}>
               <span style={{ fontSize: 11, fontWeight: 500, color: '#9CA3AF' }}>Name</span>
             </div>
             {[
-              { label: 'Assignee', w: 76  },
-              { label: 'Due date', w: 100 },
-              { label: 'Priority', w: 100 },
-              { label: 'Status',   w: 120 },
-              { label: 'Comments', w: 64  },
+              { label: 'Project',  w: 160 },
+              { label: 'Assignee', w: 90  },
+              { label: 'Due date', w: 115 },
+              { label: 'Priority', w: 115 },
+              { label: 'Status',   w: 135 },
+              { label: 'Comments', w: 80  },
             ].map(({ label, w }) => (
               <div key={label} style={{ width: w, flexShrink: 0, padding: '0 4px' }}>
                 <span style={{ fontSize: 11, fontWeight: 500, color: '#9CA3AF' }}>{label}</span>
@@ -384,6 +385,9 @@ export function TasksPage() {
 
           {/* Task list — grouped or flat */}
           {!isLoading && (() => {
+            // ── project id → display name map ─────────────────────────────────
+            const projectNameMap = new Map(projects.map((p) => [p.name, p.displayName]))
+
             // ── shared row renderer ───────────────────────────────────────────
             const renderRow = (task: Task, group: StatusGroup) => {
               const isDone     = group.closed && !group.blocked
@@ -391,6 +395,7 @@ export function TasksPage() {
               const due        = fmtDue(task.dueDate)
               const pri        = PRIORITY[task.priority] ?? { dot: '#9CA3AF', text: '#6B7280', label: task.priority }
               const assignees  = task.assignedTo.length > 0 ? task.assignedTo : (task.owner ? [task.owner] : [])
+              const projectName = task.project ? (projectNameMap.get(task.project) ?? task.project) : null
 
               return (
                 <div
@@ -418,7 +423,7 @@ export function TasksPage() {
                   </div>
 
                   {/* Name */}
-                  <div style={{ flex: '0 1 640px', display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, paddingRight: 8 }}>
+                  <div style={{ flex: '0 1 460px', display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, paddingRight: 8 }}>
                     {task.isMilestone && (
                       <span style={{ width: 8, height: 8, background: '#F59E0B', transform: 'rotate(45deg)', borderRadius: 2, flexShrink: 0 }} />
                     )}
@@ -441,9 +446,20 @@ export function TasksPage() {
                     )}
                   </div>
 
+                  {/* Project */}
+                  <div style={{ width: 160, flexShrink: 0, padding: '0 4px', minWidth: 0 }}>
+                    {projectName ? (
+                      <span style={{ fontSize: 12, color: '#6B7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
+                        {projectName}
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: 12, color: '#D1D5DB' }}>—</span>
+                    )}
+                  </div>
+
                   {/* Assignees */}
                   <div
-                    style={{ width: 76, flexShrink: 0, padding: '0 4px' }}
+                    style={{ width: 90, flexShrink: 0, padding: '0 4px' }}
                     onClick={(e) => { e.stopPropagation(); setAssigningTask(task) }}
                   >
                     {assignees.length > 0 ? (
@@ -465,7 +481,7 @@ export function TasksPage() {
                   </div>
 
                   {/* Due date */}
-                  <div style={{ width: 100, flexShrink: 0, padding: '0 4px' }}>
+                  <div style={{ width: 115, flexShrink: 0, padding: '0 4px' }}>
                     {due.text && (
                       <span style={{ fontSize: 12, fontWeight: due.color === '#EF4444' ? 600 : 400, color: due.color || '#6B7280' }}>
                         {due.text}
@@ -474,7 +490,7 @@ export function TasksPage() {
                   </div>
 
                   {/* Priority */}
-                  <div style={{ width: 100, flexShrink: 0, padding: '0 4px' }}>
+                  <div style={{ width: 115, flexShrink: 0, padding: '0 4px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                       <span style={{ width: 8, height: 8, borderRadius: '50%', background: pri.dot, flexShrink: 0 }} />
                       <span style={{ fontSize: 12, color: pri.text }}>{pri.label}</span>
@@ -482,7 +498,7 @@ export function TasksPage() {
                   </div>
 
                   {/* Status pill */}
-                  <div style={{ width: 120, flexShrink: 0, padding: '0 4px' }}>
+                  <div style={{ width: 135, flexShrink: 0, padding: '0 4px' }}>
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); setStatusChangeTarget(task) }}
@@ -507,7 +523,7 @@ export function TasksPage() {
                   </div>
 
                   {/* Comments */}
-                  <div style={{ width: 64, flexShrink: 0, padding: '0 4px' }}>
+                  <div style={{ width: 80, flexShrink: 0, padding: '0 4px' }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#D1D5DB', transition: 'color 100ms' }} className="group-hover:text-gray-400">
                       <svg fill="none" viewBox="0 0 14 14" width={12} height={12}>
                         <path d="M11 2H3a1 1 0 00-1 1v6a1 1 0 001 1h1l2 2 2-2h3a1 1 0 001-1V3a1 1 0 00-1-1z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>

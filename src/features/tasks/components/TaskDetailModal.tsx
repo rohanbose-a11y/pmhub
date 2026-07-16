@@ -378,8 +378,11 @@ export function TaskDetailModal({
   const saveDesc = async () => {
     setIsEditingDesc(false)
     if (description !== (dt.description ?? '')) {
-      await onUpdate(task.id, { subject: task.subject, status: liveStatus, priority: livePriority, description })
-      addActivity({ type: 'desc', text: 'Description updated' })
+      const ok = await onUpdate(task.id, { subject: task.subject, status: liveStatus, priority: livePriority, description })
+      if (ok) {
+        setFullTask((prev) => prev ? { ...prev, description } : null)
+        addActivity({ type: 'desc', text: 'Description updated' })
+      }
     }
   }
 
@@ -397,7 +400,8 @@ export function TaskDetailModal({
     const linkHtml = `<p><a href="${url}" target="_blank" rel="noopener noreferrer">${label}</a></p>`
     const newDesc  = (description ? description + linkHtml : linkHtml)
     setDescription(newDesc)
-    await onUpdate(task.id, { subject: task.subject, status: liveStatus, priority: livePriority, description: newDesc })
+    const ok = await onUpdate(task.id, { subject: task.subject, status: liveStatus, priority: livePriority, description: newDesc })
+    if (ok) setFullTask((prev) => prev ? { ...prev, description: newDesc } : null)
     addActivity({ type: 'link', text: `Link added: ${label}` })
     setLinkName('')
     setLinkUrl('')
@@ -408,7 +412,8 @@ export function TaskDetailModal({
     setIsEditingEngDays(false)
     const n = parseFloat(engDays)
     if (!isNaN(n) && n !== (dt.engagementDays ?? null)) {
-      await onUpdate(task.id, { subject: task.subject, status: liveStatus, priority: livePriority, engagementDays: n })
+      const ok = await onUpdate(task.id, { subject: task.subject, status: liveStatus, priority: livePriority, engagementDays: n })
+      if (ok) setFullTask((prev) => prev ? { ...prev, engagementDays: n } : null)
     } else if (isNaN(n)) {
       setEngDays(String(dt.engagementDays ?? ''))
     }
@@ -419,7 +424,8 @@ export function TaskDetailModal({
     setKraQuery('')
     setActType(val)
     if (val !== (dt.activityType ?? '')) {
-      await onUpdate(task.id, { subject: task.subject, status: liveStatus, priority: livePriority, activityType: val || undefined })
+      const ok = await onUpdate(task.id, { subject: task.subject, status: liveStatus, priority: livePriority, activityType: val || undefined })
+      if (ok) setFullTask((prev) => prev ? { ...prev, activityType: val || null } : null)
     }
   }
 

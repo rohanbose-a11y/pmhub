@@ -737,11 +737,14 @@ export function TasksPage() {
       {detailTaskId && (() => {
         const live = tasks.find((t) => t.id === detailTaskId)
         if (!live) return null
+        const detailIdx = filteredTasks.findIndex((t) => t.id === detailTaskId)
         return (
           <TaskDetailModal
             allTasks={tasks}
             onAssign={(t) => setAssigningTask(t)}
             onClose={() => setDetailTaskId(null)}
+            onPrev={detailIdx > 0 ? () => setDetailTaskId(filteredTasks[detailIdx - 1].id) : undefined}
+            onNext={detailIdx < filteredTasks.length - 1 ? () => setDetailTaskId(filteredTasks[detailIdx + 1].id) : undefined}
             onStatusChange={(t) => setStatusChangeTarget(t)}
             onUpdate={(taskId, input) => {
               const enriched = input.status === 'Completed'

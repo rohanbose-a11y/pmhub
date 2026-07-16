@@ -103,6 +103,8 @@ interface TaskDetailModalProps {
   onUpdate: (taskId: string, input: UpdateTaskInput) => Promise<boolean>
   onStatusChange: (task: Task) => void
   onAssign: (task: Task) => void
+  onPrev?: () => void  // navigate to previous task in the list; undefined = disabled
+  onNext?: () => void  // navigate to next task in the list; undefined = disabled
   drawer?: boolean    // render as right-side drawer instead of centred modal
 }
 
@@ -126,6 +128,8 @@ export function TaskDetailModal({
   onUpdate,
   onStatusChange,
   onAssign,
+  onPrev,
+  onNext,
   drawer = false,
 }: TaskDetailModalProps) {
   // Full task fetched from API (includes custom_kra, all computed fields)
@@ -254,6 +258,19 @@ export function TaskDetailModal({
       prevStatusRef.current = task.status
     }
   }, [task.status]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Keyboard navigation: ArrowLeft / ArrowRight to move between tasks ────────
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      // Don't fire while the user is typing in any input/textarea
+      const tag = (e.target as HTMLElement).tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable) return
+      if (e.key === 'ArrowLeft')  { e.preventDefault(); onPrev?.() }
+      if (e.key === 'ArrowRight') { e.preventDefault(); onNext?.() }
+    }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [onPrev, onNext])
 
   // ── @mention user search ───────────────────────────────────────────────────
   useEffect(() => {
@@ -562,12 +579,24 @@ export function TaskDetailModal({
                   <path d="M8 5h6M8 8h6M8 11h6" stroke="currentColor" strokeLinecap="round" strokeWidth="1.3"/>
                 </svg>
               </button>
-              <button className="w-7 h-7 flex items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 transition-colors">
+              <button
+                type="button"
+                onClick={onPrev}
+                disabled={!onPrev}
+                title="Previous task (←)"
+                className="w-7 h-7 flex items-center justify-center rounded-md transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              >
                 <svg fill="none" viewBox="0 0 14 14" width="12" height="12">
                   <path d="M9 3.5L5 7l4 3.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.4"/>
                 </svg>
               </button>
-              <button className="w-7 h-7 flex items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 transition-colors">
+              <button
+                type="button"
+                onClick={onNext}
+                disabled={!onNext}
+                title="Next task (→)"
+                className="w-7 h-7 flex items-center justify-center rounded-md transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              >
                 <svg fill="none" viewBox="0 0 14 14" width="12" height="12">
                   <path d="M5 3.5L9 7l-4 3.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.4"/>
                 </svg>

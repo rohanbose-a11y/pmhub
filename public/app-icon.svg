@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">ERPNext PM</title>
+  <desc id="desc">Rounded blue icon with a checklist and progress dot.</desc>
+  <rect width="128" height="128" rx="28" fill="#2563eb" />
+  <rect x="24" y="24" width="80" height="80" rx="18" fill="#eff6ff" />
+  <circle cx="42" cy="46" r="6" fill="#2563eb" />
+  <path d="M54 46h28" stroke="#1d4ed8" stroke-linecap="round" stroke-width="8" />
+  <circle cx="42" cy="68" r="6" fill="#2563eb" />
+  <path d="M54 68h22" stroke="#1d4ed8" stroke-linecap="round" stroke-width="8" />
+  <circle cx="42" cy="90" r="6" fill="#10b981" />
+  <path d="M54 90h30" stroke="#059669" stroke-linecap="round" stroke-width="8" />
+</svg>

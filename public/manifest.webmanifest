@@ -1,0 +1,17 @@
+{
+  "name": "ERPNext Project Management",
+  "short_name": "ERPNext PM",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f3f7ff",
+  "theme_color": "#2563eb",
+  "description": "Progressive web app for ERPNext project and task workflows.",
+  "icons": [
+    {
+      "src": "/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

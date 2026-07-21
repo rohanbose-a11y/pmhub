@@ -194,7 +194,7 @@ export function WhatsAppAdminPage() {
   const today          = new Date()
   const [calYear,       setCalYear]       = useState(today.getFullYear())
   const [calMonth,      setCalMonth]      = useState(today.getMonth())   // 0-based
-  const [holidayLists,      setHolidayLists]      = useState<string[]>([])
+  const [_holidayLists,     setHolidayLists]      = useState<string[]>([])
   const [selectedHolidayList, setSelectedHolidayList] = useState<string>('')
   const [holidays,            setHolidays]            = useState<HolidayEntry[]>([])
   const [loadingHolidays,     setLoadingHolidays]     = useState(false)

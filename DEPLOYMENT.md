@@ -53,3 +53,11 @@ cd /var/www/project.sauramandala.org
   
 
   node scripts/create-monthly-timesheets.js
+
+
+  2. Production nginx — add this block:
+  location /gupshup/ {
+      proxy_pass https://api.gupshup.io/;
+      proxy_set_header apikey "your-actual-key-here";
+      proxy_set_header Host api.gupshup.io;
+  }

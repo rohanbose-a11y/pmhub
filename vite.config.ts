@@ -21,6 +21,19 @@ export default defineConfig(({ mode }) => {
           cookiePathRewrite: '/',
           rewrite: (path) => path.replace(/^\/frappe/, ''),
         },
+        '/gupshup': {
+          target: 'https://api.gupshup.io',
+          changeOrigin: true,
+          secure: true,
+          rewrite: (path) => path.replace(/^\/gupshup/, ''),
+          // Inject the API key server-side — browser never sees it
+          configure: (proxy) => {
+            proxy.on('proxyReq', (proxyReq) => {
+              const apiKey = env.GUPSHUP_API_KEY
+              if (apiKey) proxyReq.setHeader('apikey', apiKey)
+            })
+          },
+        },
       },
     },
     preview: {

@@ -20,6 +20,7 @@ const TimesheetsPage        = lazy(() => import('../../features/timesheets/pages
 const ChannelsPage          = lazy(() => import('../../features/channels/pages/ChannelsPage').then(m => ({ default: m.ChannelsPage })))
 const DirectMessagesPage    = lazy(() => import('../../features/dm/pages/DirectMessagesPage').then(m => ({ default: m.DirectMessagesPage })))
 const EmployeeProfilePage   = lazy(() => import('../../features/employees/pages/EmployeeProfilePage').then(m => ({ default: m.EmployeeProfilePage })))
+const WhatsAppAdminPage     = lazy(() => import('../../features/whatsapp/pages/WhatsAppAdminPage').then(m => ({ default: m.WhatsAppAdminPage })))
 
 export function AppRouter() {
   const bootstrap = useAuthStore((state) => state.bootstrap)
@@ -59,6 +60,7 @@ export function AppRouter() {
           <Route element={<Suspense fallback={<PageLoader label="Loading…" />}><DirectMessagesPage /></Suspense>} path="/dm" />
           <Route element={<Suspense fallback={<PageLoader label="Loading…" />}><ProfilePage /></Suspense>} path="/profile" />
           <Route element={<Suspense fallback={<PageLoader label="Loading…" />}><EmployeeProfilePage /></Suspense>} path="/employees/profile" />
+          <Route element={<Suspense fallback={<PageLoader label="Loading…" />}><WhatsAppAdminPage /></Suspense>} path="/whatsapp" />
         </Route>
       </Route>
 

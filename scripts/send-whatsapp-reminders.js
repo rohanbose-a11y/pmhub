@@ -156,19 +156,28 @@ function todayRange() {
   return { from: `${today} 00:00:00`, to: `${today} 23:59:59` }
 }
 
-async function hasCheckedIn(employeeId) {
+/**
+ * Returns the check-in time string (e.g. "09:12 AM") if the employee checked in today,
+ * or null if they have not checked in yet.
+ */
+async function getCheckinTime(employeeId) {
   const { from, to } = todayRange()
   const json = await erpGet('/api/resource/Employee Checkin', {
-    fields:            JSON.stringify(['name']),
+    fields:            JSON.stringify(['time']),
     filters:           JSON.stringify([
       ['Employee Checkin', 'employee',  '=', employeeId],
       ['Employee Checkin', 'log_type',  '=', 'IN'],
       ['Employee Checkin', 'time',      '>=', from],
       ['Employee Checkin', 'time',      '<=', to],
     ]),
+    order_by:          'time asc',
     limit_page_length: '1',
   })
-  return json.data.length > 0
+  if (json.data.length === 0) return null
+  // ERPNext returns time as "YYYY-MM-DD HH:MM:SS" — extract HH:MM in 12h format
+  const raw = json.data[0].time  // e.g. "2026-07-21 09:12:00"
+  const d   = new Date(raw.replace(' ', 'T'))
+  return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
 }
 
 async function hasCheckedOut(employeeId) {
@@ -235,17 +244,26 @@ async function hasLeaveToday(employeeId) {
 
 // ─── Send WhatsApp message via Gupshup ────────────────────────────────────────
 
-async function sendWhatsApp(phone, recipientName) {
+/**
+ * Sends a WhatsApp template message.
+ * Check-in template params: [firstName, time, date]  → "Thank you {1} for checking in at {2} on {3}"
+ * Checkout template params:  [firstName, date]        → reminder message
+ */
+async function sendWhatsApp(phone, recipientName, checkinTime = null) {
   const firstName  = recipientName.split(' ')[0]
   const cleanPhone = phone.replace(/\D/g, '')
-  const dateLabel  = todayLabel()    // e.g. "20 Jul 2026"  → {{2}} in template
+  const dateLabel  = todayLabel()    // e.g. "21 Jul 2026"
+
+  const params = REMINDER_TYPE === 'checkin'
+    ? [firstName, checkinTime, dateLabel]   // {{1}} name  {{2}} time  {{3}} date
+    : [firstName, dateLabel]                // {{1}} name  {{2}} date
 
   const body = new URLSearchParams({
     channel:     'whatsapp',
     source:      GS_SRC_NUM,
     destination: cleanPhone,
     'src.name':  GS_APP_NAME,
-    template:    JSON.stringify({ id: TEMPLATE_ID, params: [firstName, dateLabel] }),
+    template:    JSON.stringify({ id: TEMPLATE_ID, params }),
   })
 
   const res = await fetch('https://api.gupshup.io/wa/api/v1/template/msg', {
@@ -315,24 +333,25 @@ async function main() {
         continue
       }
 
-      // Skip if already checked in/out today
       if (REMINDER_TYPE === 'checkin') {
-        const alreadyIn = await hasCheckedIn(emp.name)
-        if (alreadyIn) {
-          console.log(`  SKIP     ${tag}  (already checked in)`)
+        // Send a thank-you confirmation ONLY if the employee has checked in
+        const checkinTime = await getCheckinTime(emp.name)
+        if (!checkinTime) {
+          console.log(`  SKIP     ${tag}  (has not checked in yet)`)
           skipped++
           continue
         }
+        await sendWhatsApp(emp.cell_number, emp.employee_name, checkinTime)
       } else {
+        // Send a checkout reminder ONLY if the employee has NOT yet checked out
         const alreadyOut = await hasCheckedOut(emp.name)
         if (alreadyOut) {
           console.log(`  SKIP     ${tag}  (already checked out)`)
           skipped++
           continue
         }
+        await sendWhatsApp(emp.cell_number, emp.employee_name)
       }
-
-      await sendWhatsApp(emp.cell_number, emp.employee_name)
       console.log(`  SENT     ${tag}  → ${emp.cell_number}`)
       sent++
     } catch (err) {
@@ -348,7 +367,7 @@ async function main() {
 
   console.log(`\n─────────────────────────────────────`)
   console.log(`  Sent    : ${sent}`)
-  console.log(`  Skipped : ${skipped}  (holiday / on leave / already checked ${REMINDER_TYPE === 'checkin' ? 'in' : 'out'})`)
+  console.log(`  Skipped : ${skipped}  (holiday / on leave / ${REMINDER_TYPE === 'checkin' ? 'not yet checked in' : 'already checked out'})`)
   console.log(`  Failed  : ${failed}`)
   console.log(`─────────────────────────────────────\n`)
 

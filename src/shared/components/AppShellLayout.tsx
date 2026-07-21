@@ -125,7 +125,8 @@ function SectionHeader({
 
 export function AppShellLayout() {
   const location        = useLocation()
-  const username        = useAuthStore((state) => state.user?.username)
+  const user            = useAuthStore((state) => state.user)
+  const username        = user?.username
   const workspaceStatus = useWorkStore((state) => state.status)
   const workspaceError  = useWorkStore((state) => state.error)
   const loadWorkspace   = useWorkStore((state) => state.loadWorkspace)
@@ -562,6 +563,24 @@ export function AppShellLayout() {
               </div>
             )}
           </NavLink>
+
+          {/* ─── WhatsApp Admin (Administrator only) ─── */}
+          {user?.roles?.includes('Administrator') && (
+            <>
+              <NavLink to="/whatsapp" style={{ textDecoration: 'none' }}>
+                {({ isActive }) => (
+                  <div style={navItem(isActive)}>
+                    <svg fill="none" viewBox="0 0 24 24" width={16} height={16} style={{ flexShrink: 0 }}>
+                      <path d="M12 2C6.48 2 2 6.48 2 12c0 1.85.5 3.58 1.37 5.07L2 22l5.09-1.35A9.94 9.94 0 0 0 12 22c5.52 0 10-4.48 10-10S17.52 2 12 2z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/>
+                      <path d="M8.5 10.5c.5 1 1.5 2.5 3.5 3.5 1 .5 2 .5 2.5 0l.5-.5c.2-.2.2-.5 0-.7l-1.3-1.3c-.2-.2-.5-.2-.7 0l-.3.3c-.8-.4-1.3-.9-1.7-1.7l.3-.3c.2-.2.2-.5 0-.7L9.7 8.5c-.2-.2-.5-.2-.7 0l-.5.5c-.5.6-.5 1.5 0 2.5z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/>
+                    </svg>
+                    <span style={{ fontSize: 13, fontWeight: isActive ? 600 : 400, flex: 1 }}>WhatsApp</span>
+                    <span style={{ fontSize: 9.5, fontWeight: 600, background: '#FEF3C7', color: '#92400E', padding: '1px 5px', borderRadius: 4, flexShrink: 0 }}>Admin</span>
+                  </div>
+                )}
+              </NavLink>
+            </>
+          )}
 
           {/* ─── Divider ─── */}
           <div style={{ height: 1, background: '#F3F4F6', margin: '8px 0' }} />

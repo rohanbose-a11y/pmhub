@@ -191,7 +191,7 @@ export function EditTaskForm({
     const orig = initialValuesRef.current
     const keys = Object.keys(orig) as (keyof UpdateTaskInput)[]
     for (const key of keys) {
-      if ((values as Record<string, unknown>)[key] !== (orig as Record<string, unknown>)[key]) return true
+      if ((values as unknown as Record<string, unknown>)[key] !== (orig as unknown as Record<string, unknown>)[key]) return true
     }
     const origDeps = initialDepIdsRef.current
     if (depTaskIds.length !== origDeps.length) return true

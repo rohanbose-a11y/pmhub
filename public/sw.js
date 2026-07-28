@@ -1,6 +1,6 @@
 // Bump CACHE_NAME on every deploy that changes JS/CSS so the activate event
 // deletes the old cache and users get fresh code immediately.
-const CACHE_NAME = 'erpnext-pm-v3'
+const CACHE_NAME = 'erpnext-pm-v4'
 
 // Only the HTML shell is cached for offline support.
 // JS/CSS assets already have immutable HTTP cache headers set by nginx — the
@@ -43,16 +43,18 @@ self.addEventListener('fetch', (event) => {
   // Only cache the explicit shell assets listed above.
   if (!APP_SHELL_ASSETS.includes(pathname)) return
 
+  // Network-first for HTML shell: always fetch fresh when online so the browser
+  // never gets a blank page from a stale cached index.html with outdated asset
+  // hashes.  Cache is kept only as an offline fallback.
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached
-      return fetch(event.request).then((response) => {
+    fetch(event.request)
+      .then((response) => {
         if (response.ok) {
           const clone = response.clone()
           caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone))
         }
         return response
       })
-    }),
+      .catch(() => caches.match(event.request)),
   )
 })

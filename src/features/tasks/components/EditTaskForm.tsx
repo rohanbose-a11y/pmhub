@@ -113,6 +113,15 @@ const inputClass =
 
 const selectClass = `${inputClass} appearance-none pr-9 max-w-full`
 
+/** Returns inclusive calendar-day count between two ISO date strings, or undefined if invalid/reversed. */
+function calcEngagementDays(start: string, due: string): number | undefined {
+  if (!start || !due) return undefined
+  const s = new Date(start)
+  const d = new Date(due)
+  if (isNaN(s.getTime()) || isNaN(d.getTime()) || d < s) return undefined
+  return Math.round((d.getTime() - s.getTime()) / 86_400_000) + 1
+}
+
 
 
 // ── Main form ────────────────────────────────────────────────────────────────
@@ -309,6 +318,10 @@ export function EditTaskForm({
                 value={values.project ?? ''}
               >
                 <option value="">No project — general task</option>
+                {/* Preserve current project if user is not a member of it */}
+                {values.project && !projects.some((p) => p.name === values.project) && (
+                  <option value={values.project}>{values.project}</option>
+                )}
                 {projects.map((p) => (
                   <option key={p.id} value={p.name}>{p.displayName}</option>
                 ))}
@@ -443,8 +456,16 @@ export function EditTaskForm({
         <Timeline
           startDate={values.startDate ?? ''}
           dueDate={values.dueDate ?? ''}
-          onStartDateChange={(v) => set('startDate', v)}
-          onDueDateChange={(v) => set('dueDate', v)}
+          onStartDateChange={(v) => {
+            set('startDate', v)
+            const calc = calcEngagementDays(v, values.dueDate ?? '')
+            if (calc !== undefined) set('engagementDays', calc)
+          }}
+          onDueDateChange={(v) => {
+            set('dueDate', v)
+            const calc = calcEngagementDays(values.startDate ?? '', v)
+            if (calc !== undefined) set('engagementDays', calc)
+          }}
         />
         <div className="grid grid-cols-2 gap-3">
           <FormField label="Review date" name="reviewDate" onChange={handleChange} type="date" value={values.reviewDate ?? ''} />
@@ -463,7 +484,11 @@ export function EditTaskForm({
             type="number"
             value={values.engagementDays ?? ''}
           />
-          <p className="text-[11px] text-slate-400 mt-1">Days actively engaged on this task</p>
+          <p className="text-[11px] text-slate-400 mt-1">
+            {values.startDate && values.dueDate
+              ? 'Auto-calculated from dates — edit to override'
+              : 'Auto-calculated when both dates are set'}
+          </p>
         </div>
       </div>
 

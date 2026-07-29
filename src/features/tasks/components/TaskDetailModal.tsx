@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 
 import type { Task, TaskComment, UpdateTaskInput } from '../types/task.types'
+import type { Project } from '../../projects/types/project.types'
 import { taskApi } from '../../../api/taskApi'
 import { userApi } from '../../../api/userApi'
 import type { UserOption } from '../../../api/userApi'
@@ -99,6 +100,7 @@ interface ActivityEntry {
 interface TaskDetailModalProps {
   task: Task          // store task — used as initial data and for ID lookup
   allTasks: Task[]
+  projects?: Project[]  // user-assigned projects for project picker
   onClose: () => void
   onUpdate: (taskId: string, input: UpdateTaskInput) => Promise<boolean>
   onStatusChange: (task: Task) => void
@@ -124,6 +126,7 @@ function SkeletonRow({ w = 60 }: { w?: number }) {
 export function TaskDetailModal({
   task,
   allTasks,
+  projects = [],
   onClose,
   onUpdate,
   onStatusChange,
@@ -151,6 +154,7 @@ export function TaskDetailModal({
   const [isEditingEngDays, setIsEditingEngDays] = useState(false)
   const [actType, setActType]                   = useState(task.activityType ?? '')
   const [showActTypeMenu, setShowActTypeMenu]   = useState(false)
+  const [localProject,    setLocalProject]      = useState<string>(task.project ?? '')
   const [localParentTask, setLocalParentTask]   = useState<string | null>(task.parentTask ?? null)
   const [kraQuery, setKraQuery]                 = useState('')
   const [showPriorityMenu, setShowPriorityMenu] = useState(false)
@@ -185,11 +189,14 @@ export function TaskDetailModal({
   }
 
   // Fixed-position dropdown anchoring (escape overflow:hidden on the modal)
-  const [priorityDropPos,  setPriorityDropPos]  = useState({ top: 0, left: 0, width: 0 })
-  const [actTypeDropPos,   setActTypeDropPos]   = useState({ top: 0, left: 0, width: 0 })
+  const [priorityDropPos,   setPriorityDropPos]   = useState({ top: 0, left: 0, width: 0 })
+  const [actTypeDropPos,    setActTypeDropPos]    = useState({ top: 0, left: 0, width: 0 })
   const [parentTaskDropPos, setParentTaskDropPos] = useState({ top: 0, left: 0, width: 0 })
+  const [projectDropPos,    setProjectDropPos]    = useState({ top: 0, left: 0, width: 0 })
   const [showParentTaskMenu, setShowParentTaskMenu] = useState(false)
   const [parentTaskQuery,   setParentTaskQuery]  = useState('')
+  const [showProjectMenu,   setShowProjectMenu]  = useState(false)
+  const [projectQuery,      setProjectQuery]     = useState('')
 
   const priorityTriggerRef   = useRef<HTMLDivElement>(null)
   const priorityDropRef      = useRef<HTMLDivElement>(null)
@@ -197,6 +204,8 @@ export function TaskDetailModal({
   const actTypeDropRef       = useRef<HTMLDivElement>(null)
   const parentTaskTriggerRef = useRef<HTMLDivElement>(null)
   const parentTaskDropRef    = useRef<HTMLDivElement>(null)
+  const projectTriggerRef    = useRef<HTMLDivElement>(null)
+  const projectDropRef       = useRef<HTMLDivElement>(null)
 
   const { options: kraOptions } = useKraOptions()
   const { user: currentUser } = useAuthStore()
@@ -228,6 +237,7 @@ export function TaskDetailModal({
           setDescription(t.description ?? '')
           setEngDays(String(t.engagementDays ?? ''))
           setActType(t.activityType ?? '')
+          setLocalProject(t.project ?? '')
           setLocalParentTask(t.parentTask ?? null)
           setDepTaskIds(t.dependsOnTasks ? t.dependsOnTasks.split(',').map((s) => s.trim()).filter(Boolean) : [])
           setComments(t.comments ?? [])
@@ -318,6 +328,21 @@ export function TaskDetailModal({
     setParentTaskQuery('')
   }
 
+  const openProjectMenu = () => {
+    const r = projectTriggerRef.current?.getBoundingClientRect()
+    if (r) setProjectDropPos({ top: r.bottom + 4, left: r.left, width: Math.max(r.width, 220) })
+    setShowProjectMenu((v) => !v)
+    setProjectQuery('')
+  }
+
+  const handleProjectChange = async (projectName: string) => {
+    setShowProjectMenu(false)
+    setProjectQuery('')
+    if (projectName === localProject) return
+    setLocalProject(projectName)
+    await onUpdate(task.id, { subject: task.subject, status: task.status, priority: task.priority, project: projectName || undefined })
+  }
+
   // ── Dropdowns + keyboard ───────────────────────────────────────────────────
   useEffect(() => {
     const h = (e: MouseEvent) => {
@@ -339,10 +364,16 @@ export function TaskDetailModal({
         parentTaskTriggerRef.current && !parentTaskTriggerRef.current.contains(t) &&
         parentTaskDropRef.current    && !parentTaskDropRef.current.contains(t)
       ) { setShowParentTaskMenu(false); setParentTaskQuery('') }
+
+      if (
+        showProjectMenu &&
+        projectTriggerRef.current && !projectTriggerRef.current.contains(t) &&
+        projectDropRef.current    && !projectDropRef.current.contains(t)
+      ) { setShowProjectMenu(false); setProjectQuery('') }
     }
     document.addEventListener('mousedown', h)
     return () => document.removeEventListener('mousedown', h)
-  }, [showPriorityMenu, showActTypeMenu, showParentTaskMenu])
+  }, [showPriorityMenu, showActTypeMenu, showParentTaskMenu, showProjectMenu])
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -350,12 +381,13 @@ export function TaskDetailModal({
         if (showPriorityMenu)   { setShowPriorityMenu(false); return }
         if (showActTypeMenu)    { setShowActTypeMenu(false); setKraQuery(''); return }
         if (showParentTaskMenu) { setShowParentTaskMenu(false); setParentTaskQuery(''); return }
+        if (showProjectMenu)    { setShowProjectMenu(false); setProjectQuery(''); return }
         onClose()
       }
     }
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
-  }, [onClose, showPriorityMenu, showActTypeMenu, showParentTaskMenu])
+  }, [onClose, showPriorityMenu, showActTypeMenu, showParentTaskMenu, showProjectMenu])
 
   // Display task:
   //   • Live fields (status, priority, isMilestone, assignees) → always from store `task` prop
@@ -865,6 +897,27 @@ export function TaskDetailModal({
                             <path d="M5 2v6M2 5h6" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5"/>
                           </svg>
                         </div>
+                      </div>
+                    </div>
+
+                    {/* Project */}
+                    <div
+                      ref={projectTriggerRef}
+                      className="flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 transition-colors group cursor-pointer"
+                      onClick={openProjectMenu}
+                    >
+                      <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0">Project</span>
+                      <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                        {localProject ? (
+                          <span className="text-[12.5px] text-slate-700 truncate">
+                            {projects.find((p) => p.name === localProject)?.displayName ?? localProject}
+                          </span>
+                        ) : (
+                          <span className="text-[12.5px] text-slate-300 group-hover:text-slate-400 transition-colors">None</span>
+                        )}
+                        <svg fill="none" viewBox="0 0 10 10" width="8" height="8" className="text-slate-300 ml-auto flex-shrink-0">
+                          <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.3"/>
+                        </svg>
                       </div>
                     </div>
 
@@ -1466,6 +1519,65 @@ export function TaskDetailModal({
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {showProjectMenu && (
+        <div
+          ref={projectDropRef}
+          style={{ position: 'fixed', top: projectDropPos.top, left: projectDropPos.left, width: projectDropPos.width, zIndex: 9999 }}
+          className="bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden"
+        >
+          {/* Search */}
+          <div className="flex items-center gap-1.5 px-2.5 border-b border-slate-100">
+            <svg fill="none" viewBox="0 0 12 12" width="11" height="11" className="text-slate-400 flex-shrink-0">
+              <circle cx="5" cy="5" r="3.5" stroke="currentColor" strokeWidth="1.3"/>
+              <path d="M8 8l2.5 2.5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.3"/>
+            </svg>
+            <input
+              autoFocus
+              type="text"
+              value={projectQuery}
+              onChange={(e) => setProjectQuery(e.target.value)}
+              placeholder="Search projects…"
+              className="w-full h-8 text-[12px] text-slate-700 placeholder:text-slate-400 bg-transparent outline-none border-0"
+            />
+          </div>
+          {/* Options */}
+          <div className="max-h-48 overflow-y-auto scrollbar-none py-1">
+            {localProject && (
+              <button
+                type="button"
+                onClick={() => void handleProjectChange('')}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition-colors"
+              >
+                <svg fill="none" viewBox="0 0 12 12" width="10" height="10">
+                  <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeLinecap="round" strokeWidth="1.3"/>
+                </svg>
+                No project
+              </button>
+            )}
+            {projects
+              .filter((p) => !projectQuery || p.displayName.toLowerCase().includes(projectQuery.toLowerCase()))
+              .map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => void handleProjectChange(p.name)}
+                  className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-[12.5px] text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  <span className="truncate">{p.displayName}</span>
+                  {localProject === p.name && (
+                    <svg fill="none" viewBox="0 0 12 12" width="11" height="11" className="text-indigo-500 flex-shrink-0">
+                      <path d="M2 6l3 3 5-5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5"/>
+                    </svg>
+                  )}
+                </button>
+              ))}
+            {projects.filter((p) => !projectQuery || p.displayName.toLowerCase().includes(projectQuery.toLowerCase())).length === 0 && (
+              <p className="px-3 py-2 text-[12px] text-slate-400">No projects found</p>
+            )}
+          </div>
         </div>
       )}
 

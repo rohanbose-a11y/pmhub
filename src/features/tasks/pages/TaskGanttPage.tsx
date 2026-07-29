@@ -974,6 +974,7 @@ export function TaskGanttPage() {
         return (
           <TaskDetailModal
             task={t} allTasks={tasks}
+            projects={projects}
             onClose={() => setDetailTaskId(null)}
             onUpdate={handleUpdate}
             onStatusChange={(tk) => setStatusChangeTarget(tk)}
@@ -998,6 +999,7 @@ export function TaskGanttPage() {
           isSubmitting={createTaskStatus === 'submitting'}
           onClose={closeCreateModal} onSubmit={handleCreateTask} onSuccess={closeCreateModal}
           projects={projects} tasks={tasks} serverError={createTaskError}
+          initialProject={projectFilter !== 'all' ? projectFilter : undefined}
         />
       )}
     </main>

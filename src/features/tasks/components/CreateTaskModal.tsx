@@ -20,6 +20,17 @@ function initials(s: string) {
   return s.replace(/[@.]/g, ' ').split(/\s+/).filter(Boolean).map((p) => p[0]).join('').toUpperCase().slice(0, 2)
 }
 
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/** Inclusive calendar-day count between two ISO date strings (start → due + 1). */
+function calcEngagementDays(start: string, due: string): number | undefined {
+  if (!start || !due) return undefined
+  const s = new Date(start)
+  const d = new Date(due)
+  if (isNaN(s.getTime()) || isNaN(d.getTime()) || d < s) return undefined
+  return Math.round((d.getTime() - s.getTime()) / 86_400_000) + 1
+}
+
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const PRIORITY_CONFIG = [
@@ -41,6 +52,7 @@ interface CreateTaskModalProps {
   tasks: Task[]
   isSubmitting: boolean
   serverError: string | null
+  initialProject?: string
   onSubmit: (input: CreateTaskInput) => Promise<boolean>
   onClose: () => void
   onSuccess: () => void
@@ -53,13 +65,14 @@ export function CreateTaskModal({
   tasks,
   isSubmitting,
   serverError,
+  initialProject,
   onSubmit,
   onClose,
   onSuccess,
 }: CreateTaskModalProps) {
   // ── Form fields ────────────────────────────────────────────────────────────
   const [subject,     setSubject]     = useState('')
-  const [project,     setProject]     = useState(projects[0]?.name ?? '')
+  const [project,     setProject]     = useState(initialProject ?? projects[0]?.name ?? '')
   const [priority,    setPriority]    = useState('Medium')
   const [actType,     setActType]     = useState('')
   const [startDate,   setStartDate]   = useState('')
@@ -107,6 +120,7 @@ export function CreateTaskModal({
   const parentDropRef      = useRef<HTMLDivElement>(null)
   const startDateRef       = useRef<HTMLInputElement>(null)
   const dueDateRef         = useRef<HTMLInputElement>(null)
+  const engDaysInputRef    = useRef<HTMLInputElement>(null)
   const titleInputRef      = useRef<HTMLInputElement>(null)
 
   const { options: kraOptions } = useKraOptions()
@@ -328,7 +342,12 @@ export function CreateTaskModal({
                       >
                         {startDate ? fmtDate(startDate) : 'Start'}
                       </button>
-                      <input ref={startDateRef} type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="sr-only"/>
+                      <input ref={startDateRef} type="date" value={startDate} onChange={(e) => {
+                        const v = e.target.value
+                        setStartDate(v)
+                        const calc = calcEngagementDays(v, dueDate)
+                        if (calc !== undefined) setEngDays(String(calc))
+                      }} className="sr-only"/>
                       <svg fill="none" viewBox="0 0 14 6" width="12" height="6" className="text-slate-300 flex-shrink-0">
                         <path d="M0 3h12M9 1l3 2-3 2" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.2"/>
                       </svg>
@@ -339,14 +358,23 @@ export function CreateTaskModal({
                       >
                         {dueDate ? fmtDate(dueDate) : 'Due'}
                       </button>
-                      <input ref={dueDateRef} type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className="sr-only"/>
+                      <input ref={dueDateRef} type="date" value={dueDate} onChange={(e) => {
+                        const v = e.target.value
+                        setDueDate(v)
+                        const calc = calcEngagementDays(startDate, v)
+                        if (calc !== undefined) setEngDays(String(calc))
+                      }} className="sr-only"/>
                     </div>
                   </div>
 
                   {/* Engagement Days */}
-                  <div className="flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 transition-colors group">
+                  <div
+                    className="flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 transition-colors group cursor-text"
+                    onClick={() => engDaysInputRef.current?.focus()}
+                  >
                     <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0">Engagement Days</span>
                     <input
+                      ref={engDaysInputRef}
                       type="number"
                       min="0"
                       placeholder="—"

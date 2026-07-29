@@ -56,6 +56,15 @@ const inputClass =
 
 const selectClass = `${inputClass} appearance-none pr-9 max-w-full`
 
+/** Inclusive calendar-day count between two ISO date strings (start → due + 1). */
+function calcEngagementDays(start: string, due: string): number | undefined {
+  if (!start || !due) return undefined
+  const s = new Date(start)
+  const d = new Date(due)
+  if (isNaN(s.getTime()) || isNaN(d.getTime()) || d < s) return undefined
+  return Math.round((d.getTime() - s.getTime()) / 86_400_000) + 1
+}
+
 export function CreateTaskForm({
   projects,
   tasks,
@@ -244,8 +253,14 @@ export function CreateTaskForm({
         <Timeline
           startDate={values.startDate}
           dueDate={values.dueDate}
-          onStartDateChange={(v) => setValues((prev) => ({ ...prev, startDate: v }))}
-          onDueDateChange={(v) => setValues((prev) => ({ ...prev, dueDate: v }))}
+          onStartDateChange={(v) => setValues((prev) => {
+            const calc = calcEngagementDays(v, prev.dueDate)
+            return { ...prev, startDate: v, ...(calc !== undefined ? { engagementDays: String(calc) } : {}) }
+          })}
+          onDueDateChange={(v) => setValues((prev) => {
+            const calc = calcEngagementDays(prev.startDate, v)
+            return { ...prev, dueDate: v, ...(calc !== undefined ? { engagementDays: String(calc) } : {}) }
+          })}
         />
 
         {/* Engagement Days */}
@@ -261,7 +276,11 @@ export function CreateTaskForm({
             type="number"
             value={values.engagementDays}
           />
-          <p className="text-[11px] text-slate-400 mt-1">Number of days actively engaged on this task</p>
+          <p className="text-[11px] text-slate-400 mt-1">
+            {values.startDate && values.dueDate
+              ? 'Auto-calculated from dates — edit to override'
+              : 'Auto-calculated when both dates are set'}
+          </p>
         </div>
 
       </div>

@@ -593,6 +593,7 @@ export function TaskKanbanPage() {
           <TaskDetailModal
             task={t}
             allTasks={tasks}
+            projects={projects}
             onClose={() => setDetailTaskId(null)}
             onUpdate={handleUpdate}
             onStatusChange={(tk) => setStatusChangeTarget(tk)}
@@ -625,6 +626,7 @@ export function TaskKanbanPage() {
           projects={projects}
           tasks={tasks}
           serverError={createTaskError}
+          initialProject={projectFilter !== 'all' ? projectFilter : undefined}
         />
       )}
     </main>

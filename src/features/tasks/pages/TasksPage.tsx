@@ -757,6 +757,7 @@ export function TasksPage() {
         return (
           <TaskDetailModal
             allTasks={tasks}
+            projects={projects}
             onAssign={(t) => setAssigningTask(t)}
             onClose={() => setDetailTaskId(null)}
             onPrev={detailIdx > 0 ? () => setDetailTaskId(filteredTasks[detailIdx - 1].id) : undefined}
@@ -807,6 +808,7 @@ export function TasksPage() {
           projects={projects}
           tasks={tasks}
           serverError={createTaskError}
+          initialProject={projectFilter !== 'all' ? projectFilter : undefined}
         />
       )}
 

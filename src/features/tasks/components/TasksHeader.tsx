@@ -297,19 +297,6 @@ export function TasksHeader({
           Sort
         </button>
 
-        {/* Project filter */}
-        {projects.length > 0 && (
-          <select
-            value={projectFilter}
-            onChange={(e) => onProjectFilterChange(e.target.value)}
-            style={{ height: 26, padding: '0 8px', borderRadius: 6, border: '1px solid #E5E7EB', fontSize: 12, color: '#374151', background: 'white', cursor: 'pointer', outline: 'none' }}
-          >
-            <option value="all">All Projects</option>
-            {projects.map((p) => (
-              <option key={p.name} value={p.name}>{p.displayName}</option>
-            ))}
-          </select>
-        )}
 
         <div style={{ flex: 1 }} />
 

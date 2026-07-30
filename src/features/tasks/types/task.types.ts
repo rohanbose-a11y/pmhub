@@ -14,6 +14,7 @@ export interface Task {
   type: string | null
   activityType: string | null
   isMilestone: boolean
+  isGroup: boolean
   parentTask: string | null
   dependsOnTasks: string | null
   startDate: string | null
@@ -31,6 +32,7 @@ export interface Task {
   completedBy: string | null
   completedOn: string | null
   comments: TaskComment[]
+  autoRepeat: string | null   // Auto Repeat document name, set by Frappe on the Task
 }
 
 export interface UpdateTaskInput {
@@ -40,6 +42,7 @@ export interface UpdateTaskInput {
   status: string
   priority: string
   isMilestone?: boolean
+  isGroup?: boolean
   parentTask?: string
   dependsOnTasks?: string
   startDate?: string
@@ -62,6 +65,7 @@ export interface CreateTaskInput {
   activityType?: string
   priority: string
   isMilestone?: boolean
+  isGroup?: boolean
   parentTask?: string
   dependsOnTasks?: string
   startDate?: string
@@ -69,6 +73,7 @@ export interface CreateTaskInput {
   engagementDays?: number
   description?: string
   assignedTo?: string[]
+  comments?: TaskComment[]
 }
 
 export interface CreateTaskFormValues {

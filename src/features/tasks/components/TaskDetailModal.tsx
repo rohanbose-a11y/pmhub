@@ -1,8 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react'
 
 import type { Task, TaskComment, UpdateTaskInput } from '../types/task.types'
+import { autoRepeatApi, WEEKDAYS } from '../../../api/autoRepeatApi'
+import type { RepeatFrequency, Weekday } from '../../../api/autoRepeatApi'
 import type { Project } from '../../projects/types/project.types'
 import { taskApi } from '../../../api/taskApi'
+import { httpClient } from '../../../api/httpClient'
 import { userApi } from '../../../api/userApi'
 import type { UserOption } from '../../../api/userApi'
 import { useKraOptions } from '../../../hooks/useKraOptions'
@@ -141,7 +144,7 @@ export function TaskDetailModal({
 
   // Communication panel
   const [commExpanded, setCommExpanded] = useState(true)
-  const [commTab, setCommTab] = useState<'comments' | 'activity' | 'attachments'>('comments')
+  const [commTab, setCommTab] = useState<'repeat' | 'comments' | 'activity' | 'attachments'>('comments')
   const [showTimeSoon, setShowTimeSoon] = useState(false)
 
   // Editing state — initialised from store task, updated when fullTask arrives
@@ -224,11 +227,25 @@ export function TaskDetailModal({
   const [mentionDropPos,  setMentionDropPos] = useState({ bottom: 0, left: 0, width: 0 })
   const mentionDropRef = useRef<HTMLDivElement>(null)
 
+  // ── Repeat ────────────────────────────────────────────────────────────────
+  const [repeatEnabled,    setRepeatEnabled]    = useState(false)
+  const [repeatFreq,       setRepeatFreq]       = useState<RepeatFrequency>('Weekly')
+  const [repeatStart,      setRepeatStart]      = useState('')
+  const [repeatEnd,        setRepeatEnd]        = useState('')
+  const [repeatOnDay,      setRepeatOnDay]      = useState('')
+  const [repeatOnWeekdays, setRepeatOnWeekdays] = useState<Weekday[]>([])
+  const [savedRepeat,      setSavedRepeat]      = useState<import('../../../api/autoRepeatApi').AutoRepeat | null>(null)
+  const [repeatSaving,     setRepeatSaving]     = useState(false)
+  const [repeatEditMode,   setRepeatEditMode]   = useState(false)
+  const [holidayDates,     setHolidayDates]     = useState<Set<string>>(new Set())
+
   // ── Fetch full task detail on open ─────────────────────────────────────────
   useEffect(() => {
     let cancelled = false
     setFullTask(null)
     setFetchError(false)
+    setRepeatEnabled(false); setSavedRepeat(null); setRepeatEditMode(false)
+
     taskApi.getTask(task.id)
       .then((t) => {
         if (!cancelled) {
@@ -249,12 +266,59 @@ export function TaskDetailModal({
           setFetchError(true)
         }
       })
+
+    // Repeat is loaded after fullTask resolves (see useEffect below)
+
     return () => { cancelled = true }
   }, [task.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Keep editing states in sync when store task prop updates ──────────────
   useEffect(() => { if (!fullTask) setTitle(task.subject) }, [task.subject, fullTask])
   useEffect(() => { if (!fullTask) setDescription(task.description ?? '') }, [task.description, fullTask])
+
+  // ── Load Auto Repeat once fullTask resolves — use task.auto_repeat field ──
+  // Frappe writes the Auto Repeat document name onto the Task itself, so we
+  // fetch by name directly and avoid the blocked list-API filter.
+  useEffect(() => {
+    if (!fullTask) return
+    const repeatName = fullTask.autoRepeat
+    if (!repeatName) return
+    autoRepeatApi.getById(repeatName)
+      .then((repeat) => {
+        setSavedRepeat(repeat)
+        setRepeatEnabled(true)
+        setRepeatFreq(repeat.frequency)
+        setRepeatStart(repeat.startDate)
+        setRepeatEnd(repeat.endDate ?? '')
+        setRepeatOnDay(String(repeat.repeatOnDay ?? ''))
+        setRepeatOnWeekdays(repeat.repeatOnWeekdays ?? [])
+      })
+      .catch(() => {/* non-blocking — repeat panel stays disabled */})
+  }, [fullTask?.autoRepeat]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Fetch holidays for upcoming-dates skip logic (monthly+ only) ──────────
+  useEffect(() => {
+    const MONTHLY_FREQS = ['Monthly', 'Quarterly', 'Half-yearly', 'Yearly']
+    if (!savedRepeat || !MONTHLY_FREQS.includes(savedRepeat.frequency)) {
+      setHolidayDates(new Set())
+      return
+    }
+    httpClient
+      .get<{ data: { holiday_list?: string | null } }>('/api/resource/HR Settings')
+      .then(({ data }) => {
+        const listName = data.data.holiday_list
+        if (!listName) return
+        return httpClient.get<{ data: { holidays?: { holiday_date: string }[] } }>(
+          `/api/resource/Holiday List/${encodeURIComponent(listName)}`,
+        )
+      })
+      .then((res) => {
+        if (!res) return
+        const dates = new Set((res.data.data.holidays ?? []).map((h) => h.holiday_date.slice(0, 10)))
+        setHolidayDates(dates)
+      })
+      .catch(() => setHolidayDates(new Set()))
+  }, [savedRepeat?.id, savedRepeat?.frequency]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Track status changes from outside (status modal) ──────────────────────
   const prevStatusRef = useRef(task.status)
@@ -399,7 +463,6 @@ export function TaskDetailModal({
   // Status and priority always from store (updated by store after mutations)
   const sg       = STATUS_CONFIG.find((s) => s.key === task.status) ?? STATUS_CONFIG[0]
   const pg       = PRIORITY_CONFIG.find((p) => p.key === task.priority)
-  const subtasks = allTasks.filter((t) => t.parentTask === task.id)
   const shortId  = task.id
   const duePast  = dt.dueDate && new Date(dt.dueDate) < new Date()
   const updLabel = task.updatedAt
@@ -480,6 +543,10 @@ export function TaskDetailModal({
 
   const toggleMilestone = async () => {
     await onUpdate(task.id, { subject: task.subject, status: liveStatus, priority: livePriority, isMilestone: !task.isMilestone })
+  }
+
+  const toggleIsGroup = async () => {
+    await onUpdate(task.id, { subject: task.subject, status: liveStatus, priority: livePriority, isGroup: !task.isGroup })
   }
 
   const selectParentTask = async (parentId: string | null) => {
@@ -739,6 +806,7 @@ export function TaskDetailModal({
                   </div>
                 </div>
               ) : (
+                <>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-0 mb-5 rounded-xl border border-slate-100 overflow-hidden sm:divide-x divide-y sm:divide-y-0 divide-slate-100">
 
                   {/* ── Left column ── */}
@@ -983,24 +1051,29 @@ export function TaskDetailModal({
                     </div>
 
                     {/* Is Group */}
-                    <div className="flex items-center gap-2 px-4 py-2.5 group">
+                    <div
+                      className="flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 transition-colors group cursor-pointer"
+                      onClick={toggleIsGroup}
+                    >
                       <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0">Is Group</span>
                       <div className="flex items-center gap-2">
                         <div className={[
                           'relative inline-flex h-4 w-7 rounded-full border-2 border-transparent transition-colors',
-                          subtasks.length > 0 ? 'bg-indigo-500' : 'bg-slate-200',
+                          task.isGroup ? 'bg-indigo-500' : 'bg-slate-200',
                         ].join(' ')}>
                           <span className={[
                             'inline-block h-3 w-3 rounded-full bg-white shadow transition-transform',
-                            subtasks.length > 0 ? 'translate-x-3' : 'translate-x-0',
+                            task.isGroup ? 'translate-x-3' : 'translate-x-0',
                           ].join(' ')}/>
                         </div>
-                        <span className="text-[12.5px] text-slate-600">{subtasks.length > 0 ? 'Yes' : 'No'}</span>
+                        <span className="text-[12.5px] text-slate-600">{task.isGroup ? 'Yes' : 'No'}</span>
                       </div>
                     </div>
 
                   </div>
                 </div>
+
+</>
               )}
 
               {/* ── Description ── */}
@@ -1144,32 +1217,64 @@ export function TaskDetailModal({
 
           {/* ── Collapsed icon strip ── */}
           {!commExpanded && (
-            <div className="flex flex-col items-center w-[52px] py-3 gap-0.5 bg-slate-50/30">
+            <div className="flex flex-col items-center w-[52px] pt-2 pb-3 gap-0.5 bg-slate-50 border-r border-slate-100">
 
-              {/* Expand toggle */}
+              {/* Expand arrow */}
               <button
                 type="button"
-                onClick={() => { setCommTab('attachments'); setCommExpanded(true) }}
-                title="Open activity panel"
-                className="flex items-center justify-center w-9 h-9 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-indigo-500 transition-colors mb-1"
+                onClick={() => setCommExpanded(true)}
+                title="Expand panel"
+                className="flex items-center justify-center w-9 h-8 rounded-lg text-slate-300 hover:text-indigo-400 hover:bg-indigo-50 transition-colors mb-2"
               >
-                <svg fill="none" viewBox="0 0 16 16" width="14" height="14">
-                  <path d="M10 3L6 8l4 5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5"/>
+                <svg fill="none" viewBox="0 0 16 16" width="13" height="13">
+                  <path d="M10 3L6 8l4 5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6"/>
                 </svg>
               </button>
 
-              {/* Activity button — opens to Links tab */}
-              <button
-                type="button"
-                onClick={() => { setCommTab('attachments'); setCommExpanded(true) }}
-                title="Activity"
-                className="flex flex-col items-center gap-0.5 w-9 py-2.5 rounded-lg bg-white shadow-sm text-violet-600 border border-slate-100/80 transition-colors"
-              >
-                <svg fill="none" viewBox="0 0 14 14" width="15" height="15">
-                  <path d="M11 2H3a1 1 0 00-1 1v6a1 1 0 001 1h1l2 2 2-2h3a1 1 0 001-1V3a1 1 0 00-1-1z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
-                </svg>
-                <span className="text-[9px] font-medium leading-none">Activity</span>
-              </button>
+              {([
+                {
+                  tab: 'repeat' as const,
+                  label: 'Repeat',
+                  badge: repeatEnabled ? <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-indigo-500"/> : null,
+                  icon: <svg fill="none" viewBox="0 0 14 14" width="15" height="15"><path d="M2 7a5 5 0 0 1 9-3M12 7a5 5 0 0 1-9 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M11 4l1-1.5 1.5 1.5M3 10l-1 1.5-1.5-1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+                },
+                {
+                  tab: 'comments' as const,
+                  label: 'Comments',
+                  badge: comments.length > 0
+                    ? <span className="absolute top-0.5 right-0.5 min-w-[14px] h-3.5 px-0.5 rounded-full bg-indigo-500 text-white text-[8px] font-bold flex items-center justify-center">{comments.length}</span>
+                    : null,
+                  icon: <svg fill="none" viewBox="0 0 14 14" width="15" height="15"><path d="M11 2H3a1 1 0 00-1 1v6a1 1 0 001 1h1l2 2 2-2h3a1 1 0 001-1V3a1 1 0 00-1-1z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>,
+                },
+                {
+                  tab: 'attachments' as const,
+                  label: 'Links',
+                  badge: null,
+                  icon: <svg fill="none" viewBox="0 0 14 14" width="15" height="15"><path d="M6 8a3 3 0 0 0 4.24.01l1.42-1.41a3 3 0 0 0-4.24-4.24L6.35 3.4" stroke="currentColor" strokeLinecap="round" strokeWidth="1.3"/><path d="M8 6a3 3 0 0 0-4.24-.01L2.34 7.4a3 3 0 0 0 4.24 4.24l1.05-1.05" stroke="currentColor" strokeLinecap="round" strokeWidth="1.3"/></svg>,
+                },
+                {
+                  tab: 'activity' as const,
+                  label: 'Activity',
+                  badge: null,
+                  icon: <svg fill="none" viewBox="0 0 14 14" width="15" height="15"><circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.3"/><path d="M7 4.5v3l2 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,
+                },
+              ]).map(({ tab, label, icon, badge }) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => { setCommTab(tab); setCommExpanded(true) }}
+                  title={label}
+                  className={[
+                    'relative flex items-center justify-center w-10 h-10 rounded-xl transition-all',
+                    tab === 'repeat' && repeatEnabled
+                      ? 'bg-indigo-50 text-indigo-500'
+                      : 'text-slate-400 hover:bg-white hover:text-slate-600 hover:shadow-sm',
+                  ].join(' ')}
+                >
+                  {icon}
+                  {badge}
+                </button>
+              ))}
             </div>
           )}
 
@@ -1179,7 +1284,9 @@ export function TaskDetailModal({
 
               {/* Panel header */}
               <div className="flex-shrink-0 flex items-center gap-2 px-3 h-11 border-b border-slate-100">
-                <span className="flex-1 text-[13px] font-semibold text-slate-700">Activity</span>
+                <span className="flex-1 text-[13px] font-semibold text-slate-700">
+                  {commTab === 'repeat' ? 'Repeat' : commTab === 'comments' ? 'Comments' : commTab === 'attachments' ? 'Links' : 'Activity'}
+                </span>
                 <button
                   type="button"
                   onClick={() => setCommExpanded(false)}
@@ -1193,26 +1300,387 @@ export function TaskDetailModal({
               </div>
 
               {/* Tabs */}
-              <div className="flex-shrink-0 flex items-center border-b border-slate-100 px-3">
-                {(['attachments', 'comments', 'activity'] as const).map((tab) => (
+              <div className="flex-shrink-0 flex items-center border-b border-slate-100 px-1">
+                {(['repeat', 'comments', 'attachments', 'activity'] as const).map((tab) => (
                   <button
                     key={tab}
                     type="button"
                     onClick={() => setCommTab(tab)}
                     className={[
-                      'px-3 py-2.5 text-[12px] font-medium capitalize border-b-2 -mb-px transition-colors',
+                      'px-2.5 py-2.5 text-[11.5px] font-medium border-b-2 -mb-px transition-colors',
                       commTab === tab
                         ? 'border-indigo-500 text-indigo-600'
                         : 'border-transparent text-slate-400 hover:text-slate-600',
                     ].join(' ')}
                   >
-                    {tab === 'comments' ? 'Comments' : tab === 'activity' ? 'Activity' : 'Files'}
+                    {tab === 'repeat' ? 'Repeat' : tab === 'comments' ? 'Comments' : tab === 'attachments' ? 'Links' : 'Activity'}
+                    {tab === 'repeat' && repeatEnabled && (
+                      <span className="ml-1 inline-flex w-1.5 h-1.5 rounded-full bg-indigo-500 align-middle -mt-0.5"/>
+                    )}
+                    {tab === 'comments' && comments.length > 0 && (
+                      <span className="ml-1 inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-indigo-100 text-indigo-600 text-[9px] font-bold align-middle -mt-0.5">{comments.length}</span>
+                    )}
                   </button>
                 ))}
               </div>
 
               {/* Content */}
               <div className="flex-1 overflow-y-auto scrollbar-none">
+
+                {/* Repeat tab */}
+                {commTab === 'repeat' && (() => {
+                  // ── Helpers ────────────────────────────────────────────────
+                  const fmtRepeatDate = (d: string) =>
+                    new Date(d).toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' })
+
+                  const describeSchedule = (freq: RepeatFrequency, days: Weekday[], onDay: string) => {
+                    if (freq === 'Daily') return 'Every day'
+                    if (freq === 'Weekly') {
+                      if (days.length === 0) return 'Every week'
+                      const names = days.map((d) => d.charAt(0).toUpperCase() + d.slice(1))
+                      return `Every ${names.join(', ')}`
+                    }
+                    const daySuffix = onDay ? ` on day ${onDay}` : ''
+                    if (freq === 'Monthly')     return `Every month${daySuffix}`
+                    if (freq === 'Quarterly')   return `Every quarter${daySuffix}`
+                    if (freq === 'Half-yearly') return `Every 6 months${daySuffix}`
+                    if (freq === 'Yearly')      return `Every year${daySuffix}`
+                    return freq
+                  }
+
+                  const getUpcomingDates = (repeat: import('../../../api/autoRepeatApi').AutoRepeat, count = 5, holidays: Set<string> = new Set()): string[] => {
+                    // Use local dates throughout — toISOString() is UTC and shifts by timezone offset
+                    const localISO = (d: Date) =>
+                      `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+                    const parseLocal = (s: string) => { const [y,m,day] = s.split('-').map(Number); return new Date(y, m-1, day) }
+
+                    const today = new Date(); today.setHours(0, 0, 0, 0)
+                    const start = parseLocal(repeat.startDate)
+                    const endDate = repeat.endDate ? parseLocal(repeat.endDate) : null
+                    const cursor = new Date(Math.max(start.getTime(), today.getTime()))
+                    const results: string[] = []
+                    const push = (d: Date) => { if (endDate && d > endDate) return false; results.push(localISO(d)); return true }
+
+                    // Advance past Sunday → Monday (then re-check holidays)
+                    const skipSunday = (d: Date) => { if (d.getDay() === 0) d.setDate(d.getDate() + 1) }
+
+                    if (repeat.frequency === 'Daily') {
+                      const d = new Date(cursor)
+                      while (results.length < count) {
+                        if (d.getDay() !== 0) { if (!push(new Date(d))) break }  // skip Sundays
+                        d.setDate(d.getDate() + 1)
+                      }
+                      return results
+                    }
+                    if (repeat.frequency === 'Weekly') {
+                      const DAY_IDX = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday']
+                      const targets = repeat.repeatOnWeekdays.length > 0
+                        ? repeat.repeatOnWeekdays.map((d) => DAY_IDX.indexOf(d))
+                        : [start.getDay()]
+                      const d = new Date(cursor)
+                      let guard = 365
+                      while (results.length < count && guard-- > 0) { if (targets.includes(d.getDay())) { if (!push(new Date(d))) break }; d.setDate(d.getDate() + 1) }
+                      return results
+                    }
+                    const step = repeat.frequency === 'Monthly' ? 1 : repeat.frequency === 'Quarterly' ? 3 : repeat.frequency === 'Half-yearly' ? 6 : 12
+                    const dom = repeat.repeatOnDay || start.getDate()
+                    let d = new Date(start.getFullYear(), start.getMonth(), dom)
+                    while (d < cursor) d = new Date(d.getFullYear(), d.getMonth() + step, dom)
+                    while (results.length < count) {
+                      // Skip holidays then Sunday, loop until settled (Monday could also be a holiday)
+                      let guard = 14
+                      while (guard-- > 0) {
+                        while (holidays.has(localISO(d))) d.setDate(d.getDate() + 1)
+                        if (d.getDay() !== 0) break
+                        skipSunday(d)
+                      }
+                      if (!push(new Date(d))) break
+                      d = new Date(d.getFullYear(), d.getMonth() + step, dom)
+                    }
+                    return results
+                  }
+
+                  // ── Shared form ────────────────────────────────────────────
+                  const repeatForm = (
+                    <div className="rounded-xl border border-slate-200 divide-y divide-slate-100 overflow-hidden">
+                      {/* Frequency */}
+                      <div className="flex items-center gap-3 px-3.5 py-2.5">
+                        <span className="text-xs font-semibold text-slate-500 w-24 flex-shrink-0">Frequency</span>
+                        <div className="relative flex-1 min-w-0">
+                          <select
+                            value={repeatFreq}
+                            onChange={(e) => setRepeatFreq(e.target.value as RepeatFrequency)}
+                            className="w-full text-[12.5px] text-slate-700 bg-transparent outline-none border border-slate-200 rounded-lg px-2.5 py-1.5 appearance-none"
+                          >
+                            {(['Daily','Weekly','Monthly','Quarterly','Half-yearly','Yearly'] as RepeatFrequency[]).map((f) => (
+                              <option key={f} value={f}>{f}</option>
+                            ))}
+                          </select>
+                          <svg className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 16 16">
+                            <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </div>
+                      </div>
+                      {/* Start date */}
+                      <div className="flex items-center gap-3 px-3.5 py-2.5">
+                        <span className="text-xs font-semibold text-slate-500 w-24 flex-shrink-0">Start date</span>
+                        <input type="date" value={repeatStart} onChange={(e) => setRepeatStart(e.target.value)}
+                          className="flex-1 text-[12.5px] text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-indigo-300"/>
+                      </div>
+                      {/* End date */}
+                      <div className="flex items-center gap-3 px-3.5 py-2.5">
+                        <span className="text-xs font-semibold text-slate-500 w-24 flex-shrink-0">End date</span>
+                        <input type="date" value={repeatEnd} onChange={(e) => setRepeatEnd(e.target.value)}
+                          className="flex-1 text-[12.5px] text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-indigo-300"/>
+                      </div>
+                      {/* Weekday picker — weekly only */}
+                      {repeatFreq === 'Weekly' && (
+                        <div className="px-3.5 py-2.5">
+                          <span className="text-xs font-semibold text-slate-500 block mb-2">Repeat on days</span>
+                          <div className="flex gap-1.5">
+                            {WEEKDAYS.map((day) => {
+                              const active = repeatOnWeekdays.includes(day)
+                              return (
+                                <button key={day} type="button"
+                                  onClick={() => setRepeatOnWeekdays((prev) => active ? prev.filter((d) => d !== day) : [...prev, day])}
+                                  className={['w-8 h-8 rounded-full text-[11px] font-bold border transition-all', active ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-slate-200 text-slate-500 hover:border-indigo-300 hover:text-indigo-500'].join(' ')}
+                                >
+                                  {day.slice(0, 2).toUpperCase()}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      {/* Day of month — monthly+ only */}
+                      {['Monthly','Quarterly','Half-yearly','Yearly'].includes(repeatFreq) && (
+                        <div className="flex items-center gap-3 px-3.5 py-2.5">
+                          <span className="text-xs font-semibold text-slate-500 w-24 flex-shrink-0">Day of month</span>
+                          <input type="number" min={1} max={28} value={repeatOnDay} onChange={(e) => setRepeatOnDay(e.target.value)} placeholder="1–28"
+                            className="w-20 text-[12.5px] text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-indigo-300 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"/>
+                        </div>
+                      )}
+                      {/* Live preview */}
+                      <div className="px-3.5 py-2.5 bg-slate-50">
+                        <p className="text-[11.5px] text-slate-500">
+                          <span className="font-semibold text-slate-600">Preview: </span>
+                          {describeSchedule(repeatFreq, repeatOnWeekdays, repeatOnDay)}
+                          {repeatStart && ` · from ${fmtRepeatDate(repeatStart)}`}
+                          {repeatEnd && ` · until ${fmtRepeatDate(repeatEnd)}`}
+                        </p>
+                      </div>
+                    </div>
+                  )
+
+                  // ── Save handler (shared) ──────────────────────────────────
+                  const handleSave = async () => {
+                    setRepeatSaving(true)
+                    try {
+                      const input = {
+                        frequency:        repeatFreq,
+                        startDate:        repeatStart || task.startDate || new Date().toISOString().slice(0, 10),
+                        endDate:          repeatEnd || undefined,
+                        repeatOnDay:      repeatOnDay ? Number(repeatOnDay) : undefined,
+                        repeatOnWeekdays: repeatFreq === 'Weekly' ? repeatOnWeekdays : undefined,
+                      }
+                      if (savedRepeat) {
+                        const updated = await autoRepeatApi.update(savedRepeat.id, input)
+                        setSavedRepeat(updated)
+                      } else {
+                        const created = await autoRepeatApi.create(task.id, input)
+                        setSavedRepeat(created)
+                      }
+                      setRepeatEnabled(true)
+                      setRepeatEditMode(false)
+                    } catch {
+                      console.warn('[TaskDetailModal] repeat save failed')
+                    } finally {
+                      setRepeatSaving(false)
+                    }
+                  }
+
+                  const handleRemove = async () => {
+                    if (!savedRepeat) return
+                    setRepeatSaving(true)
+                    try {
+                      await autoRepeatApi.remove(savedRepeat.id)
+                      setSavedRepeat(null)
+                      setRepeatEnabled(false)
+                      setRepeatEditMode(false)
+                    } catch {
+                      console.warn('[TaskDetailModal] repeat remove failed')
+                    } finally {
+                      setRepeatSaving(false)
+                    }
+                  }
+
+                  // ── View: existing repeat (summary card) ───────────────────
+                  if (savedRepeat && !repeatEditMode) {
+                    return (
+                      <div className="p-4 space-y-3">
+                        {/* Summary card */}
+                        <div className="rounded-xl border border-indigo-100 bg-gradient-to-b from-indigo-50/60 to-white p-4">
+                          <div className="flex items-start gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                              <svg fill="none" viewBox="0 0 16 16" width="15" height="15" className="text-indigo-600">
+                                <path d="M2 8a6 6 0 0 1 11-3M14 8a6 6 0 0 1-11 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                                <path d="M13 5l1-1.5 1.5 1.5M3 11l-1 1.5-1.5-1.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                              </svg>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap mb-1">
+                                <span className="text-[13px] font-bold text-slate-800">{savedRepeat.frequency}</span>
+                                <span className={['text-[10px] font-semibold px-1.5 py-0.5 rounded-full', savedRepeat.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'].join(' ')}>
+                                  {savedRepeat.status}
+                                </span>
+                              </div>
+                              <p className="text-[12.5px] text-indigo-700 font-medium">
+                                {describeSchedule(savedRepeat.frequency, savedRepeat.repeatOnWeekdays, String(savedRepeat.repeatOnDay ?? ''))}
+                              </p>
+                              <div className="flex items-center gap-2 mt-2 text-[11.5px] text-slate-400 flex-wrap">
+                                <span>Starts {fmtRepeatDate(savedRepeat.startDate)}</span>
+                                {savedRepeat.endDate && (
+                                  <><span>·</span><span>Ends {fmtRepeatDate(savedRepeat.endDate)}</span></>
+                                )}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setRepeatEditMode(true)}
+                              title="Edit repeat"
+                              className="flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                            >
+                              <svg fill="none" viewBox="0 0 14 14" width="13" height="13">
+                                <path d="M9.5 2.5l2 2L4 12H2v-2L9.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Upcoming timeline */}
+                        {(() => {
+                          const upcoming = getUpcomingDates(savedRepeat, 5, holidayDates)
+                          if (upcoming.length === 0) return null
+                          const t = new Date()
+                          const todayStr = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`
+                          return (
+                            <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+                              <div className="px-3.5 py-2 border-b border-slate-100 flex items-center gap-1.5">
+                                <svg fill="none" viewBox="0 0 14 14" width="12" height="12" className="text-slate-400">
+                                  <rect x="1" y="2" width="12" height="11" rx="2" stroke="currentColor" strokeWidth="1.3"/>
+                                  <path d="M4 1v2M10 1v2M1 6h12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                                </svg>
+                                <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Upcoming</span>
+                              </div>
+                              <div className="relative px-3.5 py-2">
+                                {/* Vertical line */}
+                                <div className="absolute left-[22px] top-4 bottom-4 w-px bg-slate-100"/>
+                                <div className="space-y-0">
+                                  {upcoming.map((dateStr, i) => {
+                                    const isToday = dateStr === todayStr
+                                    // Parse as local midnight — new Date("YYYY-MM-DD") parses UTC and shifts the weekday
+                                    const [yr, mo, dy] = dateStr.split('-').map(Number)
+                                    const d = new Date(yr, mo - 1, dy)
+                                    const label = d.toLocaleDateString('en', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
+                                    return (
+                                      <div key={dateStr} className="flex items-center gap-2.5 py-1.5 relative">
+                                        {/* Dot */}
+                                        <div className={['relative z-10 w-2.5 h-2.5 rounded-full border-2 flex-shrink-0 ml-0.5',
+                                          i === 0 ? 'border-indigo-500 bg-indigo-500' : 'border-slate-300 bg-white'].join(' ')}/>
+                                        <span className={['text-[12px]', i === 0 ? 'font-semibold text-indigo-700' : 'text-slate-600'].join(' ')}>
+                                          {label}
+                                        </span>
+                                        {isToday && (
+                                          <span className="ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-600">Today</span>
+                                        )}
+                                      </div>
+                                    )
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })()}
+
+                        {/* Remove */}
+                        <button type="button" disabled={repeatSaving} onClick={handleRemove}
+                          className="w-full py-2 rounded-lg border border-rose-200 text-rose-500 text-[12px] font-medium hover:bg-rose-50 transition-colors disabled:opacity-50">
+                          {repeatSaving ? 'Removing…' : 'Remove repeat'}
+                        </button>
+                      </div>
+                    )
+                  }
+
+                  // ── View: edit / create form ───────────────────────────────
+                  if (savedRepeat && repeatEditMode) {
+                    return (
+                      <div className="p-4 space-y-3">
+                        {repeatForm}
+                        <div className="flex gap-2">
+                          <button type="button" disabled={repeatSaving} onClick={handleSave}
+                            className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[12.5px] font-medium rounded-lg transition-colors disabled:opacity-60">
+                            {repeatSaving ? 'Saving…' : 'Save changes'}
+                          </button>
+                          <button type="button" onClick={() => {
+                            setRepeatEditMode(false)
+                            // Restore displayed values from savedRepeat
+                            setRepeatFreq(savedRepeat.frequency)
+                            setRepeatStart(savedRepeat.startDate)
+                            setRepeatEnd(savedRepeat.endDate ?? '')
+                            setRepeatOnDay(String(savedRepeat.repeatOnDay ?? ''))
+                            setRepeatOnWeekdays(savedRepeat.repeatOnWeekdays)
+                          }}
+                            className="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 text-[12.5px] font-medium hover:bg-slate-50 transition-colors">
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  }
+
+                  // ── View: no repeat yet ────────────────────────────────────
+                  if (!repeatEnabled) {
+                    return (
+                      <div className="flex flex-col items-center justify-center py-10 gap-3 text-center px-4">
+                        <div className="w-11 h-11 rounded-full bg-slate-100 flex items-center justify-center">
+                          <svg fill="none" viewBox="0 0 20 20" width="18" height="18" className="text-slate-400">
+                            <path d="M3 10a7 7 0 0 1 13-3.5M17 10a7 7 0 0 1-13 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                            <path d="M16 6.5l1-2 2 1.5M4 13.5l-1 2-2-1.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        </div>
+                        <div>
+                          <p className="text-[13px] font-semibold text-slate-600">No repeat configured</p>
+                          <p className="text-[11.5px] text-slate-400 mt-0.5">Set up a recurring schedule for this task</p>
+                        </div>
+                        <button type="button"
+                          onClick={() => { setRepeatEnabled(true); if (!repeatStart) setRepeatStart(fullTask?.startDate ?? task.startDate ?? '') }}
+                          className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[12.5px] font-medium rounded-lg transition-colors">
+                          <svg fill="none" viewBox="0 0 12 12" width="11" height="11">
+                            <path d="M6 1v10M1 6h10" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8"/>
+                          </svg>
+                          Set up repeat
+                        </button>
+                      </div>
+                    )
+                  }
+
+                  // ── View: new repeat form ──────────────────────────────────
+                  return (
+                    <div className="p-4 space-y-3">
+                      {repeatForm}
+                      <div className="flex gap-2">
+                        <button type="button" disabled={repeatSaving} onClick={handleSave}
+                          className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[12.5px] font-medium rounded-lg transition-colors disabled:opacity-60">
+                          {repeatSaving ? 'Saving…' : 'Save repeat'}
+                        </button>
+                        <button type="button" onClick={() => setRepeatEnabled(false)}
+                          className="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 text-[12.5px] font-medium hover:bg-slate-50 transition-colors">
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })()}
 
                 {/* Comments tab */}
                 {commTab === 'comments' && (

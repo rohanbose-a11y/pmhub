@@ -147,6 +147,7 @@ export function EditTaskForm({
     status: task.status,
     priority: task.priority,
     isMilestone: task.isMilestone,
+    isGroup: task.isGroup,
     parentTask: task.parentTask ?? '',
     startDate: task.startDate ?? '',
     dueDate: task.dueDate ?? '',
@@ -162,6 +163,7 @@ export function EditTaskForm({
   })
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({})
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false)
+  const [pendingStatus, setPendingStatus] = useState('')
   const [depTaskIds, setDepTaskIds] = useState<string[]>(() =>
     task.dependsOnTasks
       ? task.dependsOnTasks.split(',').map((s) => s.trim()).filter(Boolean)
@@ -177,6 +179,7 @@ export function EditTaskForm({
     status: task.status,
     priority: task.priority,
     isMilestone: task.isMilestone,
+    isGroup: task.isGroup,
     parentTask: task.parentTask ?? '',
     startDate: task.startDate ?? '',
     dueDate: task.dueDate ?? '',
@@ -245,7 +248,9 @@ export function EditTaskForm({
       department: (values.department as string)?.trim() || undefined,
       dependsOnTasks: depTaskIds.join(',') || undefined,
     })
-    if (ok) onSuccess()
+    if (ok) {
+      onSuccess()
+    }
   }
 
   return (
@@ -344,24 +349,44 @@ export function EditTaskForm({
           </div>
         </div>
 
-        {/* (Is Milestone) */}
-        <label className="flex items-center gap-3 p-3.5 bg-slate-50 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-100 active:bg-slate-100 transition-colors select-none">
-          <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${values.isMilestone ? 'bg-violet-600 border-violet-600' : 'border-slate-300 bg-white'}`}>
-            {values.isMilestone && (
-              <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 12 12">
-                <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            )}
-          </div>
-          <input
-            checked={values.isMilestone ?? false}
-            className="sr-only"
-            name="isMilestone"
-            onChange={handleChange}
-            type="checkbox"
-          />
-          <p className="text-sm font-semibold text-slate-800">Is Milestone</p>
-        </label>
+        {/* (Is Milestone / Is Group) */}
+        <div className="grid grid-cols-2 gap-3">
+          <label className="flex items-center gap-3 p-3.5 bg-slate-50 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-100 active:bg-slate-100 transition-colors select-none">
+            <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${values.isMilestone ? 'bg-violet-600 border-violet-600' : 'border-slate-300 bg-white'}`}>
+              {values.isMilestone && (
+                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 12 12">
+                  <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              )}
+            </div>
+            <input
+              checked={values.isMilestone ?? false}
+              className="sr-only"
+              name="isMilestone"
+              onChange={handleChange}
+              type="checkbox"
+            />
+            <p className="text-sm font-semibold text-slate-800">Is Milestone</p>
+          </label>
+
+          <label className="flex items-center gap-3 p-3.5 bg-slate-50 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-100 active:bg-slate-100 transition-colors select-none">
+            <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${values.isGroup ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 bg-white'}`}>
+              {values.isGroup && (
+                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 12 12">
+                  <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              )}
+            </div>
+            <input
+              checked={values.isGroup ?? false}
+              className="sr-only"
+              name="isGroup"
+              onChange={handleChange}
+              type="checkbox"
+            />
+            <p className="text-sm font-semibold text-slate-800">Is Group</p>
+          </label>
+        </div>
       </div>
 
       {/* ── Status & priority ── */}
@@ -386,7 +411,7 @@ export function EditTaskForm({
                   <button
                     key={s}
                     type="button"
-                    onClick={() => { if (s !== values.status) setIsStatusModalOpen(true) }}
+                    onClick={() => { if (s !== values.status) { setPendingStatus(s); setIsStatusModalOpen(true) } }}
                     className={`py-2.5 px-1 rounded-lg text-xs font-semibold border transition-all text-center leading-tight ${cls[s]}`}
                   >
                     {s}
@@ -622,6 +647,7 @@ export function EditTaskForm({
       {isStatusModalOpen && (
         <StatusChangeModal
           currentStatus={values.status}
+          initialStatus={pendingStatus}
           isSubmitting={false}
           onCancel={() => setIsStatusModalOpen(false)}
           onConfirm={(newStatus, note) => {

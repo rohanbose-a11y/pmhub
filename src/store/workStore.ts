@@ -36,7 +36,7 @@ interface WorkState {
    */
   _knownMonthTimesheets: Record<string, string>
   loadWorkspace: (username: string, silent?: boolean) => Promise<void>
-  createTask: (input: CreateTaskInput, username: string) => Promise<boolean>
+  createTask: (input: CreateTaskInput, username: string) => Promise<Task | null>
   updateTaskStatus: (taskId: string, status: string, completedBy?: string, completedOn?: string) => Promise<boolean>
   assignTask: (taskId: string, userId: string) => Promise<boolean>
   unassignTask: (taskId: string, userId: string) => Promise<boolean>
@@ -249,7 +249,7 @@ export const useWorkStore = create<WorkState>((set, get) => ({
       }))
 
       await get().loadWorkspace(username)
-      return true
+      return createdTask
     } catch (error) {
       set({
         createTaskStatus: 'error',
@@ -258,7 +258,7 @@ export const useWorkStore = create<WorkState>((set, get) => ({
         lastCreatedTask: null,
       })
 
-      return false
+      return null
     }
   },
 

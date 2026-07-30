@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useSearchParams } from 'react-router-dom'
 
-import type { CreateTaskInput, Task, UpdateTaskInput } from '../types/task.types'
+import type { CreateTaskInput, Task } from '../types/task.types'
 import { CreateTaskModal } from '../components/CreateTaskModal'
-import { EditTaskForm } from '../components/EditTaskForm'
 import { StatusChangeModal } from '../components/StatusChangeModal'
 import { AssignTaskModal } from '../components/AssignTaskModal'
 import { TaskDetailModal } from '../components/TaskDetailModal'
@@ -157,20 +156,9 @@ export function TasksPage() {
 
   const [isCreateOpen,       setIsCreateOpen]       = useState(false)
   const [detailTaskId,       setDetailTaskId]        = useState<string | null>(null)
-  const [editingTaskId,      setEditingTaskId]       = useState<string | null>(null)
-  const [editingTask,        setEditingTask]         = useState<Task | null>(null)
-  const [editError,          setEditError]           = useState<string | null>(null)
-  const [isEditSubmitting,   setIsEditSubmitting]    = useState(false)
   const [assigningTask,      setAssigningTask]       = useState<Task | null>(null)
   const [statusChangeTarget, setStatusChangeTarget]  = useState<Task | null>(null)
   const [isStatusChanging,   setIsStatusChanging]    = useState(false)
-  const [editCommExpanded,   setEditCommExpanded]    = useState(true)
-  const [editCommTab,        setEditCommTab]         = useState<'comments' | 'activity' | 'attachments'>('activity')
-  const [editComingSoon,     setEditComingSoon]      = useState<string | null>(null)
-  const triggerEditComingSoon = (msg: string) => {
-    setEditComingSoon(msg)
-    setTimeout(() => setEditComingSoon(null), 2800)
-  }
 
   // Auto-open task detail from dashboard / notification link
   useEffect(() => {
@@ -183,36 +171,15 @@ export function TasksPage() {
     }
   }, [location.state, tasks])
 
-  // Reset edit panel to open on Activity tab whenever a different task is opened for editing
-  useEffect(() => {
-    if (editingTaskId) { setEditCommExpanded(true); setEditCommTab('activity') }
-  }, [editingTaskId])
-
   // ── Handlers ──────────────────────────────────────────────────────────────────
 
   const handleCreateTask = (input: CreateTaskInput) => {
-    if (!username) return Promise.resolve(false)
+    if (!username) return Promise.resolve(null)
     return createTask(input, username)
   }
 
   const openCreateModal  = () => { resetTaskFeedback(); setIsCreateOpen(true) }
   const closeCreateModal = () => { if (createTaskStatus === 'submitting') return; setIsCreateOpen(false) }
-
-  const closeEditModal = () => {
-    if (isEditSubmitting) return
-    setEditingTaskId(null); setEditingTask(null); setEditError(null)
-  }
-
-  const handleEditSubmit = async (taskId: string, input: UpdateTaskInput) => {
-    setIsEditSubmitting(true); setEditError(null)
-    const enriched = input.status === 'Completed'
-      ? { ...input, completedBy: input.completedBy || username || userFullName, completedOn: input.completedOn || new Date().toISOString().split('T')[0] }
-      : input
-    const ok = await updateTask(taskId, enriched)
-    setIsEditSubmitting(false)
-    if (!ok) setEditError('Failed to save changes. Please try again.')
-    return ok
-  }
 
   const handleStatusChangeConfirm = async (newStatus: string, note: string) => {
     if (!statusChangeTarget) return
@@ -812,246 +779,6 @@ export function TasksPage() {
         />
       )}
 
-      {/* Edit modal */}
-      {editingTaskId !== null && (() => {
-        const stub = tasks.find((t) => t.id === editingTaskId)
-        return (
-          <div
-            className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center justify-center animate-fade-in md:p-4"
-            onClick={() => { if (!isEditSubmitting) closeEditModal() }}
-          >
-            <div
-              className="relative flex bg-white w-full max-w-[1100px] h-[96vh] md:h-[calc(100vh-2rem)] md:rounded-xl shadow-2xl overflow-hidden"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* ══ Main content ══ */}
-              <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-                {/* Top bar */}
-                <div className="flex-shrink-0 flex items-center gap-2 px-3 h-11 border-b border-slate-100 bg-white">
-                  <div className="flex items-center gap-1.5 text-[12px] min-w-0">
-                    <span className="hidden sm:inline text-slate-400 shrink-0">Team Space</span>
-                    <span className="hidden sm:inline text-slate-200">/</span>
-                    <span className="text-slate-600 font-medium truncate">
-                      {stub?.project ?? 'Edit Task'}
-                    </span>
-                  </div>
-                  <div className="ml-auto flex items-center gap-1 flex-shrink-0">
-                    <button
-                      onClick={closeEditModal}
-                      disabled={isEditSubmitting}
-                      className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors disabled:opacity-50"
-                    >
-                      <svg fill="none" viewBox="0 0 14 14" width="13" height="13">
-                        <path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5"/>
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Scrollable body */}
-                <div className="flex-1 overflow-y-auto scrollbar-none">
-                  <div className="px-7 pt-5 pb-6">
-                    {editingTask ? (
-                      <EditTaskForm
-                        canEdit={myTaskIds.has(editingTask.id)}
-                        isSubmitting={isEditSubmitting}
-                        onCancel={closeEditModal}
-                        onSubmit={handleEditSubmit}
-                        onSuccess={closeEditModal}
-                        projects={projects}
-                        tasks={tasks}
-                        serverError={editError}
-                        task={editingTask}
-                      />
-                    ) : (
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '80px 0' }}>
-                        <svg className="w-6 h-6 animate-spin text-brand-400" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4z"/>
-                        </svg>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* ══ Right communication panel (collapsible, open by default) ══ */}
-              <div
-                className={[
-                  'hidden md:flex flex-col border-l border-slate-100 bg-white flex-shrink-0 overflow-hidden',
-                  'transition-[width] duration-300 ease-in-out',
-                  editCommExpanded ? 'w-[320px]' : 'w-[52px]',
-                ].join(' ')}
-              >
-                {/* Collapsed icon strip */}
-                {!editCommExpanded && (
-                  <div className="flex flex-col items-center w-[52px] py-3 gap-0.5 bg-slate-50/30">
-                    <button
-                      type="button"
-                      onClick={() => { setEditCommTab('attachments'); setEditCommExpanded(true) }}
-                      title="Open activity panel"
-                      className="flex items-center justify-center w-9 h-9 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-indigo-500 transition-colors mb-1"
-                    >
-                      <svg fill="none" viewBox="0 0 16 16" width="14" height="14">
-                        <path d="M10 3L6 8l4 5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5"/>
-                      </svg>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setEditCommTab('attachments'); setEditCommExpanded(true) }}
-                      title="Activity"
-                      className="flex flex-col items-center gap-0.5 w-9 py-2.5 rounded-lg bg-white shadow-sm text-violet-600 border border-slate-100/80 transition-colors"
-                    >
-                      <svg fill="none" viewBox="0 0 14 14" width="15" height="15">
-                        <path d="M11 2H3a1 1 0 00-1 1v6a1 1 0 001 1h1l2 2 2-2h3a1 1 0 001-1V3a1 1 0 00-1-1z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
-                      </svg>
-                      <span className="text-[9px] font-medium leading-none">Activity</span>
-                    </button>
-                  </div>
-                )}
-
-                {/* Expanded panel */}
-                {editCommExpanded && (
-                  <div className="flex flex-col h-full w-[320px]">
-                    {/* Panel header */}
-                    <div className="flex-shrink-0 flex items-center gap-2 px-3 h-11 border-b border-slate-100">
-                      <span className="flex-1 text-[13px] font-semibold text-slate-700">Activity</span>
-                      <button
-                        type="button"
-                        onClick={() => setEditCommExpanded(false)}
-                        title="Collapse panel"
-                        className="flex items-center justify-center w-7 h-7 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
-                      >
-                        <svg fill="none" viewBox="0 0 16 16" width="14" height="14">
-                          <path d="M6 3l4 5-4 5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5"/>
-                        </svg>
-                      </button>
-                    </div>
-
-                    {/* Tabs */}
-                    <div className="flex-shrink-0 flex items-center border-b border-slate-100 px-3">
-                      {(['attachments', 'activity', 'comments'] as const).map((tab) => (
-                        <button
-                          key={tab}
-                          type="button"
-                          onClick={() => setEditCommTab(tab)}
-                          className={[
-                            'px-3 py-2.5 text-[12px] font-medium capitalize border-b-2 -mb-px transition-colors',
-                            editCommTab === tab
-                              ? 'border-indigo-500 text-indigo-600'
-                              : 'border-transparent text-slate-400 hover:text-slate-600',
-                          ].join(' ')}
-                        >
-                          {tab === 'comments' ? 'Comments' : tab === 'activity' ? 'Activity' : 'Files'}
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Content */}
-                    <div className="flex-1 overflow-y-auto scrollbar-none">
-                      {editCommTab === 'comments' && (
-                        <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-10 px-5">
-                          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-50 to-violet-100 flex items-center justify-center shadow-sm">
-                            <svg fill="none" viewBox="0 0 20 20" width="20" height="20" className="text-violet-500">
-                              <path d="M16 2H4a1 1 0 00-1 1v9a1 1 0 001 1h2l3 3 3-3h4a1 1 0 001-1V3a1 1 0 00-1-1z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/>
-                              <path d="M7 7h6M7 10h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-                            </svg>
-                          </div>
-                          <div>
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-violet-50 text-violet-600 text-[10px] font-bold uppercase tracking-wider">
-                              ✦ Coming Soon
-                            </span>
-                            <p className="text-[13px] font-semibold text-slate-700 mt-2">Team Conversations</p>
-                            <p className="text-[11.5px] text-slate-400 mt-1.5 leading-relaxed max-w-[210px] mx-auto">
-                              Threaded replies, @mentions, emoji reactions, and smart notifications — all in context, right where the work happens.
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                      {editCommTab === 'activity' && (
-                        <div className="flex flex-col items-center justify-center h-full gap-2 text-center py-10 px-4">
-                          <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center">
-                            <svg fill="none" viewBox="0 0 20 20" width="18" height="18" className="text-slate-400">
-                              <circle cx="10" cy="10" r="8" stroke="currentColor" strokeWidth="1.4"/>
-                              <path d="M10 6v4l3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-                            </svg>
-                          </div>
-                          <p className="text-[12.5px] font-medium text-slate-600">No activity yet</p>
-                          <p className="text-[11.5px] text-slate-400">Activity will appear after saving</p>
-                        </div>
-                      )}
-                      {editCommTab === 'attachments' && (
-                        <div className="flex flex-col items-center justify-center h-full gap-2 text-center py-10 px-4">
-                          <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center">
-                            <svg fill="none" viewBox="0 0 16 16" width="14" height="14" className="text-slate-400">
-                              <path d="M7 9a4 4 0 0 0 5.66.01l1.9-1.88a4 4 0 0 0-5.66-5.66L7.8 3.58" stroke="currentColor" strokeLinecap="round" strokeWidth="1.4"/>
-                              <path d="M9 7a4 4 0 0 0-5.66-.01L1.44 8.87a4 4 0 0 0 5.66 5.66l1.1-1.1" stroke="currentColor" strokeLinecap="round" strokeWidth="1.4"/>
-                            </svg>
-                          </div>
-                          <p className="text-[12px] text-slate-500 font-medium">No links yet</p>
-                          <p className="text-[11px] text-slate-400">Links will appear after saving</p>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Composer — only for comments */}
-                    {editCommTab === 'comments' && (
-                      <div className="flex-shrink-0 border-t border-slate-100 p-3">
-                        {editComingSoon && (
-                          <div className="mb-2 px-3 py-2 rounded-lg bg-violet-50 border border-violet-100 text-[11.5px] text-violet-700 flex items-start gap-1.5">
-                            <span className="flex-shrink-0 mt-px">✦</span>
-                            <span>{editComingSoon}</span>
-                          </div>
-                        )}
-                        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-                          <textarea
-                            readOnly
-                            className="w-full px-3 pt-2.5 pb-1 text-[12.5px] text-slate-700 placeholder:text-slate-400 bg-transparent outline-none resize-none scrollbar-none cursor-not-allowed"
-                            placeholder="Add a comment… (@ to mention)"
-                            rows={3}
-                            onClick={() => triggerEditComingSoon('Real-time comments with @mentions, file attachments, and threaded replies — coming soon.')}
-                          />
-                          <div className="flex items-center justify-between px-2 pb-2 pt-1 border-t border-slate-100">
-                            <div className="flex items-center gap-0.5">
-                              <button type="button" title="Bold" onClick={() => triggerEditComingSoon('Rich text formatting — bold, italic, inline code, lists, and more.')} className="w-6 h-6 flex items-center justify-center rounded text-slate-300 hover:text-violet-500 hover:bg-violet-50 transition-colors">
-                                <svg fill="none" viewBox="0 0 12 12" width="11" height="11">
-                                  <path d="M3 2h4a2 2 0 010 4H3zM3 6h4.5a2 2 0 010 4H3z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
-                                </svg>
-                              </button>
-                              <button type="button" title="Attach file" onClick={() => triggerEditComingSoon('Drag-and-drop files, image previews, and document storage directly on tasks.')} className="w-6 h-6 flex items-center justify-center rounded text-slate-300 hover:text-violet-500 hover:bg-violet-50 transition-colors">
-                                <svg fill="none" viewBox="0 0 12 12" width="11" height="11">
-                                  <path d="M10 5.5L6 9.5a3 3 0 01-4.2-4.2l5-5a1.7 1.7 0 012.4 2.4L4 7.9A1 1 0 012.6 6.5L7 2" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.2"/>
-                                </svg>
-                              </button>
-                              <button type="button" title="Mention" onClick={() => triggerEditComingSoon('@mention teammates to notify them instantly and loop them into the conversation.')} className="w-6 h-6 flex items-center justify-center rounded text-slate-300 hover:text-violet-500 hover:bg-violet-50 transition-colors">
-                                <svg fill="none" viewBox="0 0 12 12" width="11" height="11">
-                                  <circle cx="6" cy="5.5" r="1.8" stroke="currentColor" strokeWidth="1.2"/>
-                                  <path d="M9.5 6A3.5 3.5 0 116 2.5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.2"/>
-                                  <path d="M9.5 6v1.2a1.3 1.3 0 002.5 0V6a6 6 0 10-2.5 4.8" stroke="currentColor" strokeLinecap="round" strokeWidth="1.2"/>
-                                </svg>
-                              </button>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() => triggerEditComingSoon('Send comments, updates, and questions — keep the whole conversation on the task.')}
-                              className="h-6 px-2.5 bg-violet-100 hover:bg-violet-200 text-violet-600 text-[11.5px] font-medium rounded-lg transition-colors flex items-center gap-1"
-                            >
-                              Send
-                              <svg fill="none" viewBox="0 0 10 10" width="9" height="9">
-                                <path d="M2 5h6M5.5 2.5L8 5l-2.5 2.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.3"/>
-                              </svg>
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )
-      })()}
     </main>
   )
 }

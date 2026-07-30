@@ -453,7 +453,7 @@ export function TaskKanbanPage() {
   const openCreateModal  = () => { resetTaskFeedback(); setIsCreateOpen(true) }
   const closeCreateModal = () => { if (createTaskStatus === 'submitting') return; setIsCreateOpen(false) }
   const handleCreateTask = (input: CreateTaskInput) => {
-    if (!username) return Promise.resolve(false)
+    if (!username) return Promise.resolve(null)
     return createTask(input, username)
   }
 

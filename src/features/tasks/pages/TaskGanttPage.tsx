@@ -535,7 +535,7 @@ export function TaskGanttPage() {
 
   const openCreateModal  = () => { resetTaskFeedback(); setIsCreateOpen(true) }
   const closeCreateModal = () => { if (createTaskStatus === 'submitting') return; setIsCreateOpen(false) }
-  const handleCreateTask = (input: CreateTaskInput) => username ? createTask(input, username) : Promise.resolve(false)
+  const handleCreateTask = (input: CreateTaskInput) => username ? createTask(input, username) : Promise.resolve(null)
 
   // ── Chart drag-to-scroll ──────────────────────────────────────────────────
   const [chartDragging, setChartDragging] = useState(false)

@@ -6,9 +6,9 @@ import { env } from '../../../config/env'
 
 // ─── Storage keys ─────────────────────────────────────────────────────────────
 
-const CFG_KEY       = 'wa_shift_config'
-const LOGS_KEY      = 'wa_logs'
-const SCHEDULER_KEY = 'wa_scheduler_fired'
+const CFG_KEY            = 'wa_shift_config'
+const LOGS_KEY           = 'wa_logs'
+const SCHEDULER_RUNS_KEY = 'wa_scheduler_runs'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -26,14 +26,25 @@ interface ShiftReminderConfig {
 
 interface ShiftRow extends ErpShift, ShiftReminderConfig {}
 
+type LogType =
+  | 'checkin_reminder'      // not yet checked in
+  | 'checkin_confirmation'  // already checked in (includes time)
+  | 'checkout_reminder'     // not yet checked out
+  | 'skipped_on_leave'      // on approved leave
+  | 'skipped_holiday'       // today is a holiday
+  | 'skipped_checked_out'   // already checked out
+  | 'skipped_no_phone'      // no phone number
+
+type LogStatus = 'sent' | 'failed' | 'skipped'
+
 interface LogEntry {
   id:           string
   ts:           string
   employeeName: string
   phone:        string
-  type:         'checkin' | 'checkout'
-  status:       'sent' | 'failed'
-  error?:       string
+  logType:      LogType
+  status:       LogStatus
+  detail?:      string   // checkin time for confirmation; error text for failed
 }
 
 interface EmpRow {
@@ -52,7 +63,7 @@ interface ErpShiftFull extends ErpShift {
   holiday_list?: string | null
 }
 
-type Tab = 'dashboard' | 'settings' | 'logs'
+type Tab = 'dashboard' | 'settings' | 'logs' | 'scheduler'
 
 // ─── localStorage helpers ─────────────────────────────────────────────────────
 
@@ -79,28 +90,23 @@ function appendLog(entry: LogEntry) {
   localStorage.setItem(LOGS_KEY, JSON.stringify([entry, ...existing].slice(0, 500)))
 }
 
-// ─── Scheduler fire-tracking (per shift + type + date) ───────────────────────
-
-function wasFiredToday(shiftName: string, type: 'checkin' | 'checkout'): boolean {
-  try {
-    const today = new Date().toISOString().slice(0, 10)
-    const data: Record<string, string[]> = JSON.parse(localStorage.getItem(SCHEDULER_KEY) || '{}')
-    return (data[today] ?? []).includes(`${shiftName}::${type}`)
-  } catch { return false }
+interface SchedulerRun {
+  id:        string
+  ts:        string
+  shiftName: string
+  type:      'checkin' | 'checkout'
+  sent:      number
+  skipped:   number
+  failed:    number
 }
 
-function markFiredToday(shiftName: string, type: 'checkin' | 'checkout') {
+function loadSchedulerRuns(): SchedulerRun[] {
   try {
-    const today = new Date().toISOString().slice(0, 10)
-    const data: Record<string, string[]> = JSON.parse(localStorage.getItem(SCHEDULER_KEY) || '{}')
-    if (!data[today]) data[today] = []
-    if (!data[today].includes(`${shiftName}::${type}`)) data[today].push(`${shiftName}::${type}`)
-    // Keep only last 7 days
-    const trimmed: Record<string, string[]> = {}
-    Object.keys(data).sort().slice(-7).forEach((k) => { trimmed[k] = data[k] })
-    localStorage.setItem(SCHEDULER_KEY, JSON.stringify(trimmed))
-  } catch { /* non-fatal */ }
+    const s = localStorage.getItem(SCHEDULER_RUNS_KEY)
+    return s ? JSON.parse(s) : []
+  } catch { return [] }
 }
+
 
 // ─── Time helpers ─────────────────────────────────────────────────────────────
 
@@ -123,24 +129,97 @@ function fmtTs(iso: string): string {
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(iso))
 }
 
+function stripHtml(s: string): string {
+  return s.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim()
+}
+
+// ─── Phone helper ────────────────────────────────────────────────────────────
+
+function cleanPhone(raw: string): string {
+  let p = (raw ?? '').replace(/\D/g, '')
+  if (p.length === 10 && /^[6-9]/.test(p)) p = '91' + p
+  return p
+}
+
+// ─── ERPNext checkin / leave helpers ─────────────────────────────────────────
+
+function todayRangeStr() {
+  const now = new Date()
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const d = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+  return { from: `${d} 00:00:00`, to: `${d} 23:59:59` }
+}
+
+async function getEmployeeCheckinTime(employeeId: string): Promise<string | null> {
+  const { from, to } = todayRangeStr()
+  const res = await httpClient.get<{ data: { time: string }[] }>('/api/resource/Employee Checkin', {
+    params: {
+      fields:            JSON.stringify(['time']),
+      filters:           JSON.stringify([
+        ['Employee Checkin', 'employee',  '=', employeeId],
+        ['Employee Checkin', 'log_type',  '=', 'IN'],
+        ['Employee Checkin', 'time',      '>=', from],
+        ['Employee Checkin', 'time',      '<=', to],
+      ]),
+      limit_page_length: 1,
+      order_by:          'time asc',
+    },
+  })
+  if (!res.data.data.length) return null
+  const dt = new Date(res.data.data[0].time.replace(' ', 'T'))
+  return dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }).toUpperCase()
+}
+
+async function hasEmployeeCheckedOut(employeeId: string): Promise<boolean> {
+  const { from, to } = todayRangeStr()
+  const res = await httpClient.get<{ data: { name: string }[] }>('/api/resource/Employee Checkin', {
+    params: {
+      fields:            JSON.stringify(['name']),
+      filters:           JSON.stringify([
+        ['Employee Checkin', 'employee',  '=', employeeId],
+        ['Employee Checkin', 'log_type',  '=', 'OUT'],
+        ['Employee Checkin', 'time',      '>=', from],
+        ['Employee Checkin', 'time',      '<=', to],
+      ]),
+      limit_page_length: 1,
+    },
+  })
+  return res.data.data.length > 0
+}
+
+async function hasLeaveToday(employeeId: string): Promise<boolean> {
+  const { from } = todayRangeStr()
+  const today = from.slice(0, 10)
+  const res = await httpClient.get<{ data: { name: string }[] }>('/api/resource/Leave Application', {
+    params: {
+      fields:            JSON.stringify(['name']),
+      filters:           JSON.stringify([
+        ['Leave Application', 'employee',  '=',  employeeId],
+        ['Leave Application', 'from_date', '<=', today],
+        ['Leave Application', 'to_date',   '>=', today],
+        ['Leave Application', 'status',    '=',  'Approved'],
+        ['Leave Application', 'docstatus', '=',  1],
+      ]),
+      limit_page_length: 1,
+    },
+  })
+  return res.data.data.length > 0
+}
+
 // ─── Gupshup API call ─────────────────────────────────────────────────────────
 
 async function sendWhatsApp(
   phone: string,
-  recipientName: string,
-  type: 'checkin' | 'checkout',
-  dateLabel: string,
+  templateId: string,
+  params: string[],
 ): Promise<{ ok: boolean; error?: string }> {
-  const templateId = type === 'checkin' ? env.gupshupCheckinTmpl : env.gupshupCheckoutTmpl
-  const firstName  = recipientName.split(' ')[0]
-
   try {
     const body = new URLSearchParams({
       channel:     'whatsapp',
       source:      env.gupshupSrcNumber,
       destination: phone,
       'src.name':  env.gupshupAppName,
-      template:    JSON.stringify({ id: templateId, params: [firstName, dateLabel] }),
+      template:    JSON.stringify({ id: templateId, params }),
     })
 
     const res = await fetch(`${env.gupshupBase}/wa/api/v1/template/msg`, {
@@ -174,6 +253,7 @@ export function WhatsAppAdminPage() {
   const [loadingShifts, setLoadingShifts] = useState(true)
   const [fetchError,    setFetchError]    = useState<string | null>(null)
   const [logs,          setLogs]          = useState<LogEntry[]>(loadLogs)
+  const [schedulerRuns, setSchedulerRuns] = useState<SchedulerRun[]>(loadSchedulerRuns)
   const [saved,         setSaved]         = useState(false)
 
   // Test send
@@ -187,8 +267,18 @@ export function WhatsAppAdminPage() {
   const [bulkSending,  setBulkSending]  = useState(false)
   const [bulkProgress, setBulkProgress] = useState('')
 
-  // Scheduler
-  const [lastSchedulerFire, setLastSchedulerFire] = useState<string | null>(null)
+  // Live clock for the Scheduler status card (updates every 10s)
+  const [nowHHMM, setNowHHMM] = useState(() => {
+    const n = new Date()
+    return `${String(n.getHours()).padStart(2, '0')}:${String(n.getMinutes()).padStart(2, '0')}`
+  })
+  useEffect(() => {
+    const id = setInterval(() => {
+      const n = new Date()
+      setNowHHMM(`${String(n.getHours()).padStart(2, '0')}:${String(n.getMinutes()).padStart(2, '0')}`)
+    }, 10_000)
+    return () => clearInterval(id)
+  }, [])
 
   // Calendar
   const today          = new Date()
@@ -200,7 +290,7 @@ export function WhatsAppAdminPage() {
   const [loadingHolidays,     setLoadingHolidays]     = useState(false)
 
   const isAdmin      = user?.roles?.includes('Administrator') ?? false
-  const envConfigured = !!(env.gupshupAppName && env.gupshupSrcNumber && env.gupshupCheckinTmpl && env.gupshupCheckoutTmpl)
+  const envConfigured = !!(env.gupshupAppName && env.gupshupSrcNumber && env.gupshupCheckinTmpl && env.gupshupCheckinConfirmTmpl && env.gupshupCheckoutTmpl)
 
   // ── Fetch shifts + employee counts ────────────────────────────────────────
   useEffect(() => {
@@ -313,59 +403,7 @@ export function WhatsAppAdminPage() {
       .finally(() => setLoadingHolidays(false))
   }, [isAdmin, selectedHolidayList, calYear, calMonth])
 
-  // ── Browser scheduler — checks every 30s, fires when time matches ─────────
-  useEffect(() => {
-    if (!isAdmin || !envConfigured) return
-
-    async function tick() {
-      const now   = new Date()
-      const hhmm  = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-      const cfg   = loadReminderConfigs()
-
-      for (const [shiftName, shiftCfg] of Object.entries(cfg)) {
-        if (!shiftCfg.enabled) continue
-
-        for (const type of ['checkin', 'checkout'] as const) {
-          const target = type === 'checkin' ? shiftCfg.checkinTime : shiftCfg.checkoutTime
-          if (hhmm !== target) continue
-          if (wasFiredToday(shiftName, type)) continue
-
-          markFiredToday(shiftName, type)
-          setLastSchedulerFire(`${type === 'checkin' ? 'Check-in' : 'Check-out'} sent for "${shiftName}" at ${hhmm}`)
-
-          // Fetch employees for this specific shift and send
-          try {
-            const res = await httpClient.get<{ data: EmpRow[] }>('/api/resource/Employee', {
-              params: {
-                fields:  JSON.stringify(['name', 'employee_name', 'cell_number']),
-                filters: JSON.stringify([
-                  ['Employee', 'status',        '=', 'Active'],
-                  ['Employee', 'default_shift',  '=', shiftName],
-                ]),
-                limit_page_length: 500,
-              },
-            })
-            const employees = res.data.data.filter((e) => !!e.cell_number)
-            const date = todayLabel()
-            for (const emp of employees) {
-              const phone  = (emp.cell_number ?? '').replace(/\D/g, '')
-              const result = await sendWhatsApp(phone, emp.employee_name, type, date)
-              appendLog({
-                id: crypto.randomUUID(), ts: new Date().toISOString(),
-                employeeName: emp.employee_name, phone, type,
-                status: result.ok ? 'sent' : 'failed', error: result.error,
-              })
-            }
-            setLogs(loadLogs())
-          } catch { /* non-fatal — already logged */ }
-        }
-      }
-    }
-
-    const id = setInterval(() => { void tick() }, 30_000)
-    void tick() // run immediately on mount too
-    return () => clearInterval(id)
-  }, [isAdmin, envConfigured])
+  // Scheduler runs in AppShellLayout via useWhatsAppScheduler — always active
 
   if (!isAdmin) {
     return (
@@ -385,7 +423,12 @@ export function WhatsAppAdminPage() {
   }))
 
   function updateShiftConfig(name: string, patch: Partial<ShiftReminderConfig>) {
-    setReminderCfg((prev) => ({ ...prev, [name]: { ...prev[name], ...patch } }))
+    setReminderCfg((prev) => {
+      const next = { ...prev, [name]: { ...prev[name], ...patch } }
+      // Auto-persist when toggling enabled so scheduler picks it up immediately
+      if ('enabled' in patch) saveReminderConfigs(next)
+      return next
+    })
   }
 
   function handleSave() {
@@ -403,11 +446,16 @@ export function WhatsAppAdminPage() {
     if (!testPhone || !testName) return
     setTestSending(true)
     setTestResult(null)
-    const result = await sendWhatsApp(testPhone, testName, testType, todayLabel())
+    const phone      = cleanPhone(testPhone)
+    const firstName  = testName.split(' ')[0]
+    const date       = todayLabel()
+    const logType: LogType   = testType === 'checkin' ? 'checkin_reminder' : 'checkout_reminder'
+    const templateId = testType === 'checkin' ? env.gupshupCheckinTmpl : env.gupshupCheckoutTmpl
+    const result     = await sendWhatsApp(phone, templateId, [firstName, date])
     appendLog({
       id: crypto.randomUUID(), ts: new Date().toISOString(),
-      employeeName: testName, phone: testPhone,
-      type: testType, status: result.ok ? 'sent' : 'failed', error: result.error,
+      employeeName: testName, phone,
+      logType, status: result.ok ? 'sent' : 'failed', detail: result.error,
     })
     setLogs(loadLogs())
     setTestResult({ ok: result.ok, msg: result.ok ? 'Message sent successfully.' : (result.error ?? 'Failed') })
@@ -415,6 +463,25 @@ export function WhatsAppAdminPage() {
   }
 
   async function handleBulkSend(type: 'checkin' | 'checkout') {
+    if (bulkSending) return
+
+    // Holiday check — log all employees as skipped_holiday
+    const todayStr = new Date().toISOString().slice(0, 10)
+    const isHoliday = holidays.some((h) => h.holiday_date.slice(0, 10) === todayStr)
+    if (isHoliday) {
+      const holidayName = stripHtml(holidays.find((h) => h.holiday_date.slice(0, 10) === todayStr)?.description ?? '') || 'Holiday'
+      appendLog({
+        id: crypto.randomUUID(), ts: new Date().toISOString(),
+        employeeName: 'All Employees',
+        phone: '',
+        logType: 'skipped_holiday', status: 'skipped',
+        detail: `${holidayName}${selectedHolidayList ? ` · ${selectedHolidayList}` : ''}`,
+      })
+      setLogs(loadLogs())
+      setBulkProgress(`Today is a holiday (${holidayName}). No reminders sent.`)
+      return
+    }
+
     setBulkSending(true)
     setBulkProgress('Fetching active employees…')
     try {
@@ -425,23 +492,54 @@ export function WhatsAppAdminPage() {
           limit_page_length: 500,
         },
       })
-      const employees = res.data.data.filter((e) => !!e.cell_number)
-      if (employees.length === 0) {
-        setBulkProgress('No employees with a phone number found.')
-        setBulkSending(false)
-        return
-      }
-      setBulkProgress(`Sending to ${employees.length} employee(s)…`)
-      let sent = 0, failed = 0
+      const employees = res.data.data
+      setBulkProgress(`Processing ${employees.length} employee(s)…`)
+      let sent = 0, skipped = 0, failed = 0
       const date = todayLabel()
+
       for (const emp of employees) {
-        const phone  = (emp.cell_number ?? '').replace(/\D/g, '')
-        const result = await sendWhatsApp(phone, emp.employee_name, type, date)
-        appendLog({ id: crypto.randomUUID(), ts: new Date().toISOString(), employeeName: emp.employee_name, phone, type, status: result.ok ? 'sent' : 'failed', error: result.error })
+        const baseLog = { id: crypto.randomUUID(), ts: new Date().toISOString(), employeeName: emp.employee_name }
+
+        if (!emp.cell_number) {
+          appendLog({ ...baseLog, phone: '', logType: 'skipped_no_phone', status: 'skipped' })
+          skipped++; continue
+        }
+        const phone     = cleanPhone(emp.cell_number)
+        const firstName = emp.employee_name.split(' ')[0]
+
+        const onLeave = await hasLeaveToday(emp.name).catch(() => false)
+        if (onLeave) {
+          appendLog({ ...baseLog, phone, logType: 'skipped_on_leave', status: 'skipped' })
+          skipped++; continue
+        }
+
+        let logType: LogType
+        let templateId: string
+        let params: string[]
+
+        if (type === 'checkin') {
+          const checkinTime = await getEmployeeCheckinTime(emp.name).catch(() => null)
+          if (checkinTime) {
+            logType = 'checkin_confirmation'; templateId = env.gupshupCheckinConfirmTmpl; params = [firstName, checkinTime, date]
+          } else {
+            logType = 'checkin_reminder'; templateId = env.gupshupCheckinTmpl; params = [firstName, date]
+          }
+        } else {
+          const alreadyOut = await hasEmployeeCheckedOut(emp.name).catch(() => false)
+          if (alreadyOut) {
+            appendLog({ ...baseLog, phone, logType: 'skipped_checked_out', status: 'skipped' })
+            skipped++; continue
+          }
+          logType = 'checkout_reminder'; templateId = env.gupshupCheckoutTmpl; params = [firstName, date]
+        }
+
+        const result = await sendWhatsApp(phone, templateId, params)
+        appendLog({ ...baseLog, phone, logType, status: result.ok ? 'sent' : 'failed', detail: result.error })
         result.ok ? sent++ : failed++
       }
+
       setLogs(loadLogs())
-      setBulkProgress(`Done — ${sent} sent, ${failed} failed.`)
+      setBulkProgress(`Done — ${sent} sent, ${skipped} skipped, ${failed} failed.`)
     } catch (err) {
       setBulkProgress(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`)
     } finally {
@@ -474,14 +572,19 @@ export function WhatsAppAdminPage() {
           style={{ background: 'white', border: '1px solid #E5E7EB' }}
         >
           {([
-            { id: 'dashboard', label: 'Dashboard' },
-            { id: 'settings',  label: 'Settings' },
-            { id: 'logs',      label: `Logs${logs.length > 0 ? ` (${logs.length})` : ''}` },
+            { id: 'dashboard',  label: 'Dashboard' },
+            { id: 'settings',   label: 'Settings' },
+            { id: 'logs',       label: `Logs${logs.length > 0 ? ` (${logs.length})` : ''}` },
+            { id: 'scheduler',  label: `Scheduler${schedulerRuns.length > 0 ? ` (${schedulerRuns.length})` : ''}` },
           ] as { id: Tab; label: string }[]).map((t) => (
             <button
               key={t.id}
               type="button"
-              onClick={() => { setTab(t.id); if (t.id === 'logs') setLogs(loadLogs()) }}
+              onClick={() => {
+                setTab(t.id)
+                if (t.id === 'logs') setLogs(loadLogs())
+                if (t.id === 'scheduler') setSchedulerRuns(loadSchedulerRuns())
+              }}
               className="flex items-center justify-center px-5 py-1.5 rounded-lg text-[12.5px] font-semibold transition-all"
               style={{
                 background: tab === t.id ? '#F5F3FF' : 'transparent',
@@ -503,8 +606,8 @@ export function WhatsAppAdminPage() {
           const totalFailed  = allLogs.filter((l) => l.status === 'failed').length
           const todaySent    = todayLogs.filter((l) => l.status === 'sent').length
           const todayFailed  = todayLogs.filter((l) => l.status === 'failed').length
-          const checkinSent  = allLogs.filter((l) => l.type === 'checkin'  && l.status === 'sent').length
-          const checkoutSent = allLogs.filter((l) => l.type === 'checkout' && l.status === 'sent').length
+          const checkinSent  = allLogs.filter((l) => l.logType?.startsWith('checkin')  && l.status === 'sent').length
+          const checkoutSent = allLogs.filter((l) => l.logType === 'checkout_reminder' && l.status === 'sent').length
           const successRate  = allLogs.length > 0 ? Math.round((totalSent / allLogs.length) * 100) : 0
           const recentLogs   = allLogs.slice(0, 6)
 
@@ -541,7 +644,9 @@ export function WhatsAppAdminPage() {
                         Scheduler active — {enabledShifts} shift{enabledShifts > 1 ? 's' : ''} enabled
                       </p>
                       <p className="text-[11.5px]" style={{ color: '#16A34A' }}>
-                        {lastSchedulerFire ?? 'Monitoring… messages fire automatically when the scheduled time is reached.'}
+                        {schedulerRuns[0]
+                          ? `Last run: ${schedulerRuns[0].type === 'checkin' ? 'Check-in' : 'Check-out'} for "${schedulerRuns[0].shiftName}" — ${fmtTs(schedulerRuns[0].ts)}`
+                          : 'Monitoring… messages fire automatically when the scheduled time is reached.'}
                       </p>
                     </>
                   ) : (
@@ -648,11 +753,24 @@ export function WhatsAppAdminPage() {
                           {/* Type dot */}
                           <div
                             className="w-2 h-2 rounded-full flex-shrink-0"
-                            style={{ background: log.type === 'checkin' ? '#3B82F6' : '#7B3FF2' }}
+                            style={{
+                              background:
+                                log.logType?.startsWith('checkin')  ? '#3B82F6' :
+                                log.logType === 'checkout_reminder' ? '#7B3FF2' : '#94A3B8',
+                            }}
                           />
                           <div className="flex-1 min-w-0">
                             <p className="text-[12.5px] font-semibold text-slate-800 truncate">{log.employeeName}</p>
-                            <p className="text-[11px] text-slate-400">{log.type === 'checkin' ? 'Check-in' : 'Check-out'} · {fmtTs(log.ts)}</p>
+                            <p className="text-[11px] text-slate-400">
+                              {log.logType === 'checkin_reminder'     ? 'Check-in Reminder' :
+                               log.logType === 'checkin_confirmation' ? 'Check-in Confirmation' :
+                               log.logType === 'checkout_reminder'    ? 'Check-out Reminder' :
+                               log.logType === 'skipped_on_leave'     ? 'Skipped — On Leave' :
+                               log.logType === 'skipped_holiday'      ? 'Skipped — Holiday' :
+                               log.logType === 'skipped_checked_out'  ? 'Skipped — Checked Out' :
+                               log.logType === 'skipped_no_phone'     ? 'Skipped — No Phone' : '—'}
+                              {' · '}{fmtTs(log.ts)}
+                            </p>
                           </div>
                           <span
                             className="text-[10.5px] font-semibold px-2 py-0.5 rounded-md flex-shrink-0"
@@ -834,9 +952,10 @@ export function WhatsAppAdminPage() {
               // Normalize to YYYY-MM-DD (ERPNext may return "2026-07-20 00:00:00")
               const holidayMap = new Map<string, string[]>()
               for (const h of holidays) {
-                const key = h.holiday_date.slice(0, 10)
-                const d   = holidayMap.get(key) ?? []
-                if (!d.includes(h.description)) d.push(h.description)
+                const key  = h.holiday_date.slice(0, 10)
+                const desc = stripHtml(h.description) || 'Holiday'
+                const d    = holidayMap.get(key) ?? []
+                if (!d.includes(desc)) d.push(desc)
                 holidayMap.set(key, d)
               }
 
@@ -1159,26 +1278,202 @@ export function WhatsAppAdminPage() {
                       <span
                         className="inline-flex items-center text-[11px] font-semibold px-2 py-0.5 rounded-md w-fit"
                         style={{
-                          background: log.type === 'checkin' ? '#DBEAFE' : '#EDE9FE',
-                          color:      log.type === 'checkin' ? '#1D4ED8' : '#6D28D9',
+                          background:
+                            log.logType === 'checkin_reminder'     ? '#DBEAFE' :
+                            log.logType === 'checkin_confirmation' ? '#DCFCE7' :
+                            log.logType === 'checkout_reminder'    ? '#EDE9FE' : '#F1F5F9',
+                          color:
+                            log.logType === 'checkin_reminder'     ? '#1D4ED8' :
+                            log.logType === 'checkin_confirmation' ? '#15803D' :
+                            log.logType === 'checkout_reminder'    ? '#6D28D9' : '#64748B',
                         }}
                       >
-                        {log.type === 'checkin' ? 'Check-in' : 'Check-out'}
+                        {log.logType === 'checkin_reminder'     ? 'Check-in Reminder' :
+                         log.logType === 'checkin_confirmation' ? 'Check-in Confirmation' :
+                         log.logType === 'checkout_reminder'    ? 'Check-out Reminder' :
+                         log.logType === 'skipped_on_leave'     ? 'Skipped — On Leave' :
+                         log.logType === 'skipped_holiday'      ? 'Skipped — Holiday' :
+                         log.logType === 'skipped_checked_out'  ? 'Skipped — Checked Out' :
+                         log.logType === 'skipped_no_phone'     ? 'Skipped — No Phone' : '—'}
                       </span>
                       <div>
                         <span
                           className="inline-flex items-center text-[11px] font-semibold px-2 py-0.5 rounded-md w-fit"
                           style={{
-                            background: log.status === 'sent' ? '#DCFCE7' : '#FEE2E2',
-                            color:      log.status === 'sent' ? '#16A34A' : '#DC2626',
+                            background: log.status === 'sent' ? '#DCFCE7' : log.status === 'skipped' ? '#F1F5F9' : '#FEE2E2',
+                            color:      log.status === 'sent' ? '#16A34A' : log.status === 'skipped' ? '#64748B'  : '#DC2626',
                           }}
                         >
-                          {log.status === 'sent' ? '✓ Sent' : '✕ Failed'}
+                          {log.status === 'sent' ? '✓ Sent' : log.status === 'skipped' ? '— Skipped' : '✕ Failed'}
                         </span>
-                        {log.error && (
-                          <p className="text-[10.5px] text-red-400 mt-0.5 leading-tight">{log.error}</p>
+                        {log.detail && log.status === 'failed' && (
+                          <p className="text-[10.5px] text-red-400 mt-0.5 leading-tight">{log.detail}</p>
                         )}
                       </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ══ SCHEDULER ═══════════════════════════════════════════════════════ */}
+        {tab === 'scheduler' && (
+          <div>
+
+            {/* ── Live status card ───────────────────────────────────────────── */}
+            {(() => {
+              const enabledRows = shiftRows.filter((s) => reminderCfg[s.name]?.enabled)
+              const todayKey    = new Date().toISOString().slice(0, 10)
+              const todayRuns   = schedulerRuns.filter((r) => r.ts.slice(0, 10) === todayKey)
+
+              return (
+                <div className="rounded-2xl p-5 mb-4" style={{ background: 'white', border: '1px solid #E5E7EB' }}>
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-[13px] font-semibold text-slate-800">Scheduler Status</p>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="text-[11px] font-mono font-semibold px-2.5 py-1 rounded-lg"
+                        style={{ background: '#F0FDF4', color: '#15803D', border: '1px solid #BBF7D0' }}
+                      >
+                        Now {nowHHMM}
+                      </span>
+                      {todayRuns.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            window.dispatchEvent(new CustomEvent('wa-scheduler-reset'))
+                            localStorage.removeItem(SCHEDULER_RUNS_KEY)
+                            setSchedulerRuns([])
+                          }}
+                          className="text-[11px] font-semibold px-2.5 py-1 rounded-lg"
+                          style={{ background: '#FEF2F2', color: '#DC2626', border: '1px solid #FECACA' }}
+                          title="Clears today's fired markers so the scheduler can fire again — use for testing"
+                        >
+                          Reset fired
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {enabledRows.length === 0 ? (
+                    <p className="text-[12px] text-slate-400">
+                      No shifts are enabled. Go to <strong>Settings</strong>, toggle a shift <strong>Active</strong>, then click <strong>Save</strong>.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {enabledRows.map((row) => {
+                        const cfg     = reminderCfg[row.name]
+                        const ciFired = todayRuns.some((r) => r.shiftName === row.name && r.type === 'checkin')
+                        const coFired = todayRuns.some((r) => r.shiftName === row.name && r.type === 'checkout')
+                        const [ciH, ciM] = cfg.checkinTime.split(':').map(Number)
+                        const [coH, coM] = cfg.checkoutTime.split(':').map(Number)
+                        const [nowH, nowM] = nowHHMM.split(':').map(Number)
+                        const nowMinsLocal  = nowH * 60 + nowM
+                        const ciActive  = !ciFired && (nowMinsLocal - (ciH * 60 + ciM)) >= 0 && (nowMinsLocal - (ciH * 60 + ciM)) <= 1
+                        const coActive  = !coFired && (nowMinsLocal - (coH * 60 + coM)) >= 0 && (nowMinsLocal - (coH * 60 + coM)) <= 1
+                        return (
+                          <div key={row.name}
+                            className="flex flex-wrap items-center gap-3 px-4 py-3 rounded-xl"
+                            style={{ background: '#F8FAFC', border: '1px solid #E5E7EB' }}
+                          >
+                            <span className="text-[12.5px] font-semibold text-slate-800 flex-1 min-w-0 truncate">{row.name}</span>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {/* Check-in */}
+                              <span className="flex items-center gap-1.5 text-[11.5px] px-2.5 py-1 rounded-lg font-semibold"
+                                style={{
+                                  background: ciFired ? '#DCFCE7' : ciActive ? '#FEF9C3' : '#DBEAFE',
+                                  color:      ciFired ? '#15803D' : ciActive ? '#92400E' : '#1D4ED8',
+                                }}
+                              >
+                                CI {cfg.checkinTime}
+                                {ciFired ? ' ✓ fired' : ciActive ? ' ⚡ firing' : ''}
+                              </span>
+                              {/* Check-out */}
+                              <span className="flex items-center gap-1.5 text-[11.5px] px-2.5 py-1 rounded-lg font-semibold"
+                                style={{
+                                  background: coFired ? '#DCFCE7' : coActive ? '#FEF9C3' : '#EDE9FE',
+                                  color:      coFired ? '#15803D' : coActive ? '#92400E' : '#6D28D9',
+                                }}
+                              >
+                                CO {cfg.checkoutTime}
+                                {coFired ? ' ✓ fired' : coActive ? ' ⚡ firing' : ''}
+                              </span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                      <p className="text-[11px] text-slate-400 pt-1">
+                        The scheduler checks every 30 s. Keep this browser tab open and visible for reliable firing.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
+
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[12px] text-slate-400">
+                Each row is one automatic scheduler run — when it fired, which shift, and how many messages were sent.
+              </p>
+              {schedulerRuns.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => { localStorage.removeItem(SCHEDULER_RUNS_KEY); setSchedulerRuns([]) }}
+                  className="text-[12px] font-semibold px-3 py-1.5 rounded-lg"
+                  style={{ background: '#FEF2F2', color: '#DC2626' }}
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+
+            {schedulerRuns.length === 0 ? (
+              <div
+                className="rounded-2xl flex flex-col items-center py-20 gap-3"
+                style={{ background: 'white', border: '1px solid #E5E7EB' }}
+              >
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: '#F0FDF4' }}>
+                  <svg fill="none" viewBox="0 0 20 20" width={18} height={18} style={{ color: '#22C55E' }}>
+                    <circle cx="10" cy="10" r="7" stroke="currentColor" strokeWidth="1.5"/>
+                    <path d="M10 6v4l2.5 2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                </div>
+                <p className="text-[13px] font-semibold text-slate-600">No scheduler runs yet</p>
+                <p className="text-[12px] text-slate-400">Runs appear here when the scheduler fires automatically.</p>
+              </div>
+            ) : (
+              <div className="rounded-2xl overflow-hidden" style={{ background: 'white', border: '1px solid #E5E7EB' }}>
+                <div
+                  className="grid px-6 py-2.5"
+                  style={{ gridTemplateColumns: '160px 1fr 130px 80px 80px 80px', gap: 12, borderBottom: '1px solid #F3F4F6' }}
+                >
+                  {['Ran At', 'Shift', 'Type', 'Sent', 'Skipped', 'Failed'].map((h) => (
+                    <span key={h} className="text-[10.5px] font-semibold text-slate-400 uppercase tracking-wider">{h}</span>
+                  ))}
+                </div>
+                <div className="divide-y" style={{ borderColor: '#F9FAFB' }}>
+                  {schedulerRuns.map((run) => (
+                    <div
+                      key={run.id}
+                      className="grid items-center px-6 py-3.5 hover:bg-slate-50 transition-colors"
+                      style={{ gridTemplateColumns: '160px 1fr 130px 80px 80px 80px', gap: 12 }}
+                    >
+                      <span className="text-[11.5px] text-slate-400 tabular-nums">{fmtTs(run.ts)}</span>
+                      <span className="text-[13px] font-semibold text-slate-800 truncate">{run.shiftName}</span>
+                      <span
+                        className="inline-flex items-center text-[11px] font-semibold px-2 py-0.5 rounded-md w-fit"
+                        style={{
+                          background: run.type === 'checkin' ? '#DBEAFE' : '#EDE9FE',
+                          color:      run.type === 'checkin' ? '#1D4ED8' : '#6D28D9',
+                        }}
+                      >
+                        {run.type === 'checkin' ? 'Check-in' : 'Check-out'}
+                      </span>
+                      <span className="text-[13px] font-bold" style={{ color: run.sent > 0 ? '#16A34A' : '#9CA3AF' }}>{run.sent}</span>
+                      <span className="text-[13px] font-bold text-slate-400">{run.skipped}</span>
+                      <span className="text-[13px] font-bold" style={{ color: run.failed > 0 ? '#DC2626' : '#9CA3AF' }}>{run.failed}</span>
                     </div>
                   ))}
                 </div>

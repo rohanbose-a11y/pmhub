@@ -5,9 +5,8 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App.tsx'
 import './index.css'
 
-if ('serviceWorker' in navigator) {
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
-    // Register a small offline shell for installable PWA behavior.
     void navigator.serviceWorker.register('/sw.js')
   })
 }

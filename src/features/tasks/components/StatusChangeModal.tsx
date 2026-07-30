@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 interface StatusChangeModalProps {
   currentStatus: string
   isSubmitting: boolean
+  /** Pre-select a status when the modal opens (e.g. the status button the user just clicked). */
+  initialStatus?: string
   onConfirm: (newStatus: string, note: string) => void
   onCancel: () => void
 }
@@ -16,8 +18,8 @@ const STATUSES = [
   { key: 'Cancelled',      dot: 'bg-rose-400',    ring: 'ring-rose-300',    bg: 'bg-rose-50',     text: 'text-rose-600'    },
 ]
 
-export function StatusChangeModal({ currentStatus, isSubmitting, onConfirm, onCancel }: StatusChangeModalProps) {
-  const [selectedStatus, setSelectedStatus] = useState<string>('')
+export function StatusChangeModal({ currentStatus, isSubmitting, initialStatus, onConfirm, onCancel }: StatusChangeModalProps) {
+  const [selectedStatus, setSelectedStatus] = useState<string>(initialStatus ?? '')
   const [note, setNote] = useState('')
   const trimmed = note.trim()
 

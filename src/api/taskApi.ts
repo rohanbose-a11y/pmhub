@@ -19,6 +19,7 @@ interface FrappeTaskRecord {
   type?: string | null
   custom_kra?: string | null
   is_milestone?: number | null
+  is_group?: number | null
   parent_task?: string | null
   depends_on_tasks?: string | null
   exp_start_date?: string | null
@@ -36,6 +37,7 @@ interface FrappeTaskRecord {
   completed_by?: string | null
   completed_on?: string | null
   custom_comments?: string | null
+  auto_repeat?: string | null
 }
 
 /**
@@ -52,6 +54,7 @@ const taskFieldsFull = [
   'priority',
   'type',
   'is_milestone',
+  'is_group',
   'parent_task',
   'depends_on_tasks',
   'exp_start_date',
@@ -69,6 +72,7 @@ const taskFieldsFull = [
   'completed_by',
   'completed_on',
   'custom_comments',
+  'auto_repeat',
 ]
 
 /** Fallback without exotic fields — used when the server returns 400/417 on the full list. */
@@ -132,6 +136,7 @@ const toTask = (record: FrappeTaskRecord): Task => ({
   type: record.type || null,
   activityType: record.custom_kra || null,
   isMilestone: !!record.is_milestone,
+  isGroup: !!record.is_group,
   parentTask: record.parent_task || null,
   dependsOnTasks: record.depends_on_tasks || null,
   startDate: record.exp_start_date || null,
@@ -149,6 +154,7 @@ const toTask = (record: FrappeTaskRecord): Task => ({
   completedBy: record.completed_by || null,
   completedOn: record.completed_on || null,
   comments: parseComments(record.custom_comments),
+  autoRepeat: record.auto_repeat || null,
 })
 
 type AnyTaskInput = UpdateTaskInput | CreateTaskInput
@@ -161,6 +167,7 @@ const toPayload = (input: AnyTaskInput) => {
     project: input.project?.trim() || undefined,
     priority: input.priority,
     ...('isMilestone' in input && { is_milestone: (input as UpdateTaskInput).isMilestone ? 1 : 0 }),
+    ...(input.isGroup !== undefined && { is_group: input.isGroup ? 1 : 0 }),
     parent_task: input.parentTask?.trim() || undefined,
     exp_start_date: input.startDate || undefined,
     exp_end_date: input.dueDate || undefined,
@@ -331,11 +338,22 @@ export const taskApi = {
   },
 
   async createTask(input: CreateTaskInput): Promise<Task> {
+    // custom_engagement_days is mandatory on this ERPNext instance.
+    // Frappe evaluates mandatory with Python's `not value`, so 0 also fails.
+    // Default to 1 when the caller didn't provide a positive value so the
+    // field is always satisfied without blocking the user.
+    const normalizedInput: CreateTaskInput = {
+      ...input,
+      engagementDays: (input.engagementDays && input.engagementDays > 0)
+        ? input.engagementDays
+        : 1,
+    }
+
     const createDoc = async (): Promise<Task> => {
       try {
         const { data } = await httpClient.post<FrappeDocumentResponse<FrappeTaskRecord>>(
           '/api/resource/Task',
-          { ...toPayload(input), status: 'Open' },
+          { ...toPayload(normalizedInput), status: 'Open' },
         )
         return toTask(data.data)
       } catch (err) {
@@ -344,7 +362,7 @@ export const taskApi = {
         try {
           const { data } = await httpClient.post<FrappeDocumentResponse<FrappeTaskRecord>>(
             '/api/resource/Task',
-            { ...toPayloadCore(input), status: 'Open' },
+            { ...toPayloadCore(normalizedInput), status: 'Open' },
           )
           return toTask(data.data)
         } catch (err2) {
@@ -352,13 +370,13 @@ export const taskApi = {
           console.warn('[taskApi] createTask core-payload 400/417 — retrying with minimal payload.', axios.isAxiosError(err2) ? err2.response?.data : err2)
           const { data } = await httpClient.post<FrappeDocumentResponse<FrappeTaskRecord>>(
             '/api/resource/Task',
-            { ...toPayloadMinimal(input), status: 'Open' },
+            { ...toPayloadMinimal(normalizedInput), status: 'Open' },
           )
           const created = toTask(data.data)
-          if (input.activityType?.trim()) {
+          if (normalizedInput.activityType?.trim()) {
             try {
               const kraUrl = `/api/resource/Task/${encodeURIComponent(created.id)}`
-              const { data: kraData } = await httpClient.put<FrappeDocumentResponse<FrappeTaskRecord>>(kraUrl, { custom_kra: input.activityType.trim() })
+              const { data: kraData } = await httpClient.put<FrappeDocumentResponse<FrappeTaskRecord>>(kraUrl, { custom_kra: normalizedInput.activityType.trim() })
               return toTask(kraData.data)
             } catch {
               /* custom_kra field unavailable on this ERPNext instance — task created without it */

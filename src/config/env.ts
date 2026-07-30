@@ -9,6 +9,7 @@ export const env = {
   gupshupBase:          import.meta.env.VITE_GUPSHUP_BASE?.trim()            || '/gupshup',
   gupshupAppName:       import.meta.env.VITE_GUPSHUP_APP_NAME?.trim()        || '',
   gupshupSrcNumber:     import.meta.env.VITE_GUPSHUP_SRC_NUMBER?.trim()      || '',
-  gupshupCheckinTmpl:   import.meta.env.VITE_GUPSHUP_CHECKIN_TMPL_ID?.trim() || '',
-  gupshupCheckoutTmpl:  import.meta.env.VITE_GUPSHUP_CHECKOUT_TMPL_ID?.trim()|| '',
+  gupshupCheckinTmpl:        import.meta.env.VITE_GUPSHUP_CHECKIN_TMPL_ID?.trim()         || '',
+  gupshupCheckinConfirmTmpl: import.meta.env.VITE_GUPSHUP_CHECKIN_CONFIRM_TMPL_ID?.trim() || '',
+  gupshupCheckoutTmpl:       import.meta.env.VITE_GUPSHUP_CHECKOUT_TMPL_ID?.trim()        || '',
 }

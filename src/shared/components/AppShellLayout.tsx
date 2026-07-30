@@ -6,6 +6,7 @@ import { useWorkStore } from '../../store/workStore'
 import { useNotifStore } from '../../store/notifStore'
 import { useNotificationSound } from '../../hooks/useNotificationSound'
 import { appNavItems, MobileBottomNav } from './MobileBottomNav'
+import { useWhatsAppScheduler } from '../../features/whatsapp/useWhatsAppScheduler'
 
 // ─── Command-palette types ────────────────────────────────────────────────────
 
@@ -253,6 +254,7 @@ export function AppShellLayout() {
   }, [tasks, username, readIds])
 
   useNotificationSound(myTaskIdsKey)
+  useWhatsAppScheduler()
 
   const lastLoadedAt = useRef<number>(0)
 

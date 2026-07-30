@@ -1,11 +1,37 @@
 import { useEffect, useRef, useState } from 'react'
+import React from 'react'
 
 import { RichTextEditor } from '../../../shared/components/RichTextEditor'
 import { useKraOptions } from '../../../hooks/useKraOptions'
 import { useAuthStore } from '../../../store/authStore'
 import { AssignTaskModal } from './AssignTaskModal'
 import type { Project } from '../../projects/types/project.types'
-import type { Task, CreateTaskInput } from '../types/task.types'
+import type { Task, TaskComment, CreateTaskInput } from '../types/task.types'
+import { autoRepeatApi, WEEKDAYS } from '../../../api/autoRepeatApi'
+import type { RepeatFrequency, Weekday } from '../../../api/autoRepeatApi'
+import { userApi } from '../../../api/userApi'
+import type { UserOption } from '../../../api/userApi'
+
+function mentionSlug(username: string) {
+  return username.split('@')[0]
+}
+
+function renderMentionText(text: string): React.ReactNode {
+  const parts = text.split(/((?:^|\s)@[\w.-]+)/g)
+  return parts.map((seg, i) => {
+    const trimmed = seg.trimStart()
+    if (trimmed.startsWith('@') && /^@[\w.-]+$/.test(trimmed)) {
+      const leading = seg.length - trimmed.length
+      return (
+        <React.Fragment key={i}>
+          {seg.slice(0, leading)}
+          <span className="text-indigo-600 font-medium bg-indigo-50 rounded px-0.5">{trimmed}</span>
+        </React.Fragment>
+      )
+    }
+    return seg
+  })
+}
 
 const AV_COLORS = [
   'bg-violet-500', 'bg-blue-500',   'bg-emerald-500', 'bg-amber-500',
@@ -53,7 +79,7 @@ interface CreateTaskModalProps {
   isSubmitting: boolean
   serverError: string | null
   initialProject?: string
-  onSubmit: (input: CreateTaskInput) => Promise<boolean>
+  onSubmit: (input: CreateTaskInput) => Promise<Task | null>
   onClose: () => void
   onSuccess: () => void
 }
@@ -82,22 +108,43 @@ export function CreateTaskModal({
   const [isMilestone, setIsMilestone] = useState(false)
   const [isGroup,     setIsGroup]     = useState(false)
   const [description, setDescription] = useState('')
-  const [depTaskIds,  setDepTaskIds]  = useState<string[]>([])
+  const [depTaskIds,    setDepTaskIds]    = useState<string[]>([])
+  const [showDepPicker, setShowDepPicker] = useState(false)
+  const [depPickerValue, setDepPickerValue] = useState('')
   const [kraQuery,    setKraQuery]    = useState('')
   const [parentQuery, setParentQuery] = useState('')
   const [titleError,   setTitleError]   = useState(false)
   const [projectError, setProjectError] = useState(false)
   const [editorKey,    setEditorKey]    = useState(0)
 
+  // ── Repeat ────────────────────────────────────────────────────────────────
+  const [repeatEnabled,     setRepeatEnabled]     = useState(false)
+  const [repeatFreq,        setRepeatFreq]        = useState<RepeatFrequency>('Weekly')
+  const [repeatStart,       setRepeatStart]       = useState('')
+  const [repeatEnd,         setRepeatEnd]         = useState('')
+  const [repeatOnDay,       setRepeatOnDay]       = useState('')
+  const [repeatOnWeekdays,  setRepeatOnWeekdays]  = useState<Weekday[]>([])
+  const [repeatError,       setRepeatError]       = useState<string | null>(null)
+
+  // ── Comments + @mention ───────────────────────────────────────────────────
+  const [pendingComments, setPendingComments] = useState<TaskComment[]>([])
+  const [commentText,     setCommentText]     = useState('')
+  const commentInputRef = useRef<HTMLTextAreaElement>(null)
+  const [mentionQuery,   setMentionQuery]   = useState<string | null>(null)
+  const [mentionUsers,   setMentionUsers]   = useState<UserOption[]>([])
+  const [mentionIdx,     setMentionIdx]     = useState(0)
+  const [mentionDropPos, setMentionDropPos] = useState({ bottom: 0, left: 0, width: 0 })
+  const mentionDropRef = useRef<HTMLDivElement>(null)
+
+  // ── Links ─────────────────────────────────────────────────────────────────
+  const [pendingLinks, setPendingLinks] = useState<{ label: string; url: string }[]>([])
+  const [showAddLink,  setShowAddLink]  = useState(false)
+  const [linkName,     setLinkName]     = useState('')
+  const [linkUrl,      setLinkUrl]      = useState('')
+
   // ── Right panel ───────────────────────────────────────────────────────────
   const [commExpanded, setCommExpanded] = useState(false)
-  const [commTab, setCommTab] = useState<'comments' | 'activity' | 'attachments'>('attachments')
-  const [comingSoon, setComingSoon] = useState<string | null>(null)
-  const triggerComingSoon = (msg: string) => {
-    setComingSoon(msg)
-    setTimeout(() => setComingSoon(null), 2800)
-  }
-
+  const [commTab, setCommTab] = useState<'repeat' | 'comments' | 'links' | 'activity'>('comments')
   // ── Dropdown open states ───────────────────────────────────────────────────
   const [showPriorityMenu, setShowPriorityMenu] = useState(false)
   const [showActTypeMenu,  setShowActTypeMenu]  = useState(false)
@@ -135,6 +182,87 @@ export function CreateTaskModal({
     const t = setTimeout(() => titleInputRef.current?.focus(), 60)
     return () => clearTimeout(t)
   }, [])
+
+  // @mention user search
+  useEffect(() => {
+    if (mentionQuery === null) { setMentionUsers([]); return }
+    const timer = setTimeout(() => {
+      userApi.searchUsers(mentionQuery)
+        .then((users) => { setMentionUsers(users); setMentionIdx(0) })
+        .catch(() => setMentionUsers([]))
+    }, 150)
+    return () => clearTimeout(timer)
+  }, [mentionQuery])
+
+  // Close mention dropdown on outside click
+  useEffect(() => {
+    if (mentionQuery === null) return
+    const h = (e: MouseEvent) => {
+      const t = e.target as Node
+      if (
+        mentionDropRef.current && !mentionDropRef.current.contains(t) &&
+        commentInputRef.current && !commentInputRef.current.contains(t)
+      ) setMentionQuery(null)
+    }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [mentionQuery])
+
+  const handleCommentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setCommentText(e.target.value)
+    const pos = e.target.selectionStart ?? e.target.value.length
+    const textToCursor = e.target.value.slice(0, pos)
+    const match = textToCursor.match(/@([^\s@]*)$/)
+    if (match) {
+      if (mentionQuery === null) {
+        const rect = commentInputRef.current?.getBoundingClientRect()
+        if (rect) setMentionDropPos({ bottom: window.innerHeight - rect.top + 4, left: rect.left, width: rect.width })
+      }
+      setMentionQuery(match[1])
+    } else {
+      setMentionQuery(null)
+    }
+  }
+
+  const insertMention = (user: UserOption) => {
+    const el = commentInputRef.current
+    if (!el) return
+    const pos = el.selectionStart ?? commentText.length
+    const before = commentText.slice(0, pos)
+    const after  = commentText.slice(pos)
+    const atIdx  = before.lastIndexOf('@')
+    const token  = `@${mentionSlug(user.name)} `
+    const newText = before.slice(0, atIdx) + token + after
+    setCommentText(newText)
+    setMentionQuery(null)
+    setMentionUsers([])
+    setTimeout(() => {
+      el.focus()
+      const newPos = atIdx + token.length
+      el.setSelectionRange(newPos, newPos)
+    }, 0)
+  }
+
+  const handleCommentKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (mentionQuery !== null && mentionUsers.length > 0) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setMentionIdx((i) => Math.min(i + 1, mentionUsers.length - 1)); return }
+      if (e.key === 'ArrowUp')   { e.preventDefault(); setMentionIdx((i) => Math.max(i - 1, 0)); return }
+      if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); insertMention(mentionUsers[mentionIdx]); return }
+      if (e.key === 'Escape') { setMentionQuery(null); setMentionUsers([]); return }
+    }
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault()
+      const text = commentText.trim()
+      if (!text) return
+      setPendingComments((prev) => [...prev, {
+        user: currentUser?.username ?? 'Unknown',
+        fullName: currentUser?.fullName ?? currentUser?.username ?? 'Unknown',
+        text,
+        timestamp: new Date().toISOString(),
+      }])
+      setCommentText('')
+    }
+  }
 
   // ── Open helpers ──────────────────────────────────────────────────────────
   const openPriorityMenu = () => {
@@ -191,27 +319,59 @@ export function CreateTaskModal({
   const doSubmit = async (andAnother = false) => {
     if (!subject.trim()) { setTitleError(true); titleInputRef.current?.focus(); return }
     if (projects.length > 0 && !project) { setProjectError(true); return }
+    // Validate repeat: must have a start date if enabled
+    if (repeatEnabled && !repeatStart) {
+      setRepeatError('A start date is required to enable repeat.')
+      setCommExpanded(true); setCommTab('repeat')
+      return
+    }
+    setRepeatError(null)
     const engDaysNum = engDays !== '' ? Number(engDays) : undefined
-    const ok = await onSubmit({
+    // Serialize pending links as <a> HTML appended to description
+    const linksHtml = pendingLinks.map((l) =>
+      `<p><a href="${l.url}" target="_blank" rel="noopener noreferrer">${l.label}</a></p>`
+    ).join('')
+    const fullDesc = (description || '') + linksHtml || undefined
+    const created = await onSubmit({
       subject:        subject.trim(),
       project:        project     || undefined,
       activityType:   actType     || undefined,
       priority,
       isMilestone,
+      isGroup,
       parentTask:     parentTask  || undefined,
       dependsOnTasks: depTaskIds.join(',') || undefined,
       startDate:      startDate   || undefined,
       dueDate:        dueDate     || undefined,
       engagementDays: engDaysNum,
-      description:    description || undefined,
+      description:    fullDesc,
       assignedTo:     pendingAssignees.length > 0 ? pendingAssignees : undefined,
+      comments:       pendingComments.length > 0 ? pendingComments : undefined,
     })
-    if (ok) {
+    if (created) {
+      if (repeatEnabled && repeatStart) {
+        try {
+          await autoRepeatApi.create(created.id, {
+            frequency:        repeatFreq,
+            startDate:        repeatStart,
+            endDate:          repeatEnd || undefined,
+            repeatOnDay:      repeatOnDay ? Number(repeatOnDay) : undefined,
+            repeatOnWeekdays: repeatFreq === 'Weekly' ? repeatOnWeekdays : undefined,
+          })
+        } catch {
+          // Task was created — only the repeat schedule failed. Show inline error.
+          setRepeatError('Task created, but the repeat schedule could not be saved. You can set it from the task detail view.')
+          setCommExpanded(true); setCommTab('repeat')
+          console.warn('[CreateTaskModal] Auto Repeat creation failed')
+        }
+      }
       if (andAnother) {
         // Reset form for another entry
         setSubject(''); setActType(''); setStartDate(''); setDueDate('')
         setEngDays(''); setParentTask(''); setIsMilestone(false); setIsGroup(false)
-        setDescription(''); setDepTaskIds([]); setPendingAssignees([]); setEditorKey((k) => k + 1); setProjectError(false)
+        setDescription(''); setDepTaskIds([]); setShowDepPicker(false); setDepPickerValue(''); setPendingAssignees([]); setEditorKey((k) => k + 1); setProjectError(false)
+        setRepeatEnabled(false); setRepeatStart(''); setRepeatEnd(''); setRepeatOnDay(''); setRepeatOnWeekdays([]); setRepeatError(null)
+        setPendingComments([]); setCommentText(''); setPendingLinks([]); setLinkName(''); setLinkUrl('')
         setTimeout(() => titleInputRef.current?.focus(), 60)
       } else {
         onSuccess()
@@ -533,54 +693,86 @@ export function CreateTaskModal({
                 placeholder="Add a description…"
               />
 
-              {/* ── Dependent tasks (shown once at least one is added) ── */}
-              {depTaskIds.length > 0 && (
-                <>
-                  <div className="h-px bg-slate-100 mt-5 mb-4"/>
-                  <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                    Dependent Tasks
-                    <span className="ml-1.5 font-normal normal-case tracking-normal text-slate-300">({depTaskIds.length})</span>
-                  </p>
-                  <div className="rounded-lg border border-slate-100 divide-y divide-slate-50 overflow-hidden mb-3">
+              {/* ── Subtasks ── */}
+              <div className="h-px bg-slate-100 mt-5 mb-4"/>
+              <div className="mb-5">
+                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                  Subtasks{depTaskIds.length > 0 && <span className="ml-1.5 font-normal normal-case tracking-normal text-slate-300">({depTaskIds.length})</span>}
+                </p>
+
+                {depTaskIds.length > 0 && (
+                  <div className="mb-2.5 rounded-lg border border-slate-100 divide-y divide-slate-50 overflow-hidden">
                     {depTaskIds.map((depId) => {
                       const depTask = tasks.find((t) => t.id === depId)
                       return (
-                        <div key={depId} className="flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50">
-                          <span className="w-1.5 h-1.5 rounded-full bg-slate-300 flex-shrink-0"/>
+                        <div key={depId} className="flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 transition-colors">
+                          <div className="w-1.5 h-1.5 rounded-full bg-slate-400 flex-shrink-0"/>
                           <span className="flex-1 text-[12.5px] text-slate-700 truncate">{depTask?.subject ?? depId}</span>
                           <button
                             type="button"
+                            aria-label="Remove"
                             onClick={() => setDepTaskIds((p) => p.filter((x) => x !== depId))}
-                            className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-rose-100 text-slate-400 hover:text-rose-500 transition-colors"
+                            className="flex-shrink-0 w-5 h-5 flex items-center justify-center rounded-full hover:bg-rose-100 text-slate-300 hover:text-rose-500 transition-colors"
                           >
-                            <svg fill="none" viewBox="0 0 12 12" width="10" height="10">
-                              <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeLinecap="round" strokeWidth="1.3"/>
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 12 12">
+                              <path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
                             </svg>
                           </button>
                         </div>
                       )
                     })}
                   </div>
-                </>
-              )}
+                )}
 
-              {/* Add dependency link */}
-              <div className="mt-4">
-                <select
-                  className="text-[12px] text-slate-400 bg-transparent border-0 outline-none cursor-pointer hover:text-slate-600 transition-colors"
-                  onChange={(e) => {
-                    if (e.target.value) {
-                      setDepTaskIds((p) => [...p, e.target.value])
-                      e.target.value = ''
-                    }
-                  }}
-                  value=""
+                {showDepPicker && (
+                  <div className="flex gap-2 mb-2">
+                    <div className="relative flex-1 min-w-0">
+                      <select
+                        className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 appearance-none pr-9 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-all"
+                        onChange={(e) => setDepPickerValue(e.target.value)}
+                        value={depPickerValue}
+                      >
+                        <option value="">Select a task…</option>
+                        {tasks.filter((t) => !depTaskIds.includes(t.id)).map((t) => (
+                          <option key={t.id} value={t.id}>{t.subject}</option>
+                        ))}
+                      </select>
+                      <svg className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" viewBox="0 0 16 16">
+                        <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={!depPickerValue}
+                      onClick={() => {
+                        setDepTaskIds((p) => [...p, depPickerValue])
+                        setShowDepPicker(false)
+                        setDepPickerValue('')
+                      }}
+                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-all disabled:opacity-40 disabled:pointer-events-none flex-shrink-0"
+                    >
+                      Add
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setShowDepPicker(false); setDepPickerValue('') }}
+                      className="px-3 py-2 text-sm text-slate-500 hover:text-slate-700 transition-colors flex-shrink-0"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => { setShowDepPicker(true); setDepPickerValue('') }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] text-slate-500 border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-colors"
                 >
-                  <option value="">+ Add dependency…</option>
-                  {tasks.filter((t) => !depTaskIds.includes(t.id)).map((t) => (
-                    <option key={t.id} value={t.id}>{t.subject}</option>
-                  ))}
-                </select>
+                  <svg fill="none" viewBox="0 0 12 12" width="11" height="11">
+                    <path d="M6 1v10M1 6h10" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5"/>
+                  </svg>
+                  Add Task
+                </button>
               </div>
 
               {/* Error */}
@@ -635,7 +827,7 @@ export function CreateTaskModal({
 
         </div>
 
-        {/* ══ Right communication panel (collapsible) ══ */}
+        {/* ══ Right panel (collapsible) ══ */}
         <div
           className={[
             'hidden md:flex flex-col border-l border-slate-100 bg-white flex-shrink-0 overflow-hidden',
@@ -645,37 +837,72 @@ export function CreateTaskModal({
         >
           {/* Collapsed icon strip */}
           {!commExpanded && (
-            <div className="flex flex-col items-center w-[52px] py-3 gap-0.5 bg-slate-50/30">
+            <div className="flex flex-col items-center w-[52px] pt-2 pb-3 gap-0.5 bg-slate-50 border-r border-slate-100">
+              {/* Expand arrow */}
               <button
                 type="button"
-                onClick={() => { setCommTab('attachments'); setCommExpanded(true) }}
-                title="Open activity panel"
-                className="flex items-center justify-center w-9 h-9 rounded-xl text-slate-400 hover:bg-slate-100 hover:text-indigo-500 transition-colors mb-1"
+                onClick={() => setCommExpanded(true)}
+                title="Expand panel"
+                className="flex items-center justify-center w-9 h-8 rounded-lg text-slate-300 hover:text-indigo-400 hover:bg-indigo-50 transition-colors mb-2"
               >
-                <svg fill="none" viewBox="0 0 16 16" width="14" height="14">
-                  <path d="M10 3L6 8l4 5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5"/>
+                <svg fill="none" viewBox="0 0 16 16" width="13" height="13">
+                  <path d="M10 3L6 8l4 5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6"/>
                 </svg>
               </button>
-              <button
-                type="button"
-                onClick={() => { setCommTab('attachments'); setCommExpanded(true) }}
-                title="Activity"
-                className="flex flex-col items-center gap-0.5 w-9 py-2.5 rounded-lg bg-white shadow-sm text-violet-600 border border-slate-100/80 transition-colors"
-              >
-                <svg fill="none" viewBox="0 0 14 14" width="15" height="15">
-                  <path d="M11 2H3a1 1 0 00-1 1v6a1 1 0 001 1h1l2 2 2-2h3a1 1 0 001-1V3a1 1 0 00-1-1z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
-                </svg>
-                <span className="text-[9px] font-medium leading-none">Activity</span>
-              </button>
+
+              {([
+                {
+                  tab: 'repeat',
+                  label: 'Repeat',
+                  badge: repeatError ? <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-rose-500"/> : repeatEnabled ? <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-indigo-500"/> : null,
+                  icon: <svg fill="none" viewBox="0 0 14 14" width="15" height="15"><path d="M2 7a5 5 0 0 1 9-3M12 7a5 5 0 0 1-9 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/><path d="M11 4l1-1.5 1.5 1.5M3 10l-1 1.5-1.5-1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+                },
+                {
+                  tab: 'comments',
+                  label: 'Comments',
+                  badge: pendingComments.length > 0 ? <span className="absolute top-0.5 right-0.5 min-w-[14px] h-3.5 px-0.5 rounded-full bg-indigo-500 text-white text-[8px] font-bold flex items-center justify-center">{pendingComments.length}</span> : null,
+                  icon: <svg fill="none" viewBox="0 0 14 14" width="15" height="15"><path d="M11 2H3a1 1 0 00-1 1v6a1 1 0 001 1h1l2 2 2-2h3a1 1 0 001-1V3a1 1 0 00-1-1z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>,
+                },
+                {
+                  tab: 'links',
+                  label: 'Links',
+                  badge: pendingLinks.length > 0 ? <span className="absolute top-0.5 right-0.5 min-w-[14px] h-3.5 px-0.5 rounded-full bg-indigo-500 text-white text-[8px] font-bold flex items-center justify-center">{pendingLinks.length}</span> : null,
+                  icon: <svg fill="none" viewBox="0 0 14 14" width="15" height="15"><path d="M6 8a3 3 0 0 0 4.24.01l1.42-1.41a3 3 0 0 0-4.24-4.24L6.35 3.4" stroke="currentColor" strokeLinecap="round" strokeWidth="1.3"/><path d="M8 6a3 3 0 0 0-4.24-.01L2.34 7.4a3 3 0 0 0 4.24 4.24l1.05-1.05" stroke="currentColor" strokeLinecap="round" strokeWidth="1.3"/></svg>,
+                },
+                {
+                  tab: 'activity',
+                  label: 'Activity',
+                  badge: null,
+                  icon: <svg fill="none" viewBox="0 0 14 14" width="15" height="15"><circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.3"/><path d="M7 4.5v3l2 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,
+                },
+              ] as const).map(({ tab, label, icon, badge }) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => { setCommTab(tab); setCommExpanded(true) }}
+                  title={label}
+                  className={[
+                    'relative flex flex-col items-center justify-center gap-1 w-10 h-10 rounded-xl transition-all',
+                    tab === 'repeat' && repeatEnabled
+                      ? 'bg-indigo-50 text-indigo-500'
+                      : 'text-slate-400 hover:bg-white hover:text-slate-600 hover:shadow-sm',
+                  ].join(' ')}
+                >
+                  {icon}
+                  {badge}
+                </button>
+              ))}
             </div>
           )}
 
           {/* Expanded panel */}
           {commExpanded && (
             <div className="flex flex-col h-full w-[320px]">
-              {/* Panel header */}
+              {/* Header */}
               <div className="flex-shrink-0 flex items-center gap-2 px-3 h-11 border-b border-slate-100">
-                <span className="flex-1 text-[13px] font-semibold text-slate-700">Activity</span>
+                <span className="flex-1 text-[13px] font-semibold text-slate-700">
+                  {commTab === 'repeat' ? 'Repeat' : commTab === 'comments' ? 'Comments' : commTab === 'links' ? 'Links' : 'Activity'}
+                </span>
                 <button
                   type="button"
                   onClick={() => setCommExpanded(false)}
@@ -688,44 +915,197 @@ export function CreateTaskModal({
                 </button>
               </div>
 
-              {/* Tabs */}
-              <div className="flex-shrink-0 flex items-center border-b border-slate-100 px-3">
-                {(['attachments', 'activity', 'comments'] as const).map((tab) => (
+              {/* Tab bar — all 4 always visible */}
+              <div className="flex-shrink-0 flex items-center border-b border-slate-100 px-1">
+                {(['repeat', 'comments', 'links', 'activity'] as const).map((tab) => (
                   <button
                     key={tab}
                     type="button"
                     onClick={() => setCommTab(tab)}
                     className={[
-                      'px-3 py-2.5 text-[12px] font-medium capitalize border-b-2 -mb-px transition-colors',
+                      'px-2.5 py-2.5 text-[11.5px] font-medium border-b-2 -mb-px transition-colors',
                       commTab === tab
                         ? 'border-indigo-500 text-indigo-600'
                         : 'border-transparent text-slate-400 hover:text-slate-600',
                     ].join(' ')}
                   >
-                    {tab === 'comments' ? 'Comments' : tab === 'activity' ? 'Activity' : 'Files'}
+                    {tab === 'repeat' ? 'Repeat' : tab === 'comments' ? 'Comments' : tab === 'links' ? 'Links' : 'Activity'}
+                    {tab === 'repeat' && repeatError && (
+                      <span className="ml-1 inline-flex w-1.5 h-1.5 rounded-full bg-rose-500 align-middle -mt-0.5"/>
+                    )}
+                    {tab === 'repeat' && !repeatError && repeatEnabled && (
+                      <span className="ml-1 inline-flex w-1.5 h-1.5 rounded-full bg-indigo-500 align-middle -mt-0.5"/>
+                    )}
+                    {tab === 'comments' && pendingComments.length > 0 && (
+                      <span className="ml-1 inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-indigo-100 text-indigo-600 text-[9px] font-bold align-middle -mt-0.5">{pendingComments.length}</span>
+                    )}
+                    {tab === 'links' && pendingLinks.length > 0 && (
+                      <span className="ml-1 inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-indigo-100 text-indigo-600 text-[9px] font-bold align-middle -mt-0.5">{pendingLinks.length}</span>
+                    )}
                   </button>
                 ))}
               </div>
 
               {/* Content */}
               <div className="flex-1 overflow-y-auto scrollbar-none">
+
+                {/* ── Repeat tab ── */}
+                {commTab === 'repeat' && (
+                  <div className="p-4 space-y-3">
+                    {/* Repeat error */}
+                    {repeatError && (
+                      <div className="flex items-start gap-2 bg-rose-50 border border-rose-100 text-rose-700 px-3 py-2.5 rounded-lg text-[12px]">
+                        <svg className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 16 16">
+                          <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm-.75 3.75a.75.75 0 0 1 1.5 0v3.5a.75.75 0 0 1-1.5 0v-3.5zm.75 7a.875.875 0 1 1 0-1.75.875.875 0 0 1 0 1.75z"/>
+                        </svg>
+                        <span>{repeatError}</span>
+                      </div>
+                    )}
+                    {/* Enable toggle */}
+                    <div
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
+                      onClick={() => {
+                        const next = !repeatEnabled
+                        setRepeatEnabled(next)
+                        if (next && !repeatStart) setRepeatStart(startDate || '')
+                      }}
+                    >
+                      <div className={[
+                        'relative inline-flex h-4 w-7 rounded-full border-2 border-transparent transition-colors flex-shrink-0',
+                        repeatEnabled ? 'bg-indigo-500' : 'bg-slate-200',
+                      ].join(' ')}>
+                        <span className={['inline-block h-3 w-3 rounded-full bg-white shadow transition-transform', repeatEnabled ? 'translate-x-3' : 'translate-x-0'].join(' ')}/>
+                      </div>
+                      <span className="text-[13px] font-semibold text-slate-700">Enable repeat</span>
+                      {repeatEnabled && <span className="ml-auto text-xs text-indigo-600 font-medium">{repeatFreq}</span>}
+                    </div>
+                    {repeatEnabled && (
+                      <div className="rounded-lg border border-slate-200 divide-y divide-slate-100 overflow-hidden">
+                        {/* Frequency */}
+                        <div className="flex items-center gap-3 px-3.5 py-2.5">
+                          <span className="text-xs font-semibold text-slate-500 w-24 flex-shrink-0">Frequency</span>
+                          <div className="relative flex-1 min-w-0">
+                            <select
+                              value={repeatFreq}
+                              onChange={(e) => setRepeatFreq(e.target.value as RepeatFrequency)}
+                              className="w-full text-[12.5px] text-slate-700 bg-transparent outline-none border border-slate-200 rounded-lg px-2.5 py-1.5 appearance-none"
+                            >
+                              {(['Daily','Weekly','Monthly','Quarterly','Half-yearly','Yearly'] as RepeatFrequency[]).map((f) => (
+                                <option key={f} value={f}>{f}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                        {/* Start date */}
+                        <div className="flex items-center gap-3 px-3.5 py-2.5">
+                          <span className="text-xs font-semibold text-slate-500 w-24 flex-shrink-0">Start date</span>
+                          <input
+                            type="date"
+                            value={repeatStart}
+                            onChange={(e) => setRepeatStart(e.target.value)}
+                            className="flex-1 text-[12.5px] text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-indigo-300"
+                          />
+                        </div>
+                        {/* End date */}
+                        <div className="flex items-center gap-3 px-3.5 py-2.5">
+                          <span className="text-xs font-semibold text-slate-500 w-24 flex-shrink-0">End date</span>
+                          <input
+                            type="date"
+                            value={repeatEnd}
+                            onChange={(e) => setRepeatEnd(e.target.value)}
+                            className="flex-1 text-[12.5px] text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-indigo-300"
+                          />
+                        </div>
+                        {/* Repeat on days — weekly only */}
+                        {repeatFreq === 'Weekly' && (
+                          <div className="px-3.5 py-2.5">
+                            <span className="text-xs font-semibold text-slate-500 block mb-2">Repeat on days</span>
+                            <div className="flex gap-1.5 flex-wrap">
+                              {WEEKDAYS.map((day) => {
+                                const label = day.slice(0, 2).toUpperCase()
+                                const active = repeatOnWeekdays.includes(day)
+                                return (
+                                  <button
+                                    key={day}
+                                    type="button"
+                                    onClick={() => setRepeatOnWeekdays((prev) =>
+                                      active ? prev.filter((d) => d !== day) : [...prev, day]
+                                    )}
+                                    className={[
+                                      'w-8 h-8 rounded-full text-[11px] font-bold border transition-all',
+                                      active
+                                        ? 'bg-indigo-600 border-indigo-600 text-white'
+                                        : 'bg-white border-slate-200 text-slate-500 hover:border-indigo-300 hover:text-indigo-500',
+                                    ].join(' ')}
+                                  >
+                                    {label}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
+                        {/* Day of month — monthly+ only */}
+                        {['Monthly','Quarterly','Half-yearly','Yearly'].includes(repeatFreq) && (
+                          <div className="flex items-center gap-3 px-3.5 py-2.5">
+                            <span className="text-xs font-semibold text-slate-500 w-24 flex-shrink-0">Day of month</span>
+                            <input
+                              type="number"
+                              min={1}
+                              max={28}
+                              value={repeatOnDay}
+                              onChange={(e) => setRepeatOnDay(e.target.value)}
+                              placeholder="1–28"
+                              className="w-20 text-[12.5px] text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-indigo-300 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Activity tabs ── */}
                 {commTab === 'comments' && (
-                  <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-10 px-5">
-                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-50 to-violet-100 flex items-center justify-center shadow-sm">
-                      <svg fill="none" viewBox="0 0 20 20" width="20" height="20" className="text-violet-500">
-                        <path d="M16 2H4a1 1 0 00-1 1v9a1 1 0 001 1h2l3 3 3-3h4a1 1 0 001-1V3a1 1 0 00-1-1z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/>
-                        <path d="M7 7h6M7 10h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-                      </svg>
-                    </div>
-                    <div>
-                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-violet-50 text-violet-600 text-[10px] font-bold uppercase tracking-wider">
-                        ✦ Coming Soon
-                      </span>
-                      <p className="text-[13px] font-semibold text-slate-700 mt-2">Team Conversations</p>
-                      <p className="text-[11.5px] text-slate-400 mt-1.5 leading-relaxed max-w-[210px] mx-auto">
-                        Threaded replies, @mentions, emoji reactions, and smart notifications — all in context, right where the work happens.
-                      </p>
-                    </div>
+                  <div className="py-3 px-3 space-y-4">
+                    {pendingComments.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-10 gap-2 text-center">
+                        <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center">
+                          <svg fill="none" viewBox="0 0 16 16" width="14" height="14" className="text-slate-400">
+                            <path d="M13 2H3a1 1 0 00-1 1v7a1 1 0 001 1h1.5l2.5 2.5L9.5 11H13a1 1 0 001-1V3a1 1 0 00-1-1z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+                          </svg>
+                        </div>
+                        <p className="text-[12px] text-slate-500 font-medium">No comments yet</p>
+                        <p className="text-[11px] text-slate-400">Add one below before saving</p>
+                      </div>
+                    ) : (
+                      pendingComments.map((c, i) => {
+                        const displayName = c.fullName ?? c.user
+                        return (
+                          <div key={i} className="flex items-start gap-2.5">
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0 ${avColor(displayName)}`}>
+                              {initials(displayName)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5 mb-0.5">
+                                <span className="text-[11.5px] font-semibold text-slate-700 truncate">{displayName}</span>
+                                <span className="text-[11px] text-slate-400 flex-shrink-0">just now</span>
+                              </div>
+                              <p className="text-[12.5px] text-slate-600 leading-relaxed whitespace-pre-wrap break-words">{renderMentionText(c.text)}</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setPendingComments((prev) => prev.filter((_, j) => j !== i))}
+                              className="flex-shrink-0 w-5 h-5 flex items-center justify-center rounded hover:bg-rose-100 text-slate-300 hover:text-rose-500 transition-colors"
+                            >
+                              <svg fill="none" viewBox="0 0 12 12" width="9" height="9">
+                                <path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                              </svg>
+                            </button>
+                          </div>
+                        )
+                      })
+                    )}
                   </div>
                 )}
                 {commTab === 'activity' && (
@@ -740,16 +1120,114 @@ export function CreateTaskModal({
                     <p className="text-[11.5px] text-slate-400">Activity will appear after saving</p>
                   </div>
                 )}
-                {commTab === 'attachments' && (
-                  <div className="flex flex-col items-center justify-center h-full gap-2 text-center py-10 px-4">
-                    <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center">
-                      <svg fill="none" viewBox="0 0 16 16" width="14" height="14" className="text-slate-400">
-                        <path d="M7 9a4 4 0 0 0 5.66.01l1.9-1.88a4 4 0 0 0-5.66-5.66L7.8 3.58" stroke="currentColor" strokeLinecap="round" strokeWidth="1.4"/>
-                        <path d="M9 7a4 4 0 0 0-5.66-.01L1.44 8.87a4 4 0 0 0 5.66 5.66l1.1-1.1" stroke="currentColor" strokeLinecap="round" strokeWidth="1.4"/>
-                      </svg>
+                {commTab === 'links' && (
+                  <div className="py-3 px-3">
+                    {/* Header row */}
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Links</p>
+                      <button
+                        type="button"
+                        onClick={() => { setShowAddLink((v) => !v); setLinkName(''); setLinkUrl('') }}
+                        title={showAddLink ? 'Cancel' : 'Add link'}
+                        className="w-6 h-6 rounded-md flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                      >
+                        {showAddLink ? (
+                          <svg fill="none" viewBox="0 0 12 12" width="10" height="10">
+                            <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5"/>
+                          </svg>
+                        ) : (
+                          <svg fill="none" viewBox="0 0 12 12" width="10" height="10">
+                            <path d="M6 1v10M1 6h10" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8"/>
+                          </svg>
+                        )}
+                      </button>
                     </div>
-                    <p className="text-[12px] text-slate-500 font-medium">No links yet</p>
-                    <p className="text-[11px] text-slate-400">Links will appear after saving</p>
+                    {/* Add link form */}
+                    {showAddLink && (
+                      <div className="mb-4 p-3 rounded-xl border border-slate-200 bg-slate-50 space-y-2">
+                        <div>
+                          <label className="block text-[10.5px] text-slate-400 mb-1 font-medium uppercase tracking-wide">Document name</label>
+                          <input
+                            type="text"
+                            value={linkName}
+                            onChange={(e) => setLinkName(e.target.value)}
+                            placeholder="e.g. Design Spec"
+                            className="w-full h-8 px-2.5 text-[12.5px] rounded-lg border border-slate-200 bg-white focus:border-indigo-300 focus:outline-none focus:ring-1 focus:ring-indigo-100 placeholder:text-slate-300"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10.5px] text-slate-400 mb-1 font-medium uppercase tracking-wide">URL</label>
+                          <input
+                            type="url"
+                            value={linkUrl}
+                            onChange={(e) => setLinkUrl(e.target.value)}
+                            placeholder="https://"
+                            className="w-full h-8 px-2.5 text-[12.5px] rounded-lg border border-slate-200 bg-white focus:border-indigo-300 focus:outline-none focus:ring-1 focus:ring-indigo-100 placeholder:text-slate-300"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2 pt-1">
+                          <button
+                            type="button"
+                            disabled={!linkUrl.trim()}
+                            onClick={() => {
+                              const url = linkUrl.trim()
+                              if (!url) return
+                              setPendingLinks((prev) => [...prev, { label: linkName.trim() || url, url }])
+                              setLinkName(''); setLinkUrl(''); setShowAddLink(false)
+                            }}
+                            className="h-7 px-3 text-[12px] font-medium rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          >
+                            Add
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => { setShowAddLink(false); setLinkName(''); setLinkUrl('') }}
+                            className="h-7 px-3 text-[12px] text-slate-500 hover:text-slate-700 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {/* Links list */}
+                    {pendingLinks.length > 0 ? (
+                      <div className="space-y-1">
+                        {pendingLinks.map((lk, i) => (
+                          <div key={i} className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-slate-50 transition-colors group">
+                            <div className="w-6 h-6 rounded-md bg-sky-100 flex items-center justify-center flex-shrink-0">
+                              <svg fill="none" viewBox="0 0 12 12" width="9" height="9" className="text-sky-500">
+                                <path d="M5 7a3 3 0 0 0 4.24.01l1.42-1.41a3 3 0 0 0-4.24-4.24L5.35 2.4" stroke="currentColor" strokeLinecap="round" strokeWidth="1.3"/>
+                                <path d="M7 5a3 3 0 0 0-4.24-.01L1.34 6.4a3 3 0 0 0 4.24 4.24l1.05-1.05" stroke="currentColor" strokeLinecap="round" strokeWidth="1.3"/>
+                              </svg>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[12.5px] font-medium text-slate-700 truncate">{lk.label}</p>
+                              <p className="text-[11px] text-slate-400 truncate">{lk.url}</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setPendingLinks((prev) => prev.filter((_, j) => j !== i))}
+                              className="flex-shrink-0 w-5 h-5 flex items-center justify-center rounded hover:bg-rose-100 text-slate-300 hover:text-rose-500 transition-colors opacity-0 group-hover:opacity-100"
+                            >
+                              <svg fill="none" viewBox="0 0 12 12" width="9" height="9">
+                                <path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                              </svg>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : !showAddLink && (
+                      <div className="flex flex-col items-center justify-center py-8 gap-2 text-center">
+                        <div className="w-9 h-9 rounded-full bg-slate-100 flex items-center justify-center">
+                          <svg fill="none" viewBox="0 0 16 16" width="14" height="14" className="text-slate-400">
+                            <path d="M7 9a4 4 0 0 0 5.66.01l1.9-1.88a4 4 0 0 0-5.66-5.66L7.8 3.58" stroke="currentColor" strokeLinecap="round" strokeWidth="1.4"/>
+                            <path d="M9 7a4 4 0 0 0-5.66-.01L1.44 8.87a4 4 0 0 0 5.66 5.66l1.1-1.1" stroke="currentColor" strokeLinecap="round" strokeWidth="1.4"/>
+                          </svg>
+                        </div>
+                        <p className="text-[12px] text-slate-500 font-medium">No links yet</p>
+                        <p className="text-[11px] text-slate-400">Click + to add a link</p>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -757,44 +1235,32 @@ export function CreateTaskModal({
               {/* Composer — only for comments */}
               {commTab === 'comments' && (
                 <div className="flex-shrink-0 border-t border-slate-100 p-3">
-                  {comingSoon && (
-                    <div className="mb-2 px-3 py-2 rounded-lg bg-violet-50 border border-violet-100 text-[11.5px] text-violet-700 flex items-start gap-1.5">
-                      <span className="flex-shrink-0 mt-px">✦</span>
-                      <span>{comingSoon}</span>
-                    </div>
-                  )}
-                  <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+                  <div className="rounded-xl border border-slate-200 bg-white overflow-hidden focus-within:border-indigo-300 focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
                     <textarea
-                      readOnly
-                      className="w-full px-3 pt-2.5 pb-1 text-[12.5px] text-slate-700 placeholder:text-slate-400 bg-transparent outline-none resize-none scrollbar-none cursor-not-allowed"
-                      placeholder="Add a comment… (@ to mention)"
+                      ref={commentInputRef}
+                      value={commentText}
+                      onChange={handleCommentChange}
+                      onKeyDown={handleCommentKeyDown}
+                      className="w-full px-3 pt-2.5 pb-1 text-[12.5px] text-slate-700 placeholder:text-slate-400 bg-transparent outline-none resize-none scrollbar-none"
+                      placeholder="Add a comment… (type @ to mention, Ctrl+Enter to send)"
                       rows={3}
-                      onClick={() => triggerComingSoon('Real-time comments with @mentions, file attachments, and threaded replies — coming soon.')}
                     />
-                    <div className="flex items-center justify-between px-2 pb-2 pt-1 border-t border-slate-100">
-                      <div className="flex items-center gap-0.5">
-                        <button type="button" title="Bold" onClick={() => triggerComingSoon('Rich text formatting — bold, italic, inline code, lists, and more.')} className="w-6 h-6 flex items-center justify-center rounded text-slate-300 hover:text-violet-500 hover:bg-violet-50 transition-colors">
-                          <svg fill="none" viewBox="0 0 12 12" width="11" height="11">
-                            <path d="M3 2h4a2 2 0 010 4H3zM3 6h4.5a2 2 0 010 4H3z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
-                          </svg>
-                        </button>
-                        <button type="button" title="Attach file" onClick={() => triggerComingSoon('Drag-and-drop files, image previews, and document storage directly on tasks.')} className="w-6 h-6 flex items-center justify-center rounded text-slate-300 hover:text-violet-500 hover:bg-violet-50 transition-colors">
-                          <svg fill="none" viewBox="0 0 12 12" width="11" height="11">
-                            <path d="M10 5.5L6 9.5a3 3 0 01-4.2-4.2l5-5a1.7 1.7 0 012.4 2.4L4 7.9A1 1 0 012.6 6.5L7 2" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.2"/>
-                          </svg>
-                        </button>
-                        <button type="button" title="Mention" onClick={() => triggerComingSoon('@mention teammates to notify them instantly and loop them into the conversation.')} className="w-6 h-6 flex items-center justify-center rounded text-slate-300 hover:text-violet-500 hover:bg-violet-50 transition-colors">
-                          <svg fill="none" viewBox="0 0 12 12" width="11" height="11">
-                            <circle cx="6" cy="5.5" r="1.8" stroke="currentColor" strokeWidth="1.2"/>
-                            <path d="M9.5 6A3.5 3.5 0 116 2.5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.2"/>
-                            <path d="M9.5 6v1.2a1.3 1.3 0 002.5 0V6a6 6 0 10-2.5 4.8" stroke="currentColor" strokeLinecap="round" strokeWidth="1.2"/>
-                          </svg>
-                        </button>
-                      </div>
+                    <div className="flex items-center justify-end px-2 pb-2 pt-1 border-t border-slate-100">
                       <button
                         type="button"
-                        onClick={() => triggerComingSoon('Send comments, updates, and questions — keep the whole conversation on the task.')}
-                        className="h-6 px-2.5 bg-violet-100 hover:bg-violet-200 text-violet-600 text-[11.5px] font-medium rounded-lg transition-colors flex items-center gap-1"
+                        disabled={!commentText.trim()}
+                        onClick={() => {
+                          const text = commentText.trim()
+                          if (!text) return
+                          setPendingComments((prev) => [...prev, {
+                            user: currentUser?.username ?? 'Unknown',
+                            fullName: currentUser?.fullName ?? currentUser?.username ?? 'Unknown',
+                            text,
+                            timestamp: new Date().toISOString(),
+                          }])
+                          setCommentText('')
+                        }}
+                        className="h-6 px-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[11.5px] font-medium rounded-lg transition-colors flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         Send
                         <svg fill="none" viewBox="0 0 10 10" width="9" height="9">
@@ -810,6 +1276,49 @@ export function CreateTaskModal({
         </div>
 
         {/* ══ Fixed-position dropdowns ══ */}
+
+        {/* @mention dropdown */}
+        {mentionQuery !== null && (
+          <div
+            ref={mentionDropRef}
+            style={{
+              position: 'fixed',
+              bottom: mentionDropPos.bottom,
+              left: mentionDropPos.left,
+              width: mentionDropPos.width,
+              zIndex: 9999,
+            }}
+            className="bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden"
+          >
+            {mentionUsers.length === 0 ? (
+              <p className="text-[12px] text-slate-400 text-center py-3 px-3">
+                {mentionQuery === '' ? 'Type to search users…' : 'No users found'}
+              </p>
+            ) : (
+              <div className="py-1 max-h-52 overflow-y-auto scrollbar-none">
+                {mentionUsers.map((u, i) => (
+                  <button
+                    key={u.name}
+                    type="button"
+                    onMouseDown={(e) => { e.preventDefault(); insertMention(u) }}
+                    className={[
+                      'w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors',
+                      i === mentionIdx ? 'bg-indigo-50' : 'hover:bg-slate-50',
+                    ].join(' ')}
+                  >
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0 ${avColor(u.fullName)}`}>
+                      {initials(u.fullName)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[12.5px] font-medium text-slate-800 truncate">{u.fullName}</p>
+                      <p className="text-[11px] text-slate-400 truncate">@{mentionSlug(u.name)}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {showPriorityMenu && (
           <div
@@ -999,6 +1508,8 @@ export function CreateTaskModal({
           type: null,
           activityType: null,
           isMilestone,
+          isGroup,
+          autoRepeat: null,
           parentTask: parentTask || null,
           dependsOnTasks: null,
           startDate: startDate || null,

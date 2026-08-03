@@ -100,7 +100,7 @@ export function LoginPage() {
               </span>
             </h1>
             <p className="text-[0.85rem] leading-relaxed" style={{ color: '#A78BFA', maxWidth: 340 }}>
-              Kanban boards, Gantt charts, task trees &amp; timesheets —
+              Kanban boards, Gantt charts, and task trees —
               everything your team needs to ship on time.
             </p>
           </div>

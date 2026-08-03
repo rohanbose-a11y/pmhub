@@ -99,7 +99,6 @@ const NAV_GROUPS: PaletteGroup[] = [
       { label: 'Project Dashboard',  shortcut: 'G P', to: '/dashboard/project', type: 'nav' },
       { label: 'Projects',                            to: '/projects',          type: 'nav' },
       { label: 'Notifications',      shortcut: 'G N', to: '/notifications',     type: 'nav' },
-      { label: 'Timesheets',                          to: '/timesheets',        type: 'nav' },
       { label: 'Profile',                             to: '/profile',           type: 'nav' },
     ],
   },

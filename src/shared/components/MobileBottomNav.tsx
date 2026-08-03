@@ -41,18 +41,6 @@ function TasksIcon(props: SVGProps<SVGSVGElement>) {
   )
 }
 
-function TimesheetIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg fill="none" viewBox="0 0 24 24" {...props}>
-      <rect x="4" y="5" width="16" height="15" rx="3" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M8 3.5v3" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
-      <path d="M16 3.5v3" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
-      <path d="M7.5 10.5h9" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
-      <path d="M7.5 15h5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
-    </svg>
-  )
-}
-
 function ProfileIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg fill="none" viewBox="0 0 24 24" {...props}>
@@ -71,7 +59,6 @@ export const appNavItems = [
   { to: '/dashboard',  label: 'Home',     Icon: HomeIcon      },
   { to: '/projects',   label: 'Projects', Icon: ProjectsIcon  },
   { to: '/tasks',      label: 'Tasks',    Icon: TasksIcon     },
-  { to: '/timesheets', label: 'Time',     Icon: TimesheetIcon },
   { to: '/profile',    label: 'Profile',  Icon: ProfileIcon   },
 ] as const
 

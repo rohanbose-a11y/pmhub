@@ -27,7 +27,6 @@ const NAV_PALETTE: PaletteGroup[] = [{
     { label: 'Personal Dashboard',  shortcut: 'G D', to: '/dashboard',          type: 'nav' },
     { label: 'Project Dashboard',            to: '/dashboard/project', type: 'nav' },
     { label: 'Projects',                     to: '/projects',          type: 'nav' },
-    { label: 'Timesheets',                   to: '/timesheets',        type: 'nav' },
     { label: 'Notifications',  shortcut: 'G N', to: '/notifications',     type: 'nav' },
     { label: 'Profile',                      to: '/profile',           type: 'nav' },
   ],

@@ -253,8 +253,14 @@ const isFrappeMandatoryError = (err: unknown) =>
   err.response?.status === 417 &&
   (err.response.data as Record<string, unknown>)?.exc_type === 'MandatoryError'
 
+const isFrappeBusinessRuleError = (err: unknown) =>
+  axios.isAxiosError(err) &&
+  err.response?.status === 417 &&
+  !!(err.response.data as Record<string, unknown>)?._server_messages
+
 const isFrappeFieldError = (err: unknown) =>
   !isFrappeMandatoryError(err) &&
+  !isFrappeBusinessRuleError(err) &&
   axios.isAxiosError(err) &&
   (err.response?.status === 400 || err.response?.status === 417)
 

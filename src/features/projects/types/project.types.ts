@@ -9,6 +9,7 @@ export interface Project {
   owner?: string | null
   members?: string[]
   updatedAt?: string | null
+  notes?: string | null
 }
 
 export interface UpdateProjectInput {

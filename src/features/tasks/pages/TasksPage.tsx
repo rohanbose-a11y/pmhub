@@ -9,6 +9,7 @@ import { TaskDetailModal } from '../components/TaskDetailModal'
 import { TasksHeader } from '../components/TasksHeader'
 import { useAuthStore } from '../../../store/authStore'
 import { useWorkStore } from '../../../store/workStore'
+import { UserAvatar } from '../../../shared/components/UserAvatar'
 
 // ─── Status groups — ClickUp color system ────────────────────────────────────
 
@@ -43,11 +44,6 @@ const PRIORITY: Record<string, { dot: string; text: string; label: string }> = {
 
 const PAGE_SIZE = 20
 
-// ─── Avatar helpers ───────────────────────────────────────────────────────────
-
-function initials(s: string): string {
-  return s.replace(/[@.]/g, ' ').split(/\s+/).filter(Boolean).map((p) => p[0]).join('').toUpperCase().slice(0, 2)
-}
 
 // ─── Due date formatter ───────────────────────────────────────────────────────
 
@@ -64,18 +60,6 @@ function fmtDue(v: string | null): { text: string; color: string } {
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
-
-function Avatar({ name, size = 22 }: { name: string; size?: number }) {
-  return (
-    <div
-      className="flex items-center justify-center rounded-full text-white font-bold flex-shrink-0 cursor-pointer"
-      style={{ width: size, height: size, fontSize: size * 0.38, background: '#444' }}
-      title={name}
-    >
-      {initials(name)}
-    </div>
-  )
-}
 
 function Checkbox({ checked, onClick }: { checked: boolean; onClick: () => void }) {
   return (
@@ -298,17 +282,12 @@ export function TasksPage() {
               { label: 'Due date', w: 115 },
               { label: 'Priority', w: 115 },
               { label: 'Status',   w: 135 },
-              { label: 'Comments', w: 80  },
+              { label: 'Repeat',   w: 70  },
             ].map(({ label, w }) => (
               <div key={label} style={{ width: w, flexShrink: 0, padding: '0 4px' }}>
                 <span style={{ fontSize: 11, fontWeight: 500, color: '#9CA3AF' }}>{label}</span>
               </div>
             ))}
-            <div style={{ width: 28, flexShrink: 0 }}>
-              <button style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#D1D5DB', background: 'none', border: 'none', cursor: 'pointer' }}>
-                <svg fill="none" viewBox="0 0 12 12" width={11} height={11}><path d="M6 1v10M1 6h10" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5"/></svg>
-              </button>
-            </div>
           </div>
 
           {/* Loading skeleton */}
@@ -433,7 +412,7 @@ export function TasksPage() {
                       <div style={{ display: 'flex', alignItems: 'center' }}>
                         {assignees.slice(0, 3).map((name, i) => (
                           <div key={name} style={{ marginLeft: i > 0 ? -6 : 0, zIndex: assignees.length - i }}>
-                            <Avatar name={name} size={22} />
+                            <UserAvatar name={name} size="xs" />
                           </div>
                         ))}
                         {assignees.length > 3 && (
@@ -489,21 +468,19 @@ export function TasksPage() {
                     </button>
                   </div>
 
-                  {/* Comments */}
-                  <div style={{ width: 80, flexShrink: 0, padding: '0 4px' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#D1D5DB', transition: 'color 100ms' }} className="group-hover:text-gray-400">
-                      <svg fill="none" viewBox="0 0 14 14" width={12} height={12}>
-                        <path d="M11 2H3a1 1 0 00-1 1v6a1 1 0 001 1h1l2 2 2-2h3a1 1 0 001-1V3a1 1 0 00-1-1z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
-                      </svg>
-                    </span>
+                  {/* Repeat */}
+                  <div style={{ width: 70, flexShrink: 0, padding: '0 4px' }}>
+                    {task.autoRepeat && (
+                      <span title="Repeating task" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 11, color: '#7B3FF2', fontWeight: 500 }}>
+                        <svg fill="none" viewBox="0 0 14 14" width={13} height={13}>
+                          <path d="M1 4h9a3 3 0 010 6H2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                          <path d="M3.5 1.5L1 4l2.5 2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                        Repeat
+                      </span>
+                    )}
                   </div>
 
-                  {/* + column */}
-                  <div style={{ width: 28, flexShrink: 0 }}>
-                    <svg fill="none" viewBox="0 0 12 12" width={11} height={11} style={{ color: '#E5E7EB', display: 'block', margin: '0 auto', transition: 'color 100ms' }} className="group-hover:text-gray-400">
-                      <path d="M6 1v10M1 6h10" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5"/>
-                    </svg>
-                  </div>
                 </div>
               )
             }

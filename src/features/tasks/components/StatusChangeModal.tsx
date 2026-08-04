@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 interface StatusChangeModalProps {
   currentStatus: string
@@ -22,6 +22,7 @@ export function StatusChangeModal({ currentStatus, isSubmitting, initialStatus, 
   const [selectedStatus, setSelectedStatus] = useState<string>(initialStatus ?? '')
   const [note, setNote] = useState('')
   const trimmed = note.trim()
+  const firedRef = useRef(false)
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel() }
@@ -116,7 +117,11 @@ export function StatusChangeModal({ currentStatus, isSubmitting, initialStatus, 
             <button
               className="flex-[2] py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-all active:scale-[0.98] disabled:opacity-60 disabled:pointer-events-none"
               disabled={!canConfirm}
-              onClick={() => canConfirm && onConfirm(selectedStatus, trimmed)}
+              onClick={() => {
+                if (!canConfirm || firedRef.current) return
+                firedRef.current = true
+                onConfirm(selectedStatus, trimmed)
+              }}
               type="button"
             >
               {isSubmitting ? (

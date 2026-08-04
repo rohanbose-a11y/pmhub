@@ -1,23 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { userApi, type UserOption } from '../../../api/userApi'
 import type { Task } from '../types/task.types'
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const AV_COLORS = [
-  'bg-violet-500', 'bg-blue-500',   'bg-emerald-500', 'bg-amber-500',
-  'bg-rose-500',   'bg-teal-500',   'bg-indigo-500',  'bg-pink-500',
-]
-
-function avColor(s: string) {
-  let h = 0
-  for (let i = 0; i < s.length; i++) h = s.charCodeAt(i) + ((h << 5) - h)
-  return AV_COLORS[Math.abs(h) % AV_COLORS.length]
-}
-
-function initials(s: string) {
-  return s.replace(/[@.]/g, ' ').split(/\s+/).filter(Boolean).map((p) => p[0]).join('').toUpperCase().slice(0, 2)
-}
+import { UserAvatar } from '../../../shared/components/UserAvatar'
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -44,10 +28,10 @@ export function AssignTaskModal({
   const [activeOp, setActiveOp]   = useState<string | null>(null)
   const searchRef                 = useRef<HTMLInputElement>(null)
 
-  // Pre-load users on mount
+  // Pre-load active employees on mount
   useEffect(() => {
     setIsLoading(true)
-    userApi.searchUsers('')
+    userApi.searchActiveEmployees('')
       .then((u) => setAllUsers(u))
       .catch(() => setAllUsers([]))
       .finally(() => setIsLoading(false))
@@ -59,12 +43,12 @@ export function AssignTaskModal({
     return () => clearTimeout(t)
   }, [])
 
-  // Re-search when query changes (for results beyond initial 10)
+  // Re-search when query changes
   useEffect(() => {
     if (!query.trim()) return
     const timer = setTimeout(async () => {
       try {
-        const users = await userApi.searchUsers(query.trim())
+        const users = await userApi.searchActiveEmployees(query.trim())
         setAllUsers(users)
       } catch {
         // keep current list
@@ -167,16 +151,16 @@ export function AssignTaskModal({
                   ].join(' ')}
                 >
                   {/* Avatar */}
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0 ${avColor(user.name)}`}>
-                    {isPending ? (
-                      <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                  {isPending ? (
+                    <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
+                      <svg className="w-3.5 h-3.5 animate-spin text-slate-400" fill="none" viewBox="0 0 24 24">
                         <circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                         <path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4z"/>
                       </svg>
-                    ) : (
-                      initials(user.name)
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    <UserAvatar name={user.name} size="sm" />
+                  )}
 
                   {/* Name + email */}
                   <div className="flex-1 min-w-0">

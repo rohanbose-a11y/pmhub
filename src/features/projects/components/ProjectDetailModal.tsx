@@ -5,14 +5,14 @@ import { useWorkStore } from '../../../store/workStore'
 import { projectApi } from '../../../api/projectApi'
 import { userApi, type UserOption } from '../../../api/userApi'
 import type { Project, UpdateProjectInput, RawProjectMember } from '../types/project.types'
+import { UserAvatar } from '../../../shared/components/UserAvatar'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const STATUS_OPTIONS = ['Open', 'Active', 'Completed', 'Cancelled']
+const STATUS_OPTIONS = ['Open', 'Completed', 'Cancelled']
 
 const STATUS_CONFIG = [
   { key: 'Open',      dot: 'bg-slate-400',   pill: 'bg-slate-100 text-slate-600'       },
-  { key: 'Active',    dot: 'bg-blue-500',    pill: 'bg-blue-50 text-blue-700'          },
   { key: 'Completed', dot: 'bg-emerald-500', pill: 'bg-emerald-50 text-emerald-700'    },
   { key: 'Cancelled', dot: 'bg-rose-400',    pill: 'bg-rose-50 text-rose-600'          },
 ]
@@ -29,9 +29,6 @@ function coverGradient(id: string) {
   return COVER_GRADIENTS[hash % COVER_GRADIENTS.length]
 }
 
-function initials(s: string) {
-  return s.replace(/[@.]/g, ' ').split(/\s+/).filter(Boolean).map((p) => p[0]).join('').toUpperCase().slice(0, 2)
-}
 
 function fmtDate(v: string | null | undefined) {
   if (!v) return null
@@ -82,7 +79,8 @@ export function ProjectDetailModal({ project, onClose, onRefresh }: Props) {
   const [startDate,    setStartDate]    = useState(toInputDate(project.expectedStartDate))
   const [endDate,      setEndDate]      = useState(toInputDate(project.expectedEndDate))
   const [progress,     setProgress]     = useState(String(Math.round(project.completion ?? 0)))
-  const [showStatusMenu, setShowStatusMenu] = useState(false)
+  const liveNotes = project.notes ?? ''
+const [showStatusMenu, setShowStatusMenu] = useState(false)
   const [isEditingStart,    setIsEditingStart]    = useState(false)
   const [isEditingEnd,      setIsEditingEnd]      = useState(false)
   const [isEditingProgress, setIsEditingProgress] = useState(false)
@@ -120,7 +118,7 @@ export function ProjectDetailModal({ project, onClose, onRefresh }: Props) {
   useEffect(() => {
     if (!showAddMember) return
     setLoadingUsers(true)
-    userApi.searchUsers('').then(setAllUsers).catch(() => setAllUsers([])).finally(() => setLoadingUsers(false))
+    userApi.searchActiveEmployees('').then(setAllUsers).catch(() => setAllUsers([])).finally(() => setLoadingUsers(false))
     setTimeout(() => searchRef.current?.focus(), 80)
   }, [showAddMember])
 
@@ -128,7 +126,7 @@ export function ProjectDetailModal({ project, onClose, onRefresh }: Props) {
   useEffect(() => {
     if (!showAddMember || !userQuery.trim()) return
     const t = setTimeout(() => {
-      userApi.searchUsers(userQuery.trim()).then(setAllUsers).catch(() => {})
+      userApi.searchActiveEmployees(userQuery.trim()).then(setAllUsers).catch(() => {})
     }, 250)
     return () => clearTimeout(t)
   }, [userQuery, showAddMember])
@@ -198,7 +196,7 @@ export function ProjectDetailModal({ project, onClose, onRefresh }: Props) {
     await doUpdate({ completion: clamped }, `Progress updated to ${clamped}%`, 'progress')
   }
 
-  const toggleMember = async (user: UserOption) => {
+const toggleMember = async (user: UserOption) => {
     if (activeOp) return
     setActiveOp(user.name)
     const isMember = members.includes(user.name)
@@ -242,11 +240,11 @@ export function ProjectDetailModal({ project, onClose, onRefresh }: Props) {
   // ─────────────────────────────────────────────────────────────────────────
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/40 flex items-end md:items-center justify-center md:p-4"
+      className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-3"
       onClick={onClose}
     >
       <div
-        className="relative flex bg-white overflow-hidden shadow-2xl w-full max-w-[1300px] h-[96vh] md:h-[calc(100vh-2rem)] md:rounded-xl"
+        className="relative flex bg-white overflow-hidden shadow-2xl w-full h-full rounded-xl"
         onClick={(e) => e.stopPropagation()}
       >
 
@@ -446,18 +444,21 @@ export function ProjectDetailModal({ project, onClose, onRefresh }: Props) {
                 <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0">Owner</span>
                 {project.owner ? (
                   <div className="flex items-center gap-2">
-                    <div
-                      className="w-[22px] h-[22px] rounded-full flex items-center justify-center text-white text-[8px] font-bold flex-shrink-0"
-                      style={{ background: '#444' }}
-                    >
-                      {initials(project.owner)}
-                    </div>
+                    <UserAvatar name={project.owner} size="xs" />
                     <span className="text-[12.5px] text-slate-700">{project.owner}</span>
                   </div>
                 ) : (
                   <span className="text-[12px] text-slate-300">Not assigned</span>
                 )}
               </div>
+
+              {/* Notes */}
+              {liveNotes && (
+                <div className="flex items-start gap-2 px-6 py-2.5">
+                  <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0 pt-0.5">About</span>
+                  <div className="text-[12.5px] text-slate-700 [&_p]:mb-1 [&_ol]:list-decimal [&_ol]:pl-4 [&_ul]:list-disc [&_ul]:pl-4" dangerouslySetInnerHTML={{ __html: liveNotes }} />
+                </div>
+              )}
             </div>
 
             {/* Task breakdown */}
@@ -673,17 +674,16 @@ export function ProjectDetailModal({ project, onClose, onRefresh }: Props) {
                                     activeOp && !isPending ? 'opacity-50' : '',
                                   ].join(' ')}
                                 >
-                                  <div
-                                    className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0"
-                                    style={{ background: '#444' }}
-                                  >
-                                    {isPending ? (
-                                      <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                                  {isPending ? (
+                                    <div className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
+                                      <svg className="w-3 h-3 animate-spin text-slate-400" fill="none" viewBox="0 0 24 24">
                                         <circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
                                         <path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4z"/>
                                       </svg>
-                                    ) : initials(user.name)}
-                                  </div>
+                                    </div>
+                                  ) : (
+                                    <UserAvatar name={user.name} fullName={user.fullName} size="sm" />
+                                  )}
                                   <div className="flex-1 min-w-0">
                                     <p className="text-[12.5px] font-medium text-slate-800 truncate leading-tight">
                                       {user.fullName}
@@ -729,12 +729,7 @@ export function ProjectDetailModal({ project, onClose, onRefresh }: Props) {
                       <div className="space-y-1">
                         {members.map((m) => (
                           <div key={m} className="flex items-center gap-2.5 px-2 py-1.5 rounded-lg hover:bg-slate-50 group transition-colors">
-                            <div
-                              className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0"
-                              style={{ background: '#444' }}
-                            >
-                              {initials(m)}
-                            </div>
+                            <UserAvatar name={m} size="sm" />
                             <div className="flex-1 min-w-0">
                               <p className="text-[12.5px] font-medium text-slate-700 truncate">{m}</p>
                               {project.owner === m && (

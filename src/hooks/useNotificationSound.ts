@@ -1,10 +1,17 @@
 import { useCallback, useEffect, useRef } from 'react'
 
+// Gate AudioContext on a real user gesture to satisfy browser autoplay policy.
+let userHasInteracted = false
+const markInteracted = () => { userHasInteracted = true }
+document.addEventListener('click',   markInteracted, { once: true, capture: true })
+document.addEventListener('keydown', markInteracted, { once: true, capture: true })
+
 /**
  * Synthesises a short two-tone "ding" using the Web Audio API.
  * No audio file required — works fully offline in the PWA.
  */
 function playDing() {
+  if (!userHasInteracted) return
   try {
     const ctx = new AudioContext()
 

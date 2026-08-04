@@ -1,4 +1,6 @@
+import { useState, useEffect } from 'react'
 import { formatUserDisplay } from '../lib/formatUserDisplay'
+import { userApi } from '../../api/userApi'
 
 /** Colour palettes — index chosen by hashing the username so the same person always gets the same colour */
 const PALETTES = [
@@ -57,6 +59,21 @@ export function UserAvatar({
   const initials = buildInitials(fullName, name)
   const { wrap, font } = SIZES[size]
   const shapeClass = shape === 'circle' ? 'rounded-full' : 'rounded-xl'
+
+  const [imgUrl, setImgUrl] = useState<string | null>(null)
+  useEffect(() => {
+    userApi.getImage(name).then((url) => { if (url) setImgUrl(url) })
+  }, [name])
+
+  if (imgUrl) return (
+    <img
+      src={imgUrl}
+      alt={fullName ?? name}
+      title={fullName ?? name}
+      onError={() => setImgUrl(null)}
+      className={`${wrap} ${shapeClass} object-cover flex-shrink-0 ${className}`}
+    />
+  )
 
   return (
     <div

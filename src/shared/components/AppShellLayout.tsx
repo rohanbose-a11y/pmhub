@@ -127,11 +127,13 @@ export function AppShellLayout() {
   const location        = useLocation()
   const user            = useAuthStore((state) => state.user)
   const username        = user?.username
-  const workspaceStatus = useWorkStore((state) => state.status)
-  const workspaceError  = useWorkStore((state) => state.error)
-  const loadWorkspace   = useWorkStore((state) => state.loadWorkspace)
-  const tasks           = useWorkStore((state) => state.tasks)
-  const projects        = useWorkStore((state) => state.projects)
+  const workspaceStatus    = useWorkStore((state) => state.status)
+  const workspaceError     = useWorkStore((state) => state.error)
+  const loadWorkspace      = useWorkStore((state) => state.loadWorkspace)
+  const tasks              = useWorkStore((state) => state.tasks)
+  const projects           = useWorkStore((state) => state.projects)
+  const updateTaskError    = useWorkStore((state) => state.updateTaskError)
+  const clearUpdateTaskError = useWorkStore((state) => state.clearUpdateTaskError)
   const readIds         = useNotifStore((s) => s.readIds)
   const loadForUser     = useNotifStore((s) => s.loadForUser)
 
@@ -251,6 +253,12 @@ export function AppShellLayout() {
     const idsKey = myTasks.map((t) => t.id).sort().join(',')
     return { alertCount: unread, myTaskIdsKey: idsKey }
   }, [tasks, username, readIds])
+
+  useEffect(() => {
+    if (!updateTaskError) return
+    const t = setTimeout(clearUpdateTaskError, 4000)
+    return () => clearTimeout(t)
+  }, [updateTaskError, clearUpdateTaskError])
 
   useNotificationSound(myTaskIdsKey)
   useWhatsAppScheduler()
@@ -725,6 +733,53 @@ export function AppShellLayout() {
       <div className="md:hidden">
         <MobileBottomNav />
       </div>
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          TASK UPDATE ERROR TOAST
+      ═══════════════════════════════════════════════════════════════════ */}
+      {updateTaskError && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 80,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 60,
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 10,
+            background: '#fff',
+            border: '1px solid #FECACA',
+            borderLeft: '4px solid #EF4444',
+            borderRadius: 10,
+            padding: '12px 14px',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.13)',
+            maxWidth: 'min(380px, calc(100vw - 32px))',
+            width: 'max-content',
+          }}
+        >
+          <svg fill="none" viewBox="0 0 20 20" width={17} height={17} style={{ flexShrink: 0, color: '#EF4444', marginTop: 1 }}>
+            <circle cx="10" cy="10" r="8.5" stroke="currentColor" strokeWidth="1.5"/>
+            <path d="M10 6v4.5M10 13.5v.5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.7"/>
+          </svg>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#111827', lineHeight: 1.4 }}>
+              Task could not be updated
+            </p>
+            <p style={{ margin: '3px 0 0', fontSize: 12.5, color: '#6B7280', lineHeight: 1.45 }}>
+              {updateTaskError}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={clearUpdateTaskError}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9CA3AF', padding: '0 0 0 6px', lineHeight: 1, fontSize: 14, flexShrink: 0 }}
+            aria-label="Dismiss"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* ═══════════════════════════════════════════════════════════════════
           COMMAND PALETTE

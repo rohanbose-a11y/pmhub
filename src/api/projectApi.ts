@@ -14,6 +14,7 @@ interface FrappeProjectRecord {
   expected_end_date?: string | null
   owner?: string | null
   modified?: string | null
+  notes?: string | null
 }
 
 interface FrappeProjectMemberRecord {
@@ -39,6 +40,7 @@ const projectFields = [
   'expected_end_date',
   'owner',
   'modified',
+  'notes',
 ]
 
 const normalizeIdentity = (value: string) => value.trim().toLowerCase()
@@ -74,6 +76,7 @@ const toProject = (record: FrappeProjectRecord): Project => ({
   expectedEndDate: record.expected_end_date || null,
   owner: record.owner || null,
   updatedAt: record.modified || null,
+  notes: record.notes || null,
 })
 
 const fetchProjects = async (params: Record<string, string>) => {

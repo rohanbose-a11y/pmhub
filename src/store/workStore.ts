@@ -17,6 +17,7 @@ interface WorkState {
   createTaskStatus: TaskMutationStatus
   createTaskError: string | null
   lastCreatedTask: string | null
+  updateTaskError: string | null
   loadWorkspace: (username: string, silent?: boolean) => Promise<void>
   createTask: (input: CreateTaskInput, username: string) => Promise<Task | null>
   updateTaskStatus: (taskId: string, status: string, completedBy?: string, completedOn?: string) => Promise<boolean>
@@ -24,6 +25,7 @@ interface WorkState {
   unassignTask: (taskId: string, userId: string) => Promise<boolean>
   updateTask: (taskId: string, input: UpdateTaskInput) => Promise<boolean>
   resetTaskFeedback: () => void
+  clearUpdateTaskError: () => void
 }
 
 const sortTasks = (tasks: Task[]) =>
@@ -37,8 +39,10 @@ export const useWorkStore = create<WorkState>((set, get) => ({
   createTaskStatus: 'idle',
   createTaskError: null,
   lastCreatedTask: null,
+  updateTaskError: null,
 
   resetTaskFeedback: () => set({ createTaskStatus: 'idle', createTaskError: null, lastCreatedTask: null }),
+  clearUpdateTaskError: () => set({ updateTaskError: null }),
 
   loadWorkspace: async (username, silent = false) => {
     if (!silent) set((state) => ({ ...state, status: 'loading', error: null }))
@@ -98,7 +102,10 @@ export const useWorkStore = create<WorkState>((set, get) => ({
       const updated = await taskService.updateTask(taskId, input)
       set((state) => ({ tasks: state.tasks.map((t) => (t.id === taskId ? updated : t)) }))
       return true
-    } catch { return false }
+    } catch (e) {
+      set({ updateTaskError: e instanceof Error ? e.message : 'Unable to update task.' })
+      return false
+    }
   },
 
   assignTask: async (taskId, userId) => {
@@ -133,6 +140,9 @@ export const useWorkStore = create<WorkState>((set, get) => ({
       const updated = await taskService.updateTaskStatus(taskId, status, completedBy, completedOn)
       set((state) => ({ tasks: state.tasks.map((t) => (t.id === taskId ? updated : t)) }))
       return true
-    } catch { return false }
+    } catch (e) {
+      set({ updateTaskError: e instanceof Error ? e.message : 'Unable to update task status.' })
+      return false
+    }
   },
 }))

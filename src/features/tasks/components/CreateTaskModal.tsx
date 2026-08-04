@@ -187,7 +187,7 @@ export function CreateTaskModal({
   useEffect(() => {
     if (mentionQuery === null) { setMentionUsers([]); return }
     const timer = setTimeout(() => {
-      userApi.searchUsers(mentionQuery)
+      userApi.searchActiveEmployees(mentionQuery)
         .then((users) => { setMentionUsers(users); setMentionIdx(0) })
         .catch(() => setMentionUsers([]))
     }, 150)
@@ -384,7 +384,8 @@ export function CreateTaskModal({
   const selectedProject = projects.find((p) => p.name === project)
   const selectedParent  = tasks.find((t) => t.id === parentTask)
   const filteredParents = tasks.filter((t) =>
-    !parentQuery || t.subject.toLowerCase().includes(parentQuery.toLowerCase()),
+    (!project || t.project === project) &&
+    (!parentQuery || t.subject.toLowerCase().includes(parentQuery.toLowerCase())),
   )
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -733,7 +734,7 @@ export function CreateTaskModal({
                         value={depPickerValue}
                       >
                         <option value="">Select a task…</option>
-                        {tasks.filter((t) => !depTaskIds.includes(t.id)).map((t) => (
+                        {tasks.filter((t) => (!project || t.project === project) && !depTaskIds.includes(t.id)).map((t) => (
                           <option key={t.id} value={t.id}>{t.subject}</option>
                         ))}
                       </select>

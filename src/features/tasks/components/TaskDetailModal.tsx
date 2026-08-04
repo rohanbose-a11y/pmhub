@@ -11,6 +11,7 @@ import type { UserOption } from '../../../api/userApi'
 import { useKraOptions } from '../../../hooks/useKraOptions'
 import { useAuthStore } from '../../../store/authStore'
 import { RichTextEditor } from '../../../shared/components/RichTextEditor'
+import { UserAvatar } from '../../../shared/components/UserAvatar'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -30,20 +31,6 @@ const PRIORITY_CONFIG = [
   { key: 'Low',    dot: 'bg-slate-300',  label: 'Low'     },
 ]
 
-const AV_COLORS = [
-  'bg-violet-500', 'bg-blue-500',   'bg-emerald-500', 'bg-amber-500',
-  'bg-rose-500',   'bg-teal-500',   'bg-indigo-500',  'bg-pink-500',
-]
-
-function avColor(s: string) {
-  let h = 0
-  for (let i = 0; i < s.length; i++) h = s.charCodeAt(i) + ((h << 5) - h)
-  return AV_COLORS[Math.abs(h) % AV_COLORS.length]
-}
-
-function initials(s: string) {
-  return s.replace(/[@.]/g, ' ').split(/\s+/).filter(Boolean).map((p) => p[0]).join('').toUpperCase().slice(0, 2)
-}
 
 function fmtDate(v: string | null) {
   if (!v) return null
@@ -350,7 +337,7 @@ export function TaskDetailModal({
   useEffect(() => {
     if (mentionQuery === null) { setMentionUsers([]); return }
     const timer = setTimeout(() => {
-      userApi.searchUsers(mentionQuery)
+      userApi.searchActiveEmployees(mentionQuery)
         .then((users) => { setMentionUsers(users); setMentionIdx(0) })
         .catch(() => setMentionUsers([]))
     }, 150)
@@ -937,13 +924,7 @@ export function TaskDetailModal({
                         {task.assignedTo.length > 0 ? (
                           <div className="flex items-center -space-x-1.5">
                             {task.assignedTo.slice(0, 5).map((u) => (
-                              <div
-                                key={u}
-                                className={`w-[22px] h-[22px] rounded-full flex items-center justify-center text-white text-[9px] font-bold ring-2 ring-white flex-shrink-0 ${avColor(u)}`}
-                                title={u}
-                              >
-                                {initials(u)}
-                              </div>
+                              <UserAvatar key={u} name={u} size="xs" className="ring-2 ring-white" />
                             ))}
                             {task.assignedTo.length > 5 && (
                               <div className="w-[22px] h-[22px] rounded-full bg-slate-100 text-slate-500 text-[9px] font-bold ring-2 ring-white flex items-center justify-center">
@@ -1165,7 +1146,7 @@ export function TaskDetailModal({
                       >
                         <option value="">Select a task…</option>
                         {allTasks
-                          .filter((t) => t.id !== task.id && !depTaskIds.includes(t.id))
+                          .filter((t) => t.id !== task.id && !depTaskIds.includes(t.id) && (!localProject || t.project === localProject))
                           .map((t) => (
                             <option key={t.id} value={t.id}>{t.subject}</option>
                           ))}
@@ -1700,9 +1681,7 @@ export function TaskDetailModal({
                         const displayName = c.fullName ?? c.user
                         return (
                           <div key={i} className="flex items-start gap-2.5">
-                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0 ${avColor(displayName)}`}>
-                              {initials(displayName)}
-                            </div>
+                            <UserAvatar name={c.user} fullName={displayName} size="xs" />
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-1.5 mb-0.5">
                                 <span className="text-[11.5px] font-semibold text-slate-700 truncate">{displayName}</span>
@@ -1744,9 +1723,7 @@ export function TaskDetailModal({
                       } else if (entry.type === 'user') {
                         const name = entry.text.split(' was')[0]
                         icon = (
-                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-[9px] font-bold flex-shrink-0 ${avColor(name)}`}>
-                            {initials(name)}
-                          </div>
+                          <UserAvatar name={name} size="xs" />
                         )
                       } else if (entry.type === 'link') {
                         icon = (
@@ -1976,9 +1953,7 @@ export function TaskDetailModal({
                     i === mentionIdx ? 'bg-indigo-50' : 'hover:bg-slate-50',
                   ].join(' ')}
                 >
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0 ${avColor(u.fullName)}`}>
-                    {initials(u.fullName)}
-                  </div>
+                  <UserAvatar name={u.name} fullName={u.fullName} size="sm" />
                   <div className="flex-1 min-w-0">
                     <p className="text-[12.5px] font-medium text-slate-800 truncate">{u.fullName}</p>
                     <p className="text-[11px] text-slate-400 truncate">@{mentionSlug(u.name)}</p>
@@ -2171,6 +2146,7 @@ export function TaskDetailModal({
             {allTasks
               .filter((t) =>
                 t.id !== task.id &&
+                (!localProject || t.project === localProject) &&
                 (!parentTaskQuery || t.subject.toLowerCase().includes(parentTaskQuery.toLowerCase()))
               )
               .map((t) => (

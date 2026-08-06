@@ -5,7 +5,7 @@ import type { Task, TaskComment, UpdateTaskInput } from '../types/task.types'
 import { autoRepeatApi, WEEKDAYS } from '../../../api/autoRepeatApi'
 import type { RepeatFrequency, Weekday } from '../../../api/autoRepeatApi'
 import type { Project } from '../../projects/types/project.types'
-import { taskApi } from '../../../api/taskApi'
+import { taskApi, type TaskActivity } from '../../../api/taskApi'
 import { httpClient } from '../../../api/httpClient'
 import { userApi } from '../../../api/userApi'
 import type { UserOption } from '../../../api/userApi'
@@ -13,6 +13,7 @@ import { useKraOptions } from '../../../hooks/useKraOptions'
 import { useAuthStore } from '../../../store/authStore'
 import { RichTextEditor } from '../../../shared/components/RichTextEditor'
 import { UserAvatar } from '../../../shared/components/UserAvatar'
+import { formatUserDisplay } from '../../../shared/lib/formatUserDisplay'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -44,6 +45,46 @@ function fmtActivity(d: Date) {
   if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`
   if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`
   return d.toLocaleDateString('en', { month: 'short', day: 'numeric' })
+}
+
+function stripHtml(html: string): string {
+  return DOMPurify.sanitize(html, { ALLOWED_TAGS: [] }).trim()
+}
+
+function mapActivityEntry(e: TaskActivity): ActivityEntry {
+  const text = stripHtml(e.content)
+  const base = ((): Omit<ActivityEntry, 'name'> => {
+    switch (e.commentType) {
+      case 'Created':
+        return { type: 'created', text: 'Task created', sub: e.commentBy || undefined, time: e.creation }
+      case 'Assignment':
+        return { type: 'user', text: e.commentBy ? `${e.commentBy} was assigned` : text || 'Assignment changed', time: e.creation }
+      case 'Workflow':
+        return { type: 'status', text: text || 'Status changed', time: e.creation }
+      case 'Edit': {
+        const by = e.commentBy || undefined
+        const lower = text.toLowerCase()
+        if (lower.includes('status'))   return { type: 'status',   text, sub: by, time: e.creation }
+        if (lower.includes('priority')) return { type: 'priority', text, sub: by, time: e.creation }
+        return { type: 'desc', text: text || 'Updated', sub: by, time: e.creation }
+      }
+      case 'Comment': {
+        // PM Hub-tracked edits are stored as Comment type for cross-role visibility.
+        // Infer icon from the start of the sentence; always show who made the change.
+        const by = e.commentBy || undefined
+        const lower = text.toLowerCase()
+        if (lower.startsWith('status'))     return { type: 'status',   text, sub: by, time: e.creation }
+        if (lower.startsWith('priority'))   return { type: 'priority', text, sub: by, time: e.creation }
+        if (lower.startsWith('title'))      return { type: 'title',    text, sub: by, time: e.creation }
+        if (lower.startsWith('link'))       return { type: 'link',     text, sub: by, time: e.creation }
+        if (lower.includes('was assigned')) return { type: 'user',     text, sub: by, time: e.creation }
+        return { type: 'desc', text: text || 'Updated', sub: by, time: e.creation }
+      }
+      default:
+        return { type: 'desc', text: text || e.commentType, time: e.creation }
+    }
+  })()
+  return { ...base, name: e.name }
 }
 
 function parseLinks(html: string): { label: string; url: string }[] {
@@ -84,6 +125,7 @@ interface ActivityEntry {
   text: string
   sub?: string
   time: Date
+  name?: string  // ERPNext Comment name — present when fetched/persisted
 }
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -132,7 +174,7 @@ export function TaskDetailModal({
 
   // Communication panel
   const [commExpanded, setCommExpanded] = useState(true)
-  const [commTab, setCommTab] = useState<'repeat' | 'comments' | 'activity' | 'attachments'>('comments')
+  const [commTab, setCommTab] = useState<'repeat' | 'comments' | 'activity' | 'attachments'>('activity')
   const [showTimeSoon, setShowTimeSoon] = useState(false)
 
   // Editing state — initialised from store task, updated when fullTask arrives
@@ -157,22 +199,25 @@ export function TaskDetailModal({
   )
   const [depPickerValue,  setDepPickerValue]   = useState('')
   const [showDepPicker,   setShowDepPicker]    = useState(false)
-  const [activityLog, setActivityLog]           = useState<ActivityEntry[]>(() => {
-    const now = new Date()
-    const log: ActivityEntry[] = [
-      { type: 'created', text: 'Task created', time: now },
-      { type: 'status',  text: `Status set to ${task.status}`,
-        sub: task.status === 'Completed' && task.completedBy ? `Completed by ${task.completedBy}` : undefined,
-        time: now },
-    ]
-    if (task.assignedTo.length > 0) {
-      task.assignedTo.forEach((a) => log.push({ type: 'user', text: `${a} was assigned`, time: now }))
-    }
-    return log
-  })
+  const [activityLog, setActivityLog]           = useState<ActivityEntry[]>([])
 
-  const addActivity = (entry: Omit<ActivityEntry, 'time'>) =>
-    setActivityLog((prev) => [...prev, { ...entry, time: new Date() }])
+  const addActivity = (entry: Omit<ActivityEntry, 'time'>) => {
+    const time = new Date()
+    setActivityLog((prev) => [...prev, { ...entry, time }])
+    taskApi.postActivityComment(task.id, entry.text)
+      .then((name) => {
+        setActivityLog((prev) =>
+          prev.map((e) => e.time === time && e.text === entry.text ? { ...e, name } : e)
+        )
+      })
+      .catch(() => {/* non-fatal */})
+  }
+
+  const deleteActivity = (entry: ActivityEntry) => {
+    if (!entry.name) return
+    setActivityLog((prev) => prev.filter((e) => e !== entry))
+    taskApi.deleteActivityComment(entry.name).catch(() => {/* non-fatal */})
+  }
 
   const triggerTimeSoon = () => {
     setShowTimeSoon(true)
@@ -234,8 +279,8 @@ export function TaskDetailModal({
     setFetchError(false)
     setRepeatEnabled(false); setSavedRepeat(null); setRepeatEditMode(false)
 
-    taskApi.getTask(task.id)
-      .then((t) => {
+    taskApi.getTaskWithActivity(task.id)
+      .then(({ task: t, activity }) => {
         if (!cancelled) {
           setFullTask(t)
           setTitle(t.subject)
@@ -246,6 +291,31 @@ export function TaskDetailModal({
           setLocalParentTask(t.parentTask ?? null)
           setDepTaskIds(t.dependsOnTasks ? t.dependsOnTasks.split(',').map((s) => s.trim()).filter(Boolean) : [])
           setComments(t.comments ?? [])
+
+          const mapped = activity.map(mapActivityEntry)
+          // Ensure a "created" entry always shows the task owner.
+          const createdIdx = mapped.findIndex((e) => e.type === 'created')
+          if (createdIdx >= 0) {
+            if (!mapped[createdIdx].sub && t.owner) {
+              mapped[createdIdx] = { ...mapped[createdIdx], sub: t.owner }
+            }
+          } else if (t.owner) {
+            const time = mapped[0]?.time ?? new Date()
+            mapped.unshift({ type: 'created', text: 'Task created', sub: t.owner, time })
+          }
+          // Ensure a completion entry shows who completed it.
+          if (t.status === 'Completed' && t.completedBy) {
+            const idx = mapped.findIndex(
+              (e) => e.type === 'status' && e.text.toLowerCase().includes('completed')
+            )
+            if (idx >= 0) {
+              if (!mapped[idx].sub) mapped[idx] = { ...mapped[idx], sub: `Completed by ${t.completedBy}` }
+            } else {
+              const time = t.completedOn ? new Date(t.completedOn) : new Date()
+              mapped.push({ type: 'status', text: 'Status set to Completed', sub: `Completed by ${t.completedBy!}`, time })
+            }
+          }
+          if (mapped.length > 0) setActivityLog(mapped)
         }
       })
       .catch(() => {
@@ -392,7 +462,8 @@ export function TaskDetailModal({
     setProjectQuery('')
     if (projectName === localProject) return
     setLocalProject(projectName)
-    await onUpdate(task.id, { subject: task.subject, status: task.status, priority: task.priority, project: projectName || undefined })
+    const ok = await onUpdate(task.id, { subject: task.subject, status: task.status, priority: task.priority, project: projectName || undefined })
+    if (ok) addActivity({ type: 'desc', text: `Project changed to ${projectName || 'none'}` })
   }
 
   // ── Dropdowns + keyboard ───────────────────────────────────────────────────
@@ -513,7 +584,10 @@ export function TaskDetailModal({
     const n = parseFloat(engDays)
     if (!isNaN(n) && n !== (dt.engagementDays ?? null)) {
       const ok = await onUpdate(task.id, { subject: task.subject, status: liveStatus, priority: livePriority, engagementDays: n })
-      if (ok) setFullTask((prev) => prev ? { ...prev, engagementDays: n } : null)
+      if (ok) {
+        setFullTask((prev) => prev ? { ...prev, engagementDays: n } : null)
+        addActivity({ type: 'desc', text: `Engagement days set to ${n}` })
+      }
     } else if (isNaN(n)) {
       setEngDays(String(dt.engagementDays ?? ''))
     }
@@ -525,7 +599,10 @@ export function TaskDetailModal({
     setActType(val)
     if (val !== (dt.activityType ?? '')) {
       const ok = await onUpdate(task.id, { subject: task.subject, status: liveStatus, priority: livePriority, activityType: val || undefined })
-      if (ok) setFullTask((prev) => prev ? { ...prev, activityType: val || null } : null)
+      if (ok) {
+        setFullTask((prev) => prev ? { ...prev, activityType: val || null } : null)
+        addActivity({ type: 'desc', text: val ? `Activity type set to ${val}` : 'Activity type cleared' })
+      }
     }
   }
 
@@ -541,7 +618,8 @@ export function TaskDetailModal({
     setShowParentTaskMenu(false)
     setParentTaskQuery('')
     setLocalParentTask(parentId)
-    await onUpdate(task.id, { subject: task.subject, status: liveStatus, priority: livePriority, parentTask: parentId || undefined })
+    const ok = await onUpdate(task.id, { subject: task.subject, status: liveStatus, priority: livePriority, parentTask: parentId || undefined })
+    if (ok) addActivity({ type: 'desc', text: parentId ? `Parent task set to ${parentId}` : 'Parent task removed' })
   }
 
   const addDep = async (depId: string) => {
@@ -549,13 +627,15 @@ export function TaskDetailModal({
     const newIds = [...depTaskIds, depId]
     setDepTaskIds(newIds)
     setDepPickerValue('')
-    await onUpdate(task.id, { subject: task.subject, status: liveStatus, priority: livePriority, dependsOnTasks: newIds.join(',') })
+    const ok = await onUpdate(task.id, { subject: task.subject, status: liveStatus, priority: livePriority, dependsOnTasks: newIds.join(',') })
+    if (ok) addActivity({ type: 'desc', text: `Dependency added: ${depId}` })
   }
 
   const removeDep = async (depId: string) => {
     const newIds = depTaskIds.filter((id) => id !== depId)
     setDepTaskIds(newIds)
-    await onUpdate(task.id, { subject: task.subject, status: liveStatus, priority: livePriority, dependsOnTasks: newIds.join(',') || undefined })
+    const ok = await onUpdate(task.id, { subject: task.subject, status: liveStatus, priority: livePriority, dependsOnTasks: newIds.join(',') || undefined })
+    if (ok) addActivity({ type: 'desc', text: `Dependency removed: ${depId}` })
   }
 
   const handleCommentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -619,7 +699,6 @@ export function TaskDetailModal({
     setCommentText('')
     setTimeout(() => commentsEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
     await onUpdate(task.id, { subject: task.subject, status: liveStatus, priority: livePriority, comments: updated })
-    addActivity({ type: 'desc', text: 'Comment added' })
     setIsSendingComment(false)
   }
 
@@ -1701,78 +1780,116 @@ export function TaskDetailModal({
                 )}
 
                 {/* Activity tab */}
-                {commTab === 'activity' && (
-                  <div className="py-3 px-3 space-y-4">
-                    {activityLog.map((entry, i) => {
-                      // Icon
-                      let icon: React.ReactNode
-                      if (entry.type === 'created') {
-                        icon = (
-                          <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
-                            <svg fill="none" viewBox="0 0 12 12" width="9" height="9" className="text-indigo-500">
-                              <path d="M6 1v10M1 6h10" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6"/>
-                            </svg>
+                {commTab === 'activity' && (() => {
+                  const isAdmin =
+                    currentUser?.username === 'Administrator' ||
+                    currentUser?.roles?.includes('Administrator') ||
+                    currentUser?.roles?.includes('System Manager')
+
+                  if (activityLog.length === 0) return (
+                    <div className="flex flex-col items-center justify-center py-12 text-slate-300">
+                      <svg fill="none" viewBox="0 0 24 24" width="32" height="32" className="mb-2">
+                        <path d="M12 8v4l3 3M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                      </svg>
+                      <p className="text-[12px]">No activity yet</p>
+                    </div>
+                  )
+
+                  return (
+                    <div className="py-2 px-3 relative">
+                      {/* Vertical connector line */}
+                      <div className="absolute left-[23px] top-5 bottom-5 w-px bg-slate-100 pointer-events-none" />
+
+                      {activityLog.map((entry, i) => {
+                        // Icon
+                        let icon: React.ReactNode
+                        if (entry.type === 'created') {
+                          icon = (
+                            <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0 ring-2 ring-white">
+                              <svg fill="none" viewBox="0 0 12 12" width="9" height="9" className="text-indigo-500">
+                                <path d="M6 1v10M1 6h10" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6"/>
+                              </svg>
+                            </div>
+                          )
+                        } else if (entry.type === 'status') {
+                          const scfg = STATUS_CONFIG.find((s) => entry.text.includes(s.key)) ?? STATUS_CONFIG[0]
+                          icon = (
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ring-2 ring-white ${scfg.pill}`}>
+                              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${scfg.dot}`}/>
+                            </div>
+                          )
+                        } else if (entry.type === 'user') {
+                          const name = entry.text.split(' was')[0]
+                          icon = <div className="ring-2 ring-white rounded-full flex-shrink-0"><UserAvatar name={name} size="xs" /></div>
+                        } else if (entry.type === 'link') {
+                          icon = (
+                            <div className="w-6 h-6 rounded-full bg-sky-100 flex items-center justify-center flex-shrink-0 ring-2 ring-white">
+                              <svg fill="none" viewBox="0 0 12 12" width="9" height="9" className="text-sky-500">
+                                <path d="M5 7a3 3 0 0 0 4.24.01l1.42-1.41a3 3 0 0 0-4.24-4.24L5.35 2.4" stroke="currentColor" strokeLinecap="round" strokeWidth="1.3"/>
+                                <path d="M7 5a3 3 0 0 0-4.24-.01L1.34 6.4a3 3 0 0 0 4.24 4.24l1.05-1.05" stroke="currentColor" strokeLinecap="round" strokeWidth="1.3"/>
+                              </svg>
+                            </div>
+                          )
+                        } else if (entry.type === 'priority') {
+                          icon = (
+                            <div className="w-6 h-6 rounded-full bg-orange-100 flex items-center justify-center flex-shrink-0 ring-2 ring-white">
+                              <svg fill="none" viewBox="0 0 12 12" width="9" height="9" className="text-orange-500">
+                                <path d="M6 1v6M6 9.5v1" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6"/>
+                              </svg>
+                            </div>
+                          )
+                        } else if (entry.type === 'title') {
+                          icon = (
+                            <div className="w-6 h-6 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0 ring-2 ring-white">
+                              <svg fill="none" viewBox="0 0 12 12" width="9" height="9" className="text-violet-500">
+                                <path d="M2 3h8M5 3v6" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5"/>
+                              </svg>
+                            </div>
+                          )
+                        } else {
+                          icon = (
+                            <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 ring-2 ring-white">
+                              <svg fill="none" viewBox="0 0 12 12" width="9" height="9" className="text-slate-400">
+                                <path d="M2 3h8M2 6h6M2 9h4" stroke="currentColor" strokeLinecap="round" strokeWidth="1.4"/>
+                              </svg>
+                            </div>
+                          )
+                        }
+
+                        return (
+                          <div key={i} className="flex items-start gap-2.5 group py-2">
+                            <div className="flex-shrink-0 z-10">{icon}</div>
+                            <div className="flex-1 min-w-0 pt-0.5">
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="text-[12px] text-slate-700 font-medium leading-snug">{entry.text}</p>
+                                <div className="flex items-center gap-1.5 flex-shrink-0 mt-px">
+                                  <span className="text-[10.5px] text-slate-400 whitespace-nowrap">{fmtActivity(entry.time)}</span>
+                                  {isAdmin && entry.name && (
+                                    <button
+                                      onClick={() => deleteActivity(entry)}
+                                      className="opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-400 transition-opacity"
+                                      title="Delete"
+                                    >
+                                      <svg fill="none" viewBox="0 0 10 10" width="10" height="10">
+                                        <path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5"/>
+                                      </svg>
+                                    </button>
+                                  )}
+                                </div>
+                              </div>
+                              {entry.sub && (
+                                <div className="flex items-center gap-1 mt-1">
+                                  <UserAvatar name={entry.sub} fullName={formatUserDisplay(entry.sub)} size="xs" />
+                                  <span className="text-[11px] text-slate-400">{formatUserDisplay(entry.sub)}</span>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         )
-                      } else if (entry.type === 'status') {
-                        const scfg = STATUS_CONFIG.find((s) => entry.text.includes(s.key)) ?? STATUS_CONFIG[0]
-                        icon = (
-                          <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${scfg.pill}`}>
-                            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${scfg.dot}`}/>
-                          </div>
-                        )
-                      } else if (entry.type === 'user') {
-                        const name = entry.text.split(' was')[0]
-                        icon = (
-                          <UserAvatar name={name} size="xs" />
-                        )
-                      } else if (entry.type === 'link') {
-                        icon = (
-                          <div className="w-6 h-6 rounded-full bg-sky-100 flex items-center justify-center flex-shrink-0">
-                            <svg fill="none" viewBox="0 0 12 12" width="9" height="9" className="text-sky-500">
-                              <path d="M5 7a3 3 0 0 0 4.24.01l1.42-1.41a3 3 0 0 0-4.24-4.24L5.35 2.4" stroke="currentColor" strokeLinecap="round" strokeWidth="1.3"/>
-                              <path d="M7 5a3 3 0 0 0-4.24-.01L1.34 6.4a3 3 0 0 0 4.24 4.24l1.05-1.05" stroke="currentColor" strokeLinecap="round" strokeWidth="1.3"/>
-                            </svg>
-                          </div>
-                        )
-                      } else if (entry.type === 'desc') {
-                        icon = (
-                          <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
-                            <svg fill="none" viewBox="0 0 12 12" width="9" height="9" className="text-slate-500">
-                              <path d="M2 3h8M2 6h6M2 9h4" stroke="currentColor" strokeLinecap="round" strokeWidth="1.4"/>
-                            </svg>
-                          </div>
-                        )
-                      } else if (entry.type === 'priority') {
-                        icon = (
-                          <div className="w-6 h-6 rounded-full bg-orange-100 flex items-center justify-center flex-shrink-0">
-                            <svg fill="none" viewBox="0 0 12 12" width="9" height="9" className="text-orange-500">
-                              <path d="M6 1v6M6 9.5v1" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6"/>
-                            </svg>
-                          </div>
-                        )
-                      } else {
-                        icon = (
-                          <div className="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
-                            <svg fill="none" viewBox="0 0 12 12" width="9" height="9" className="text-slate-400">
-                              <path d="M2 4h5M2 7h8M2 10h11" stroke="currentColor" strokeLinecap="round" strokeWidth="1.4"/>
-                            </svg>
-                          </div>
-                        )
-                      }
-                      return (
-                        <div key={i} className="flex items-start gap-2.5">
-                          <div className="mt-0.5 flex-shrink-0">{icon}</div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-[12px] text-slate-600">{entry.text}</p>
-                            {entry.sub && <p className="text-[11.5px] text-slate-500 mt-0.5">{entry.sub}</p>}
-                            <p className="text-[11px] text-slate-400 mt-0.5">{fmtActivity(entry.time)}</p>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
+                      })}
+                    </div>
+                  )
+                })()}
 
                 {/* Links tab */}
                 {commTab === 'attachments' && (() => {

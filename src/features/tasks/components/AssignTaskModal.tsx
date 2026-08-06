@@ -28,34 +28,23 @@ export function AssignTaskModal({
   const [activeOp, setActiveOp]   = useState<string | null>(null)
   const searchRef                 = useRef<HTMLInputElement>(null)
 
-  // Pre-load active employees on mount
+  // Load assignable users: project members if task has a project, else active employees
   useEffect(() => {
     setIsLoading(true)
-    userApi.searchActiveEmployees('')
+    const fetch = task.project
+      ? userApi.getProjectMembers(task.project)
+      : userApi.searchActiveEmployees('')
+    fetch
       .then((u) => setAllUsers(u))
       .catch(() => setAllUsers([]))
       .finally(() => setIsLoading(false))
-  }, [])
+  }, [task.project])
 
   // Focus search on open
   useEffect(() => {
     const t = setTimeout(() => searchRef.current?.focus(), 80)
     return () => clearTimeout(t)
   }, [])
-
-  // Re-search when query changes
-  useEffect(() => {
-    if (!query.trim()) return
-    const timer = setTimeout(async () => {
-      try {
-        const users = await userApi.searchActiveEmployees(query.trim())
-        setAllUsers(users)
-      } catch {
-        // keep current list
-      }
-    }, 250)
-    return () => clearTimeout(timer)
-  }, [query])
 
   // Escape closes
   useEffect(() => {

@@ -100,7 +100,16 @@ export const useWorkStore = create<WorkState>((set, get) => ({
   updateTask: async (taskId, input) => {
     try {
       const updated = await taskService.updateTask(taskId, input)
-      set((state) => ({ tasks: state.tasks.map((t) => (t.id === taskId ? updated : t)) }))
+      set((state) => ({
+        tasks: state.tasks.map((t) => {
+          if (t.id !== taskId) return t
+          // Frappe's PUT response often omits _assign — preserve the store's assignedTo
+          // if the response came back empty so assignments aren't silently wiped.
+          return updated.assignedTo.length > 0
+            ? updated
+            : { ...updated, assignedTo: t.assignedTo }
+        }),
+      }))
       return true
     } catch (e) {
       set({ updateTaskError: e instanceof Error ? e.message : 'Unable to update task.' })
@@ -138,7 +147,14 @@ export const useWorkStore = create<WorkState>((set, get) => ({
     set((state) => ({ tasks: state.tasks.map((t) => (t.id === taskId ? { ...t, status } : t)) }))
     try {
       const updated = await taskService.updateTaskStatus(taskId, status, completedBy, completedOn)
-      set((state) => ({ tasks: state.tasks.map((t) => (t.id === taskId ? updated : t)) }))
+      set((state) => ({
+        tasks: state.tasks.map((t) => {
+          if (t.id !== taskId) return t
+          return updated.assignedTo.length > 0
+            ? updated
+            : { ...updated, assignedTo: t.assignedTo }
+        }),
+      }))
       return true
     } catch (e) {
       set({ updateTaskError: e instanceof Error ? e.message : 'Unable to update task status.' })

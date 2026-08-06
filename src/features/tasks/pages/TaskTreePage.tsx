@@ -124,8 +124,8 @@ function ColHeader() {
           { label: 'Due',      w: COL.due      },
           { label: 'Priority', w: COL.priority },
           { label: 'Status',   w: COL.status   },
-          { label: 'Repeat',   w: COL.repeat   },
           { label: 'Members',  w: COL.members  },
+          { label: 'Repeat',   w: COL.repeat   },
         ] as const).map(({ label, w }) => (
           <div key={label} style={{ width: w, flexShrink: 0 }}>
             <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{label}</span>
@@ -281,6 +281,11 @@ function TaskRow({
             </span>
           </div>
 
+          {/* Assignees */}
+          <div style={{ width: COL.members }}>
+            {task.assignedTo.length > 0 && <AvatarStack max={2} userIds={task.assignedTo} />}
+          </div>
+
           {/* Repeat */}
           <div className="flex items-center gap-1" style={{ width: COL.repeat }}>
             {task.autoRepeat && (
@@ -292,11 +297,6 @@ function TaskRow({
                 <span className="text-[10px] font-medium text-indigo-400">Repeat</span>
               </>
             )}
-          </div>
-
-          {/* Assignees */}
-          <div style={{ width: COL.members }}>
-            {task.assignedTo.length > 0 && <AvatarStack max={2} userIds={task.assignedTo} />}
           </div>
 
         </div>

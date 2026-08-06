@@ -3,6 +3,7 @@ import { Fragment, useMemo, useState } from 'react'
 import { useAuthStore } from '../../../store/authStore'
 import { useWorkStore } from '../../../store/workStore'
 import { ProjectDetailModal } from '../components/ProjectDetailModal'
+import { AvatarStack } from '../../../shared/components/UserAvatar'
 import type { Project } from '../types/project.types'
 
 // ─── Constants ─────────────────────────────────────────────────────────────
@@ -33,10 +34,6 @@ function timeAgo(iso: string | null | undefined) {
   if (days === 1) return 'yesterday'
   if (days < 30)  return `${days}d ago`
   return `${Math.floor(days / 30)}mo ago`
-}
-
-function initials(uid: string) {
-  return uid.replace(/[@.]/g, ' ').split(/\s+/).filter(Boolean).map(p => p[0]).join('').toUpperCase().slice(0, 2)
 }
 
 function statusConfig(s: string) {
@@ -425,41 +422,10 @@ export function ProjectsPage() {
 
                       {/* Team */}
                       <div style={{ width: 130, flexShrink: 0, padding: '0 8px' }}>
-                        {(project.members?.length ?? 0) > 0 ? (
-                          <div style={{ display: 'flex', alignItems: 'center' }}>
-                            {project.members!.slice(0, 4).map((m, i) => (
-                              <div
-                                key={m}
-                                title={m}
-                                style={{
-                                  width: 22, height: 22, borderRadius: '50%',
-                                  background: '#444',
-                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                  color: 'white', fontSize: 7.5, fontWeight: 700,
-                                  border: '2px solid white',
-                                  marginLeft: i > 0 ? -6 : 0,
-                                  zIndex: 4 - i,
-                                  position: 'relative',
-                                }}
-                              >
-                                {initials(m)}
-                              </div>
-                            ))}
-                            {project.members!.length > 4 && (
-                              <div style={{
-                                width: 22, height: 22, borderRadius: '50%',
-                                background: '#e5e7eb', border: '2px solid white',
-                                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                fontSize: 7.5, fontWeight: 600, color: '#6b7280',
-                                marginLeft: -6, position: 'relative', zIndex: 0,
-                              }}>
-                                +{project.members!.length - 4}
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <span style={{ fontSize: 11, color: '#e5e7eb' }}>—</span>
-                        )}
+                        {(project.members?.length ?? 0) > 0
+                          ? <AvatarStack userIds={project.members!.filter(m => m !== 'Administrator' && m !== 'Guest')} max={4} />
+                          : <span style={{ fontSize: 11, color: '#e5e7eb' }}>—</span>
+                        }
                       </div>
 
                       {/* Updated */}

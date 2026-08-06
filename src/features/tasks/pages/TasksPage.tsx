@@ -349,7 +349,7 @@ export function TasksPage() {
               const isBlocked  = group.blocked
               const due        = fmtDue(task.dueDate)
               const pri        = PRIORITY[task.priority] ?? { dot: '#9CA3AF', text: '#6B7280', label: task.priority }
-              const assignees  = task.assignedTo.length > 0 ? task.assignedTo : (task.owner ? [task.owner] : [])
+              const assignees  = task.assignedTo
               const projectName = task.project ? (projectNameMap.get(task.project) ?? task.project) : null
 
               return (

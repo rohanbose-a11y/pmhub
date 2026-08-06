@@ -280,6 +280,14 @@ const listTasks = async (filters?: unknown[]): Promise<Task[]> => {
   }
 }
 
+export interface TaskActivity {
+  name: string
+  commentType: string   // 'Created' | 'Assignment' | 'Edit' | 'Workflow' | 'Comment' | …
+  content: string
+  creation: Date
+  commentBy: string
+}
+
 export const taskApi = {
   listAccessibleTasks: () => listTasks(),
 
@@ -451,5 +459,113 @@ export const taskApi = {
       name: taskId,
       assign_to: userId,
     })
+  },
+
+  /**
+   * Fetch a task plus its full activity timeline.
+   * Primary source: full Comment API (all entries, works for any user who has
+   * Task read access in a standard ERPNext setup).
+   * Fallback: __comments field on the task document (Frappe's cached snapshot,
+   * limited to ~20 entries but always accessible).
+   * Results are merged by name so neither source loses data.
+   */
+  async getTaskWithActivity(taskId: string): Promise<{ task: Task; activity: TaskActivity[] }> {
+    // Always fetch the task document (needed for task data + __comments fallback)
+    const { data } = await httpClient.get<FrappeDocumentResponse<FrappeTaskRecord & { __comments?: string | null }>>(
+      `/api/resource/Task/${encodeURIComponent(taskId)}`,
+    )
+    const task = toTask(data.data)
+
+    // Seed from __comments (limited but permission-safe)
+    const byName = new Map<string, TaskActivity>()
+    try {
+      const raw: unknown = JSON.parse(data.data.__comments ?? '[]')
+      if (Array.isArray(raw)) {
+        ;(raw as Record<string, unknown>[]).forEach((r) => {
+          const name = String(r.name ?? '')
+          byName.set(name, {
+            name,
+            commentType: String(r.comment_type ?? ''),
+            content: String(r.content ?? ''),
+            creation: new Date(String(r.creation ?? new Date().toISOString())),
+            commentBy: String(r.comment_by ?? r.owner ?? ''),
+          })
+        })
+      }
+    } catch { /* malformed __comments */ }
+
+    // Supplement with full Comment API — gives complete history; may be
+    // restricted on some ERPNext instances (catch is silent, __comments used)
+    try {
+      const { data: cd } = await httpClient.get<FrappeListResponse<{
+        name: string; comment_type: string; content: string | null
+        creation: string; comment_by: string | null; owner: string | null
+      }>>('/api/resource/Comment', {
+        params: {
+          filters: JSON.stringify([
+            ['Comment', 'reference_doctype', '=', 'Task'],
+            ['Comment', 'reference_name', '=', taskId],
+          ]),
+          fields: JSON.stringify(['name', 'comment_type', 'content', 'creation', 'comment_by', 'owner']),
+          order_by: 'creation asc',
+          limit_page_length: 500,
+        },
+      })
+      cd.data.forEach((r) => {
+        byName.set(r.name, {
+          name: r.name,
+          commentType: r.comment_type,
+          content: r.content ?? '',
+          creation: new Date(r.creation),
+          commentBy: r.comment_by ?? r.owner ?? '',
+        })
+      })
+    } catch { /* Comment API not accessible — __comments result is kept */ }
+
+    const activity = [...byName.values()].sort((a, b) => a.creation.getTime() - b.creation.getTime())
+    return { task, activity }
+  },
+
+  /** Persist a tracked edit as a Comment so it is visible to all users (Info type is admin-only). Returns the new Comment name. */
+  async postActivityComment(taskId: string, text: string): Promise<string> {
+    const { data } = await httpClient.post<FrappeDocumentResponse<{ name: string }>>('/api/resource/Comment', {
+      comment_type: 'Comment',
+      reference_doctype: 'Task',
+      reference_name: taskId,
+      content: text,
+    })
+    return data.data.name
+  },
+
+  async deleteActivityComment(commentName: string): Promise<void> {
+    await httpClient.delete(`/api/resource/Comment/${encodeURIComponent(commentName)}`)
+  },
+
+  async getTaskActivity(taskId: string): Promise<TaskActivity[]> {
+    const { data } = await httpClient.get<FrappeListResponse<{
+      name: string
+      comment_type: string
+      content: string | null
+      creation: string
+      comment_by: string | null
+      owner: string | null
+    }>>('/api/resource/Comment', {
+      params: {
+        filters: JSON.stringify([
+          ['Comment', 'reference_doctype', '=', 'Task'],
+          ['Comment', 'reference_name', '=', taskId],
+        ]),
+        fields: JSON.stringify(['name', 'comment_type', 'content', 'creation', 'comment_by', 'owner']),
+        order_by: 'creation asc',
+        limit_page_length: 200,
+      },
+    })
+    return data.data.map((r) => ({
+      name: r.name,
+      commentType: r.comment_type,
+      content: r.content ?? '',
+      creation: new Date(r.creation),
+      commentBy: r.comment_by ?? r.owner ?? '',
+    }))
   },
 }

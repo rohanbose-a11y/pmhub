@@ -12,7 +12,9 @@
     "preview:prod": "vite preview --host 0.0.0.0 --port 4173"
   },
   "dependencies": {
+    "@types/dompurify": "^3.0.5",
     "axios": "^1.14.0",
+    "dompurify": "^3.4.13",
     "quill": "^2.0.3",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",

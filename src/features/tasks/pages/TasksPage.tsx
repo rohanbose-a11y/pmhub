@@ -35,11 +35,11 @@ const STATUS_GROUPS: StatusGroup[] = [
 
 // ─── Priority config ─────────────────────────────────────────────────────────
 
-const PRIORITY: Record<string, { dot: string; text: string; label: string }> = {
-  Urgent: { dot: '#EF4444', text: '#B91C1C', label: 'Urgent' },
-  High:   { dot: '#F97316', text: '#C2410C', label: 'High'   },
-  Medium: { dot: '#3B82F6', text: '#1D4ED8', label: 'Medium' },
-  Low:    { dot: '#9CA3AF', text: '#6B7280', label: 'Low'    },
+const PRIORITY: Record<string, { dot: string; text: string; bg: string; label: string }> = {
+  Urgent: { dot: '#EF4444', text: '#B91C1C', bg: '#FEE2E2', label: 'Urgent' },
+  High:   { dot: '#F97316', text: '#C2410C', bg: '#FFEDD5', label: 'High'   },
+  Medium: { dot: '#3B82F6', text: '#1D4ED8', bg: '#DBEAFE', label: 'Medium' },
+  Low:    { dot: '#9CA3AF', text: '#6B7280', bg: '#F3F4F6', label: 'Low'    },
 }
 
 const PAGE_SIZE = 20
@@ -117,7 +117,7 @@ export function TasksPage() {
 
   // ── View filters ──────────────────────────────────────────────────────────────
 
-  const [searchParams]  = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [showClosed,    setShowClosed]    = useState(false)
   const [myTasksOnly,   setMyTasksOnly]   = useState(false)
   const [projectFilter, setProjectFilter] = useState(() => searchParams.get('project') ?? 'all')
@@ -146,7 +146,8 @@ export function TasksPage() {
 
   // Auto-open task detail from dashboard / notification link
   useEffect(() => {
-    const taskId = (location.state as { taskId?: string } | null)?.taskId
+    const state = location.state as { taskId?: unknown } | null
+    const taskId = typeof state?.taskId === 'string' ? state.taskId : undefined
     if (!taskId || !tasks.length) return
     const found = tasks.find((t) => t.id === taskId)
     if (found) {
@@ -169,7 +170,7 @@ export function TasksPage() {
     if (!statusChangeTarget) return
     setIsStatusChanging(true)
     const noteHtml = `<p><strong>→ ${newStatus}:</strong> ${note}</p>`
-    await updateTask(statusChangeTarget.id, {
+    const ok = await updateTask(statusChangeTarget.id, {
       subject:     statusChangeTarget.subject,
       status:      newStatus,
       priority:    statusChangeTarget.priority,
@@ -177,7 +178,7 @@ export function TasksPage() {
       ...(newStatus === 'Completed' ? { completedBy: username || userFullName, completedOn: new Date().toISOString().split('T')[0] } : {}),
     })
     setIsStatusChanging(false)
-    setStatusChangeTarget(null)
+    if (ok) setStatusChangeTarget(null)
   }
 
   // ── Filtered + grouped tasks ──────────────────────────────────────────────────
@@ -219,6 +220,13 @@ export function TasksPage() {
   }, [paginatedTasks, knownStatuses])
 
   const totalCount   = filteredTasks.length
+  const doneCount    = useMemo(
+    () => filteredTasks.filter((t) => {
+      const sg = STATUS_GROUPS.find((g) => g.statuses.includes(t.status))
+      return !!sg?.closed && !sg.blocked
+    }).length,
+    [filteredTasks],
+  )
   const overdueCount = useMemo(() => {
     const today = new Date(); today.setHours(0, 0, 0, 0)
     return filteredTasks.filter((t) => {
@@ -243,9 +251,10 @@ export function TasksPage() {
         onAddTask={openCreateModal}
         onGroupByChange={setGroupBy}
         onMyTasksOnlyChange={setMyTasksOnly}
-        onProjectFilterChange={setProjectFilter}
+        onProjectFilterChange={(v) => { setProjectFilter(v); setSearchParams(v === 'all' ? {} : { project: v }) }}
         onRefresh={() => { if (username) { resetTaskFeedback(); void loadWorkspace(username) } }}
         onShowClosedChange={setShowClosed}
+        doneCount={doneCount}
         overdueCount={overdueCount}
         projectFilter={projectFilter}
         projects={projects}
@@ -257,7 +266,7 @@ export function TasksPage() {
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-auto scrollbar-none" style={{ background: 'white' }}>
         <div style={{ minWidth: 720 }}>
 
-          {/* Column header — sticky at top of scroll container */}
+          {/* Column header — sticky */}
           <div
             style={{
               position: 'sticky',
@@ -277,7 +286,7 @@ export function TasksPage() {
               <span style={{ fontSize: 11, fontWeight: 500, color: '#9CA3AF' }}>Name</span>
             </div>
             {[
-              { label: 'Project',  w: 160 },
+              ...(projectFilter === 'all' ? [{ label: 'Project', w: 160 }] : []),
               { label: 'Assignee', w: 90  },
               { label: 'Due date', w: 115 },
               { label: 'Priority', w: 115 },
@@ -334,8 +343,8 @@ export function TasksPage() {
             // ── project id → display name map ─────────────────────────────────
             const projectNameMap = new Map(projects.map((p) => [p.name, p.displayName]))
 
-            // ── shared row renderer ───────────────────────────────────────────
-            const renderRow = (task: Task, group: StatusGroup) => {
+            // ── row renderer ──────────────────────────────────────────────────
+            const renderRow = (task: Task, group: StatusGroup, depth = 0) => {
               const isDone     = group.closed && !group.blocked
               const isBlocked  = group.blocked
               const due        = fmtDue(task.dueDate)
@@ -370,6 +379,13 @@ export function TasksPage() {
 
                   {/* Name */}
                   <div style={{ flex: '0 1 460px', display: 'flex', alignItems: 'center', gap: 7, minWidth: 0, paddingRight: 8 }}>
+                    {/* Depth indent (hierarchy mode) */}
+                    {depth > 0 && (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                        {depth > 1 && <span style={{ width: (depth - 1) * 16, display: 'inline-block', flexShrink: 0 }} />}
+                        <span style={{ fontSize: 10, color: '#C4B5FD', fontWeight: 700, flexShrink: 0 }}>↳</span>
+                      </span>
+                    )}
                     {task.isMilestone && (
                       <span style={{ width: 8, height: 8, background: '#F59E0B', transform: 'rotate(45deg)', borderRadius: 2, flexShrink: 0 }} />
                     )}
@@ -387,21 +403,23 @@ export function TasksPage() {
                     >
                       {task.subject}
                     </span>
-                    {task.parentTask && (
+                    {task.parentTask && depth === 0 && (
                       <span style={{ fontSize: 10, color: '#9CA3AF', flexShrink: 0 }}>↳ subtask</span>
                     )}
                   </div>
 
-                  {/* Project */}
-                  <div style={{ width: 160, flexShrink: 0, padding: '0 4px', minWidth: 0 }}>
-                    {projectName ? (
-                      <span style={{ fontSize: 12, color: '#6B7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
-                        {projectName}
-                      </span>
-                    ) : (
-                      <span style={{ fontSize: 12, color: '#D1D5DB' }}>—</span>
-                    )}
-                  </div>
+                  {/* Project — only when showing all projects */}
+                  {projectFilter === 'all' && (
+                    <div style={{ width: 160, flexShrink: 0, padding: '0 4px', minWidth: 0 }}>
+                      {projectName ? (
+                        <span style={{ fontSize: 12, color: '#6B7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
+                          {projectName}
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: 12, color: '#D1D5DB' }}>—</span>
+                      )}
+                    </div>
+                  )}
 
                   {/* Assignees */}
                   <div
@@ -623,71 +641,71 @@ export function TasksPage() {
           <span style={{ fontSize: 12, color: '#9CA3AF' }}>
             {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filteredTasks.length)} of {filteredTasks.length} tasks
           </span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <button
-              type="button"
-              disabled={currentPage === 1}
-              onClick={() => setCurrentPage((p) => p - 1)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 4,
-                height: 28, padding: '0 10px', fontSize: 12, fontWeight: 500,
-                color: currentPage === 1 ? '#D1D5DB' : '#374151',
-                background: 'white', border: '1px solid #E5E7EB',
-                borderRadius: 6, cursor: currentPage === 1 ? 'default' : 'pointer',
-              }}
-            >
-              <svg fill="none" viewBox="0 0 6 10" width={6} height={10}><path d="M5 1L1 5l4 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              Prev
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <button
+                type="button"
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage((p) => p - 1)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 4,
+                  height: 28, padding: '0 10px', fontSize: 12, fontWeight: 500,
+                  color: currentPage === 1 ? '#D1D5DB' : '#374151',
+                  background: 'white', border: '1px solid #E5E7EB',
+                  borderRadius: 6, cursor: currentPage === 1 ? 'default' : 'pointer',
+                }}
+              >
+                <svg fill="none" viewBox="0 0 6 10" width={6} height={10}><path d="M5 1L1 5l4 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                Prev
+              </button>
 
-            {(() => {
-              const pages: (number | '...')[] = []
-              if (totalPages <= 7) {
-                for (let i = 1; i <= totalPages; i++) pages.push(i)
-              } else {
-                pages.push(1)
-                if (currentPage > 3) pages.push('...')
-                for (let i = Math.max(2, currentPage - 1); i <= Math.min(totalPages - 1, currentPage + 1); i++) pages.push(i)
-                if (currentPage < totalPages - 2) pages.push('...')
-                pages.push(totalPages)
-              }
-              return pages.map((p, idx) =>
-                p === '...'
-                  ? <span key={`ellipsis-${idx}`} style={{ fontSize: 12, color: '#9CA3AF', padding: '0 4px' }}>…</span>
-                  : (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => setCurrentPage(p)}
-                      style={{
-                        height: 28, minWidth: 28, padding: '0 6px', fontSize: 12,
-                        fontWeight: p === currentPage ? 700 : 400,
-                        color: p === currentPage ? 'white' : '#374151',
-                        background: p === currentPage ? '#7B3FF2' : 'white',
-                        border: `1px solid ${p === currentPage ? '#7B3FF2' : '#E5E7EB'}`,
-                        borderRadius: 6, cursor: 'pointer',
-                      }}
-                    >{p}</button>
-                  )
-              )
-            })()}
+              {(() => {
+                const pages: (number | '...')[] = []
+                if (totalPages <= 7) {
+                  for (let i = 1; i <= totalPages; i++) pages.push(i)
+                } else {
+                  pages.push(1)
+                  if (currentPage > 3) pages.push('...')
+                  for (let i = Math.max(2, currentPage - 1); i <= Math.min(totalPages - 1, currentPage + 1); i++) pages.push(i)
+                  if (currentPage < totalPages - 2) pages.push('...')
+                  pages.push(totalPages)
+                }
+                return pages.map((p, idx) =>
+                  p === '...'
+                    ? <span key={`ellipsis-${idx}`} style={{ fontSize: 12, color: '#9CA3AF', padding: '0 4px' }}>…</span>
+                    : (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setCurrentPage(p)}
+                        style={{
+                          height: 28, minWidth: 28, padding: '0 6px', fontSize: 12,
+                          fontWeight: p === currentPage ? 700 : 400,
+                          color: p === currentPage ? 'white' : '#374151',
+                          background: p === currentPage ? '#7B3FF2' : 'white',
+                          border: `1px solid ${p === currentPage ? '#7B3FF2' : '#E5E7EB'}`,
+                          borderRadius: 6, cursor: 'pointer',
+                        }}
+                      >{p}</button>
+                    )
+                )
+              })()}
 
-            <button
-              type="button"
-              disabled={currentPage === totalPages}
-              onClick={() => setCurrentPage((p) => p + 1)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 4,
-                height: 28, padding: '0 10px', fontSize: 12, fontWeight: 500,
-                color: currentPage === totalPages ? '#D1D5DB' : '#374151',
-                background: 'white', border: '1px solid #E5E7EB',
-                borderRadius: 6, cursor: currentPage === totalPages ? 'default' : 'pointer',
-              }}
-            >
-              Next
-              <svg fill="none" viewBox="0 0 6 10" width={6} height={10}><path d="M1 1l4 4-4 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </button>
-          </div>
+              <button
+                type="button"
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage((p) => p + 1)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 4,
+                  height: 28, padding: '0 10px', fontSize: 12, fontWeight: 500,
+                  color: currentPage === totalPages ? '#D1D5DB' : '#374151',
+                  background: 'white', border: '1px solid #E5E7EB',
+                  borderRadius: 6, cursor: currentPage === totalPages ? 'default' : 'pointer',
+                }}
+              >
+                Next
+                <svg fill="none" viewBox="0 0 6 10" width={6} height={10}><path d="M1 1l4 4-4 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </button>
+            </div>
         </div>
       )}
 

@@ -455,7 +455,7 @@ export function ProjectDashboardPage() {
                             <circle cx="6" cy="6" r="5" stroke="currentColor" strokeWidth="1.3"/>
                           </svg>
                           <span style={{ fontSize: 10.5, fontWeight: 700, color: '#EF4444' }}>
-                            {pt.reduce((s, t) => s + (t as LaggingTask).daysLate, 0)} days total
+                            {pt.reduce((s, t) => s + t.daysLate, 0)} days total
                           </span>
                         </div>
                       </div>
@@ -468,7 +468,7 @@ export function ProjectDashboardPage() {
                               {t.subject}
                             </span>
                             <span style={{ fontSize: 10.5, fontWeight: 600, color: '#EF4444', flexShrink: 0 }}>
-                              {(t as LaggingTask).daysLate}d late
+                              {t.daysLate}d late
                             </span>
                           </div>
                         ))}

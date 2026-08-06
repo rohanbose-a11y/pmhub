@@ -85,7 +85,7 @@ export const useWorkStore = create<WorkState>((set, get) => ({
         createTaskError: null,
         lastCreatedTask: createdTask.subject,
       }))
-      await get().loadWorkspace(username)
+      get().loadWorkspace(username).catch((e) => console.error('Failed to refresh workspace:', e))
       return createdTask
     } catch (error) {
       set({

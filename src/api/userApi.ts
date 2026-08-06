@@ -60,8 +60,9 @@ export const userApi = {
     return _imgCache.get(username)!
   },
 
-  async searchActiveEmployees(query: string): Promise<UserOption[]> {
+  async searchActiveEmployees(query: string, signal?: AbortSignal): Promise<UserOption[]> {
     const { data } = await httpClient.get<{ data: FrappeEmployeeRecord[] }>('/api/resource/Employee', {
+      signal,
       params: {
         fields: JSON.stringify(['user_id', 'employee_name']),
         filters: JSON.stringify([

@@ -24,7 +24,6 @@ interface TreeNode {
 function buildTree(tasks: Task[]): TreeNode[] {
   const nodeMap = new Map<string, TreeNode>()
   tasks.forEach((t) => nodeMap.set(t.id, { task: t, children: [] }))
-
   const roots: TreeNode[] = []
   tasks.forEach((t) => {
     const node = nodeMap.get(t.id)!
@@ -37,7 +36,6 @@ function buildTree(tasks: Task[]): TreeNode[] {
   return roots
 }
 
-/** Collect IDs of all nodes that have children (can be expanded). */
 function collectExpandableIds(nodes: TreeNode[]): string[] {
   const ids: string[] = []
   function walk(node: TreeNode) {
@@ -55,23 +53,87 @@ const isActive = (s: string) =>
   s.toLowerCase() !== 'cancelled' &&
   s.toLowerCase() !== 'closed'
 
-const fmtDate = (v: string) =>
-  new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(v))
+function fmtDue(v: string | null): { text: string; overdue: boolean } {
+  if (!v) return { text: '', overdue: false }
+  const d = new Date(v); d.setHours(0, 0, 0, 0)
+  const now = new Date(); now.setHours(0, 0, 0, 0)
+  const diff = Math.round((d.getTime() - now.getTime()) / 86_400_000)
+  const overdue = diff < 0
+  if (diff < 0)   return { text: d.toLocaleDateString('en', { month: 'short', day: 'numeric' }), overdue: true }
+  if (diff === 0) return { text: 'Today',    overdue: false }
+  if (diff === 1) return { text: 'Tomorrow', overdue: false }
+  if (diff <= 6)  return { text: d.toLocaleDateString('en', { weekday: 'short' }), overdue: false }
+  return { text: d.toLocaleDateString('en', { month: 'short', day: 'numeric' }), overdue: false }
+}
 
 function statusDot(status: string): string {
   const s = status.toLowerCase()
-  if (s.includes('complet') || s === 'closed') return 'bg-emerald-400'
-  if (s === 'working') return 'bg-amber-400'
-  if (s.includes('pending')) return 'bg-violet-400'
-  if (s === 'cancelled') return 'bg-slate-300'
-  return 'bg-indigo-400'
+  if (s.includes('complet') || s === 'closed') return '#22C55E'
+  if (s === 'working')                          return '#3B82F6'
+  if (s.includes('pending'))                    return '#7B3FF2'
+  if (s === 'cancelled')                        return '#9CA3AF'
+  return '#6366F1'
 }
 
-const PRIORITY_BADGE: Record<string, string> = {
-  Urgent: 'bg-rose-50 text-rose-600',
-  High:   'bg-amber-50 text-amber-700',
-  Medium: 'bg-indigo-50 text-indigo-700',
-  Low:    'bg-slate-100 text-slate-500',
+function statusBadge(status: string): { bg: string; text: string } {
+  const s = status.toLowerCase()
+  if (s.includes('complet') || s === 'closed') return { bg: '#F0FDF4', text: '#15803D' }
+  if (s === 'working')                          return { bg: '#EFF6FF', text: '#1D4ED8' }
+  if (s.includes('pending'))                    return { bg: '#F3F0FF', text: '#5623BE' }
+  if (s === 'cancelled')                        return { bg: '#F5F5F5', text: '#6B7280' }
+  return { bg: '#F0F0FF', text: '#4338CA' }
+}
+
+function priorityBadge(priority: string): { bg: string; text: string } {
+  const map: Record<string, { bg: string; text: string }> = {
+    Urgent: { bg: '#FEE2E2', text: '#B91C1C' },
+    High:   { bg: '#FFEDD5', text: '#C2410C' },
+    Medium: { bg: '#DBEAFE', text: '#1D4ED8' },
+    Low:    { bg: '#F3F4F6', text: '#6B7280' },
+  }
+  return map[priority] ?? { bg: '#F3F4F6', text: '#6B7280' }
+}
+
+// ─── Column widths ─────────────────────────────────────────────────────────
+
+const COL = {
+  progress: 120,
+  due:      112,
+  priority: 112,
+  status:   148,
+  repeat:    96,
+  members:   72,
+} as const
+
+// ─── Column header strip ────────────────────────────────────────────────────
+
+function ColHeader() {
+  return (
+    <div
+      className="flex-shrink-0 flex items-center border-b border-slate-100 bg-slate-50"
+      style={{ height: 30, paddingLeft: 8, paddingRight: 12 }}
+    >
+      {/* Name area — mirrors TaskRow left side */}
+      <div style={{ width: 24 + 14, flexShrink: 0 }} /> {/* chevron + status dot space */}
+      <span className="flex-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400 pl-1">
+        Task
+      </span>
+      <div className="hidden md:flex items-center flex-shrink-0">
+        {([
+          { label: 'Progress', w: COL.progress },
+          { label: 'Due',      w: COL.due      },
+          { label: 'Priority', w: COL.priority },
+          { label: 'Status',   w: COL.status   },
+          { label: 'Repeat',   w: COL.repeat   },
+          { label: 'Members',  w: COL.members  },
+        ] as const).map(({ label, w }) => (
+          <div key={label} style={{ width: w, flexShrink: 0 }}>
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 // ─── Task row ──────────────────────────────────────────────────────────────
@@ -83,6 +145,7 @@ function TaskRow({
   onToggle,
   onEdit,
   today,
+  childCounts,
 }: {
   node:        TreeNode
   depth:       number
@@ -90,108 +153,162 @@ function TaskRow({
   onToggle:    (id: string) => void
   onEdit:      (task: Task) => void
   today:       Date
+  childCounts: Map<string, { done: number; total: number }>
 }) {
-  const { task } = node
+  const { task }    = node
   const hasChildren = node.children.length > 0
   const isExpanded  = expandedIds.has(task.id)
   const isDone      = !isActive(task.status)
-  const isOverdue   = !isDone && !!task.dueDate && new Date(task.dueDate) < today
-  const badgeClass  = PRIORITY_BADGE[task.priority] ?? 'bg-slate-100 text-slate-500'
+  const cc          = childCounts.get(task.id)
+  const ccPct       = cc && cc.total > 0 ? Math.round((cc.done / cc.total) * 100) : 0
+  const due         = fmtDue(task.dueDate)
+  const sb          = statusBadge(task.status)
+  const pb          = priorityBadge(task.priority)
+  const leftPad     = 8 + depth * 20
 
   return (
     <>
       <div
-        className="flex items-center gap-2 py-1.5 rounded-lg hover:bg-slate-50 group cursor-pointer transition-colors select-none"
-        style={{ paddingLeft: `${12 + depth * 22}px`, paddingRight: 12 }}
+        className={`flex items-center hover:bg-slate-50/80 cursor-pointer transition-colors select-none group border-b border-slate-50 ${isDone ? 'opacity-55' : ''}`}
+        style={{ paddingLeft: leftPad, paddingRight: 12, minHeight: 38 }}
         onClick={() => onEdit(task)}
         role="button"
         tabIndex={0}
         onKeyDown={(e) => e.key === 'Enter' && onEdit(task)}
       >
-        {/* Expand chevron — always same width so subjects align */}
-        <span className="w-5 h-5 flex items-center justify-center flex-shrink-0">
-          {hasChildren && (
+        {/* Chevron / leaf — 24px */}
+        <span className="flex-shrink-0 flex items-center justify-center" style={{ width: 24 }}>
+          {hasChildren ? (
             <button
               type="button"
               aria-label={isExpanded ? 'Collapse' : 'Expand'}
-              className="w-5 h-5 flex items-center justify-center rounded text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors"
+              className="w-5 h-5 flex items-center justify-center rounded hover:bg-slate-200/70 transition-colors"
               onClick={(e) => { e.stopPropagation(); onToggle(task.id) }}
             >
               <svg
-                className={`w-3 h-3 transition-transform duration-150 ${isExpanded ? 'rotate-90' : ''}`}
-                fill="none" viewBox="0 0 12 12"
+                className={`text-slate-400 transition-transform duration-150 ${isExpanded ? 'rotate-90' : ''}`}
+                fill="none" viewBox="0 0 10 10" width={9} height={9}
               >
-                <path d="M4 2l4 4-4 4" stroke="currentColor" strokeWidth="1.5"
-                  strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M3 1.5l4 3.5-4 3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
             </button>
+          ) : (
+            <span className="w-1.5 h-1.5 rounded-full bg-slate-200 flex-shrink-0" />
           )}
         </span>
 
-        {/* Status dot */}
-        <span className={`w-2 h-2 rounded-full flex-shrink-0 ${statusDot(task.status)}`} />
+        {/* Status dot — 14px total (dot + gap) */}
+        <span
+          className="flex-shrink-0 rounded-full mr-2"
+          style={{ width: 7, height: 7, background: statusDot(task.status) }}
+        />
 
         {/* Milestone diamond */}
         {task.isMilestone && (
-          <span className="w-2 h-2 bg-amber-400 rotate-45 flex-shrink-0 rounded-[2px]" />
+          <span className="w-2 h-2 bg-amber-400 rotate-45 flex-shrink-0 rounded-[2px] mr-1.5" />
         )}
 
         {/* Subject */}
         <span
-          className={`flex-1 min-w-0 truncate text-sm leading-5 ${
+          className={`flex-1 min-w-0 truncate group-hover:text-indigo-600 transition-colors ${
             isDone
-              ? 'text-slate-400 line-through'
+              ? 'text-slate-400 line-through text-[12px]'
               : depth === 0
-                ? 'font-medium text-slate-800'
-                : 'text-slate-700'
+                ? 'font-semibold text-slate-800 text-[13px]'
+                : 'text-slate-700 text-[12.5px]'
           }`}
         >
           {task.subject}
         </span>
 
-        {/* Right-side metadata — desktop only */}
-        <div className="hidden md:flex items-center gap-3 flex-shrink-0">
-          {/* Progress bar */}
-          {task.progress > 0 && (
-            <div className="flex items-center gap-1.5 w-20">
-              <div className="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all ${isDone ? 'bg-emerald-300' : 'bg-indigo-400'}`}
-                  style={{ width: `${task.progress}%` }}
-                />
-              </div>
-              <span className="text-[10px] text-slate-400 tabular-nums">{task.progress}%</span>
-            </div>
-          )}
+        {/* Right columns — desktop only */}
+        <div className="hidden md:flex items-center flex-shrink-0">
+
+          {/* Progress / child count */}
+          <div className="flex items-center gap-1.5" style={{ width: COL.progress }}>
+            {cc && cc.total > 0 ? (
+              <>
+                <div className="w-10 h-1 bg-slate-100 rounded-full overflow-hidden flex-shrink-0">
+                  <div className="h-full bg-emerald-400 rounded-full" style={{ width: `${ccPct}%` }} />
+                </div>
+                <span className="text-[10px] text-slate-400 tabular-nums">{cc.done}/{cc.total}</span>
+              </>
+            ) : task.progress > 0 ? (
+              <>
+                <div className="w-10 h-1 bg-slate-100 rounded-full overflow-hidden flex-shrink-0">
+                  <div className={`h-full rounded-full ${isDone ? 'bg-emerald-300' : 'bg-indigo-400'}`} style={{ width: `${task.progress}%` }} />
+                </div>
+                <span className="text-[10px] text-slate-400 tabular-nums">{task.progress}%</span>
+              </>
+            ) : null}
+          </div>
 
           {/* Due date */}
-          {task.dueDate && (
-            <span className={`text-xs flex items-center gap-0.5 ${isOverdue ? 'text-rose-500' : 'text-slate-400'}`}>
-              {isOverdue && (
-                <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 12 12">
-                  <circle cx="6" cy="6" r="5" stroke="currentColor" strokeWidth="1.3" />
-                  <path d="M6 3.5v3l1.5 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-                </svg>
-              )}
-              {fmtDate(task.dueDate)}
-            </span>
-          )}
+          <div style={{ width: COL.due }}>
+            {due.text && (
+              <span
+                className="text-[11px] flex items-center gap-0.5"
+                style={{ color: due.overdue ? '#EF4444' : '#9CA3AF', fontWeight: due.overdue ? 600 : 400 }}
+              >
+                {due.overdue && (
+                  <svg fill="none" viewBox="0 0 10 10" width={9} height={9} className="flex-shrink-0">
+                    <circle cx="5" cy="5" r="4" stroke="currentColor" strokeWidth="1.2"/>
+                    <path d="M5 3v2.5l1 1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+                  </svg>
+                )}
+                {due.text}
+              </span>
+            )}
+          </div>
 
           {/* Priority */}
-          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-md flex-shrink-0 ${badgeClass}`}>
-            {task.priority}
-          </span>
+          <div style={{ width: COL.priority }}>
+            <span
+              className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md flex-shrink-0"
+              style={{ background: pb.bg, color: pb.text }}
+            >
+              {task.priority}
+            </span>
+          </div>
+
+          {/* Status */}
+          <div style={{ width: COL.status }}>
+            <span
+              className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md flex-shrink-0 whitespace-nowrap"
+              style={{ background: sb.bg, color: sb.text }}
+            >
+              {task.status}
+            </span>
+          </div>
+
+          {/* Repeat */}
+          <div className="flex items-center gap-1" style={{ width: COL.repeat }}>
+            {task.autoRepeat && (
+              <>
+                <svg fill="none" viewBox="0 0 14 14" width={12} height={12} className="text-indigo-400 flex-shrink-0">
+                  <path d="M1 4h9a3 3 0 010 6H2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M3.5 1.5L1 4l2.5 2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                <span className="text-[10px] font-medium text-indigo-400">Repeat</span>
+              </>
+            )}
+          </div>
 
           {/* Assignees */}
-          {task.assignedTo.length > 0 && (
-            <AvatarStack max={2} userIds={task.assignedTo} />
-          )}
+          <div style={{ width: COL.members }}>
+            {task.assignedTo.length > 0 && <AvatarStack max={2} userIds={task.assignedTo} />}
+          </div>
+
         </div>
       </div>
 
-      {/* Children */}
+      {/* Children with vertical guide line */}
       {hasChildren && isExpanded && (
-        <div>
+        <div className="relative">
+          <div
+            className="absolute top-0 bottom-0 bg-slate-100"
+            style={{ left: leftPad + 11, width: 1 }}
+          />
           {node.children.map((child) => (
             <TaskRow
               key={child.task.id}
@@ -201,6 +318,7 @@ function TaskRow({
               onEdit={onEdit}
               onToggle={onToggle}
               today={today}
+              childCounts={childCounts}
             />
           ))}
         </div>
@@ -209,105 +327,66 @@ function TaskRow({
   )
 }
 
-// ─── Project section ────────────────────────────────────────────────────────
+// ─── Project divider (non-collapsible label row) ────────────────────────────
 
-function ProjectSection({
+function ProjectDivider({
   project,
-  roots,
   taskCount,
-  expandedIds,
-  onToggle,
-  onEdit,
-  today,
+  doneCount,
+  totalCount,
 }: {
-  project:     Project | null
-  roots:       TreeNode[]
-  taskCount:   number
-  expandedIds: Set<string>
-  onToggle:    (id: string) => void
-  onEdit:      (task: Task) => void
-  today:       Date
+  project:    Project | null
+  taskCount:  number
+  doneCount:  number
+  totalCount: number
 }) {
-  const [open, setOpen] = useState(true)
-  const label      = project ? (project.displayName || project.name) : 'No Project'
-  const completion = project?.completion ?? null
+  const label  = project ? (project.displayName || project.name) : 'No Project'
+  const accent = project ? '#6366F1' : '#CBD5E1'
+  const pct    = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden mb-3 last:mb-0">
-      {/* Section header */}
-      <button
-        type="button"
-        className="w-full flex items-center gap-3 px-4 py-3 hover:bg-slate-50 transition-colors text-left"
-        onClick={() => setOpen((v) => !v)}
-      >
-        <svg
-          className={`w-3.5 h-3.5 text-slate-400 flex-shrink-0 transition-transform duration-150 ${open ? 'rotate-90' : ''}`}
-          fill="none" viewBox="0 0 12 12"
-        >
-          <path d="M4 2l4 4-4 4" stroke="currentColor" strokeWidth="1.5"
-            strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
+    <div
+      className="flex items-center gap-3 border-b border-slate-100 bg-slate-50/70"
+      style={{ paddingLeft: 12, paddingRight: 12, minHeight: 34, borderLeft: `3px solid ${accent}` }}
+    >
+      <span className="text-[11px] font-bold text-slate-600 flex-1 truncate tracking-wide uppercase">
+        {label}
+      </span>
 
-        <span
-          className={`w-2.5 h-2.5 rounded-sm flex-shrink-0 ${project ? 'bg-indigo-500' : 'bg-slate-300'}`}
-        />
-
-        <span className="text-sm font-semibold text-slate-800 flex-1 truncate">{label}</span>
-
-        {/* Project completion */}
-        {completion !== null && completion > 0 && (
-          <div className="hidden md:flex items-center gap-2 mr-2">
-            <div className="w-20 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-              <div className="h-full bg-emerald-400 rounded-full" style={{ width: `${completion}%` }} />
-            </div>
-            <span className="text-xs text-slate-400">{completion}%</span>
+      {totalCount > 0 && (
+        <div className="hidden md:flex items-center gap-2">
+          <div className="w-14 h-1 bg-slate-200 rounded-full overflow-hidden">
+            <div className="h-full bg-emerald-400 rounded-full" style={{ width: `${pct}%` }} />
           </div>
-        )}
-
-        <span className="text-xs text-slate-400 flex-shrink-0">
-          {taskCount} task{taskCount !== 1 ? 's' : ''}
-        </span>
-      </button>
-
-      {open && (
-        <div className="border-t border-slate-100 py-1 px-1">
-          {roots.map((node) => (
-            <TaskRow
-              key={node.task.id}
-              depth={0}
-              expandedIds={expandedIds}
-              node={node}
-              onEdit={onEdit}
-              onToggle={onToggle}
-              today={today}
-            />
-          ))}
+          <span className="text-[10px] text-slate-400 tabular-nums w-10 text-right">{doneCount}/{totalCount}</span>
         </div>
       )}
+
+      <span className="text-[10px] font-semibold text-slate-400 bg-slate-200/70 px-2 py-0.5 rounded-full flex-shrink-0 tabular-nums">
+        {taskCount}
+      </span>
     </div>
   )
 }
 
 // ─── Skeleton ──────────────────────────────────────────────────────────────
 
-function SkeletonSection() {
+function SkeletonTree() {
   return (
-    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden mb-3 animate-pulse">
-      <div className="px-4 py-3 flex items-center gap-3">
-        <div className="w-3.5 h-3.5 bg-slate-100 rounded" />
-        <div className="w-2.5 h-2.5 bg-slate-100 rounded-sm" />
-        <div className="h-4 bg-slate-100 rounded-md w-40" />
-        <div className="ml-auto h-3 bg-slate-100 rounded-md w-12" />
-      </div>
-      <div className="border-t border-slate-100 py-2 px-3 space-y-1.5">
-        {[80, 65, 72].map((w) => (
-          <div key={w} className="flex items-center gap-2 px-2 py-1.5">
-            <div className="w-5 h-5 bg-slate-50 rounded" />
-            <div className="w-2 h-2 bg-slate-100 rounded-full" />
-            <div className={`h-3 bg-slate-100 rounded-md`} style={{ width: `${w}%` }} />
-            <div className="ml-auto flex gap-2">
-              <div className="h-3 bg-slate-50 rounded-md w-10" />
-              <div className="h-3 bg-slate-50 rounded-md w-12" />
+    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden flex flex-col flex-1 min-h-0 animate-pulse">
+      {/* Header strip */}
+      <div className="flex-shrink-0 h-[30px] bg-slate-50 border-b border-slate-100" />
+      {/* Rows */}
+      <div className="py-1">
+        {[82, 60, 72, 90, 55].map((w, i) => (
+          <div key={i} className="flex items-center gap-2 border-b border-slate-50" style={{ paddingLeft: i > 1 ? 28 : 8, paddingRight: 12, minHeight: 38 }}>
+            <div className="w-5 h-5 bg-slate-100 rounded flex-shrink-0" />
+            <div className="w-2 h-2 bg-slate-100 rounded-full flex-shrink-0" />
+            <div className="h-3 bg-slate-100 rounded-md flex-1" style={{ maxWidth: `${w}%` }} />
+            <div className="ml-auto hidden md:flex gap-3 flex-shrink-0">
+              <div className="h-2 bg-slate-50 rounded-md w-16" />
+              <div className="h-2 bg-slate-50 rounded-md w-12" />
+              <div className="h-5 bg-slate-50 rounded-md w-16" />
             </div>
           </div>
         ))}
@@ -400,7 +479,7 @@ export function TaskTreePage() {
 
   const noProjectTree = useMemo(() => buildTree(noProjectTasks), [noProjectTasks])
 
-  // ── Expanded state — default to all expanded after first load ───────────
+  // ── Expanded state ──────────────────────────────────────────────────────
 
   const allExpandableIds = useMemo(() => {
     const ids: string[] = []
@@ -410,7 +489,7 @@ export function TaskTreePage() {
   }, [projectTrees, noProjectTree])
 
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
-  const [initialized,  setInitialized]  = useState(false)
+  const [initialized, setInitialized] = useState(false)
 
   useEffect(() => {
     if (!initialized && allExpandableIds.length > 0) {
@@ -426,7 +505,7 @@ export function TaskTreePage() {
       return next
     })
 
-  const expandAll  = () => setExpandedIds(new Set(allExpandableIds))
+  const expandAll   = () => setExpandedIds(new Set(allExpandableIds))
   const collapseAll = () => setExpandedIds(new Set())
 
   // ── Refresh ─────────────────────────────────────────────────────────────
@@ -437,20 +516,53 @@ export function TaskTreePage() {
     await loadWorkspace(username)
   }
 
-  // ── Counts ──────────────────────────────────────────────────────────────
+  // ── Counts (from tasksForCounts — unaffected by showClosed) ─────────────
 
-  const totalCount = filteredTasks.length
+  const tasksForCounts = useMemo(() => {
+    let t = tasks
+    if (myTasksOnly && username) t = t.filter((tk) => myTaskIds.has(tk.id))
+    if (projectFilter !== 'all') t = t.filter((tk) => tk.project === projectFilter)
+    return t
+  }, [tasks, myTasksOnly, myTaskIds, projectFilter, username])
 
+  const projectCounts = useMemo(() => {
+    const m = new Map<string, { done: number; total: number }>()
+    tasksForCounts.forEach((t) => {
+      const key = t.project ?? '__none__'
+      const c   = m.get(key) ?? { done: 0, total: 0 }
+      c.total++
+      if (!isActive(t.status)) c.done++
+      m.set(key, c)
+    })
+    return m
+  }, [tasksForCounts])
+
+  const taskChildCounts = useMemo(() => {
+    const m = new Map<string, { done: number; total: number }>()
+    tasksForCounts.forEach((t) => {
+      if (!t.parentTask) return
+      const c = m.get(t.parentTask) ?? { done: 0, total: 0 }
+      c.total++
+      if (!isActive(t.status)) c.done++
+      m.set(t.parentTask, c)
+    })
+    return m
+  }, [tasksForCounts])
+
+  const totalCount   = tasksForCounts.length
+  const doneCount    = useMemo(
+    () => tasksForCounts.filter((tk) => !isActive(tk.status) && tk.status !== 'Cancelled').length,
+    [tasksForCounts],
+  )
   const overdueCount = useMemo(() => {
     const t = new Date(); t.setHours(0, 0, 0, 0)
-    return filteredTasks.filter((tk) => {
-      if (!tk.dueDate) return false
-      if (!isActive(tk.status)) return false
+    return tasksForCounts.filter((tk) => {
+      if (!tk.dueDate || !isActive(tk.status)) return false
       return new Date(tk.dueDate) < t
     }).length
-  }, [filteredTasks])
+  }, [tasksForCounts])
 
-  // ── Create task modal handlers ──────────────────────────────────────────
+  // ── Modals ───────────────────────────────────────────────────────────────
 
   const openCreateModal  = () => { resetTaskFeedback(); setIsCreateOpen(true) }
   const closeCreateModal = () => { if (createTaskStatus === 'submitting') return; setIsCreateOpen(false) }
@@ -459,8 +571,7 @@ export function TaskTreePage() {
     return createTask(input, username)
   }
 
-  // ── Detail / assign modals ─────────────────────────────────────────────────
-  const [detailTaskId, setDetailTaskId] = useState<string | null>(null)
+  const [detailTaskId,  setDetailTaskId]  = useState<string | null>(null)
   const [assigningTask, setAssigningTask] = useState<Task | null>(null)
 
   const handleUpdate = async (taskId: string, input: UpdateTaskInput) => {
@@ -470,7 +581,7 @@ export function TaskTreePage() {
     return updateTask(taskId, enriched)
   }
 
-  const handleAssign = async (userId: string): Promise<boolean> => {
+  const handleAssign   = async (userId: string): Promise<boolean> => {
     if (!assigningTask) return false
     return assignTask(assigningTask.id, userId)
   }
@@ -479,10 +590,8 @@ export function TaskTreePage() {
     return unassignTask(assigningTask.id, userId)
   }
 
-  // ── Status-change modal ─────────────────────────────────────────────────
-
   const [statusChangeTarget, setStatusChangeTarget] = useState<Task | null>(null)
-  const [isStatusChanging, setIsStatusChanging] = useState(false)
+  const [isStatusChanging,   setIsStatusChanging]   = useState(false)
 
   const handleStatusChangeConfirm = async (newStatus: string, note: string) => {
     if (!statusChangeTarget) return
@@ -499,7 +608,7 @@ export function TaskTreePage() {
     setStatusChangeTarget(null)
   }
 
-  // ─── Render ──────────────────────────────────────────────────────────────
+  // ─── Render ───────────────────────────────────────────────────────────────
 
   const isLoading = status === 'loading'
 
@@ -514,81 +623,118 @@ export function TaskTreePage() {
         onProjectFilterChange={setProjectFilter}
         onRefresh={handleRefresh}
         onShowClosedChange={setShowClosed}
+        doneCount={doneCount}
         overdueCount={overdueCount}
         projectFilter={projectFilter}
         projects={projects}
         showClosed={showClosed}
         totalCount={totalCount}
+        onExpandAll={expandAll}
+        onCollapseAll={collapseAll}
       />
 
       {/* ── Content ── */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 py-4 md:px-8 scrollbar-none">
-        {/* Expand/Collapse controls */}
-        {!isLoading && allExpandableIds.length > 0 && (
-          <div className="flex items-center gap-2 mb-3">
-            <button type="button" onClick={expandAll} className="text-[11.5px] text-slate-500 hover:text-slate-800 hover:bg-slate-100 px-2.5 py-1 rounded-md transition-colors">
-              Expand all
-            </button>
-            <button type="button" onClick={collapseAll} className="text-[11.5px] text-slate-500 hover:text-slate-800 hover:bg-slate-100 px-2.5 py-1 rounded-md transition-colors">
-              Collapse all
-            </button>
-          </div>
-        )}
+      <div className="flex-1 min-h-0 overflow-hidden px-2 pt-3 pb-3 md:px-3 flex flex-col">
 
         {isLoading ? (
-          <div>
-            <SkeletonSection />
-            <SkeletonSection />
-          </div>
+          <SkeletonTree />
         ) : filteredTasks.length === 0 ? (
-          <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
-            <div className="w-12 h-12 bg-slate-50 rounded-xl flex items-center justify-center mx-auto mb-3">
+          <div className="bg-white rounded-xl border border-slate-200 flex flex-col items-center justify-center p-16 text-center">
+            <div className="w-12 h-12 bg-slate-50 rounded-xl flex items-center justify-center mb-3">
               <svg className="w-6 h-6 text-slate-300" fill="none" viewBox="0 0 24 24">
                 <circle cx="12" cy="4.5" r="2" stroke="currentColor" strokeWidth="1.8" />
-                <path d="M12 6.5v4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                <path d="M6.5 11h11" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                <path d="M6.5 11v4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-                <path d="M17.5 11v4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                <path d="M12 6.5v4.5M6.5 11h11M6.5 11v4M17.5 11v4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
                 <circle cx="6.5"  cy="17.5" r="2" stroke="currentColor" strokeWidth="1.8" />
                 <circle cx="17.5" cy="17.5" r="2" stroke="currentColor" strokeWidth="1.8" />
               </svg>
             </div>
-            <p className="text-sm font-medium text-slate-600">No tasks yet</p>
+            <p className="text-sm font-semibold text-slate-600 mb-1">No tasks yet</p>
+            <p className="text-xs text-slate-400 mb-4">Add your first task to get started</p>
             <button
               type="button"
               onClick={openCreateModal}
-              className="mt-3 flex items-center gap-1.5 h-8 px-4 bg-slate-900 text-white text-xs font-medium rounded-lg hover:bg-slate-700 transition-colors mx-auto"
+              className="flex items-center gap-1.5 h-8 px-4 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 transition-colors"
             >
-              <svg fill="none" viewBox="0 0 14 14" width="12" height="12"><path d="M7 2v10M2 7h10" stroke="white" strokeLinecap="round" strokeWidth="1.8"/></svg>
+              <svg fill="none" viewBox="0 0 12 12" width={10} height={10}><path d="M6 1v10M1 6h10" stroke="white" strokeLinecap="round" strokeWidth="1.9"/></svg>
               Add Task
             </button>
           </div>
         ) : (
-          <div>
-            {sortedProjectIds.map((projectId) => (
-              <ProjectSection
-                key={projectId}
-                expandedIds={expandedIds}
-                onEdit={(t) => setDetailTaskId(t.id)}
-                onToggle={toggleExpanded}
-                project={projectMap.get(projectId) ?? null}
-                roots={projectTrees.get(projectId) ?? []}
-                taskCount={projectGroups.get(projectId)?.length ?? 0}
-                today={today}
-              />
-            ))}
+          /* Single card — fixed header + scrollable body */
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden flex flex-col flex-1 min-h-0">
+            <ColHeader />
 
-            {noProjectTasks.length > 0 && (
-              <ProjectSection
-                expandedIds={expandedIds}
-                onEdit={(t) => setDetailTaskId(t.id)}
-                onToggle={toggleExpanded}
-                project={null}
-                roots={noProjectTree}
-                taskCount={noProjectTasks.length}
-                today={today}
-              />
-            )}
+            <div className="flex-1 min-h-0 overflow-y-auto scrollbar-none">
+              {projectFilter === 'all' ? (
+                <>
+                  {sortedProjectIds.map((projectId) => {
+                    const counts = projectCounts.get(projectId) ?? { done: 0, total: 0 }
+                    return (
+                      <div key={projectId}>
+                        <ProjectDivider
+                          project={projectMap.get(projectId) ?? null}
+                          taskCount={projectGroups.get(projectId)?.length ?? 0}
+                          doneCount={counts.done}
+                          totalCount={counts.total}
+                        />
+                        {(projectTrees.get(projectId) ?? []).map((node) => (
+                          <TaskRow
+                            key={node.task.id}
+                            depth={0}
+                            expandedIds={expandedIds}
+                            node={node}
+                            onEdit={(t) => setDetailTaskId(t.id)}
+                            onToggle={toggleExpanded}
+                            today={today}
+                            childCounts={taskChildCounts}
+                          />
+                        ))}
+                      </div>
+                    )
+                  })}
+                  {noProjectTasks.length > 0 && (() => {
+                    const counts = projectCounts.get('__none__') ?? { done: 0, total: 0 }
+                    return (
+                      <div>
+                        <ProjectDivider
+                          project={null}
+                          taskCount={noProjectTasks.length}
+                          doneCount={counts.done}
+                          totalCount={counts.total}
+                        />
+                        {noProjectTree.map((node) => (
+                          <TaskRow
+                            key={node.task.id}
+                            depth={0}
+                            expandedIds={expandedIds}
+                            node={node}
+                            onEdit={(t) => setDetailTaskId(t.id)}
+                            onToggle={toggleExpanded}
+                            today={today}
+                            childCounts={taskChildCounts}
+                          />
+                        ))}
+                      </div>
+                    )
+                  })()}
+                </>
+              ) : (
+                <>
+                  {[...projectTrees.values()].flatMap((r) => r).concat(noProjectTree).map((node) => (
+                    <TaskRow
+                      key={node.task.id}
+                      depth={0}
+                      expandedIds={expandedIds}
+                      node={node}
+                      onEdit={(t) => setDetailTaskId(t.id)}
+                      onToggle={toggleExpanded}
+                      today={today}
+                      childCounts={taskChildCounts}
+                    />
+                  ))}
+                </>
+              )}
+            </div>
           </div>
         )}
       </div>

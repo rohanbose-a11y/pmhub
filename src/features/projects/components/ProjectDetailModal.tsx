@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import DOMPurify from 'dompurify'
 
 import { useAuthStore } from '../../../store/authStore'
 import { useWorkStore } from '../../../store/workStore'
@@ -93,7 +94,8 @@ const [showStatusMenu, setShowStatusMenu] = useState(false)
   const [allUsers,      setAllUsers]      = useState<UserOption[]>([])
   const [loadingUsers,  setLoadingUsers]  = useState(false)
   const [activeOp,      setActiveOp]      = useState<string | null>(null)
-  const searchRef = useRef<HTMLInputElement>(null)
+  const searchRef   = useRef<HTMLInputElement>(null)
+  const isSavingRef = useRef(false)
 
   // ── Right panel ──────────────────────────────────────────────────────────
   const [commExpanded, setCommExpanded] = useState(true)
@@ -111,24 +113,34 @@ const [showStatusMenu, setShowStatusMenu] = useState(false)
   useEffect(() => {
     projectApi.getProjectMembers(project.name)
       .then((raw) => setUsersRaw(raw))
-      .catch(() => {/* silently ignore */})
+      .catch((e) => console.error('Failed to load project members:', e))
   }, [project.name])
 
   // ── Load users when picker opens ─────────────────────────────────────────
   useEffect(() => {
     if (!showAddMember) return
     setLoadingUsers(true)
-    userApi.searchActiveEmployees('').then(setAllUsers).catch(() => setAllUsers([])).finally(() => setLoadingUsers(false))
-    setTimeout(() => searchRef.current?.focus(), 80)
+    userApi.searchActiveEmployees('')
+      .then(setAllUsers)
+      .catch((e) => { console.error('Failed to load users:', e); setAllUsers([]) })
+      .finally(() => setLoadingUsers(false))
+    const focusId = setTimeout(() => searchRef.current?.focus(), 80)
+    return () => clearTimeout(focusId)
   }, [showAddMember])
 
   // ── Re-search on query change ─────────────────────────────────────────────
   useEffect(() => {
     if (!showAddMember || !userQuery.trim()) return
+    const controller = new AbortController()
     const t = setTimeout(() => {
-      userApi.searchActiveEmployees(userQuery.trim()).then(setAllUsers).catch(() => {})
+      userApi.searchActiveEmployees(userQuery.trim(), controller.signal)
+        .then(setAllUsers)
+        .catch((e) => { if (e?.code !== 'ERR_CANCELED') console.error('User search failed:', e) })
     }, 250)
-    return () => clearTimeout(t)
+    return () => {
+      clearTimeout(t)
+      controller.abort()
+    }
   }, [userQuery, showAddMember])
 
   // ── ESC to close ─────────────────────────────────────────────────────────
@@ -160,6 +172,8 @@ const [showStatusMenu, setShowStatusMenu] = useState(false)
 
   // ── Save helpers ─────────────────────────────────────────────────────────
   const doUpdate = async (input: UpdateProjectInput, actText: string, actType: ActivityEntry['type']) => {
+    if (isSavingRef.current) return false
+    isSavingRef.current = true
     try {
       await projectApi.updateProject(project.name, input)
       addActivity({ type: actType, text: actText })
@@ -167,6 +181,8 @@ const [showStatusMenu, setShowStatusMenu] = useState(false)
       return true
     } catch {
       return false
+    } finally {
+      isSavingRef.current = false
     }
   }
 
@@ -456,7 +472,7 @@ const toggleMember = async (user: UserOption) => {
               {liveNotes && (
                 <div className="flex items-start gap-2 px-6 py-2.5">
                   <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0 pt-0.5">About</span>
-                  <div className="text-[12.5px] text-slate-700 [&_p]:mb-1 [&_ol]:list-decimal [&_ol]:pl-4 [&_ul]:list-disc [&_ul]:pl-4" dangerouslySetInnerHTML={{ __html: liveNotes }} />
+                  <div className="text-[12.5px] text-slate-700 [&_p]:mb-1 [&_ol]:list-decimal [&_ol]:pl-4 [&_ul]:list-disc [&_ul]:pl-4" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(liveNotes) }} />
                 </div>
               )}
             </div>

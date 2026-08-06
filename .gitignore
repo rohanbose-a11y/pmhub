@@ -1,7 +1,10 @@
 # Docs folder
 docs/
 
-# Cron credentials
+# Environment / credentials
+.env
+.env.*
+!.env.example
 .env.cron
 
 # Logs

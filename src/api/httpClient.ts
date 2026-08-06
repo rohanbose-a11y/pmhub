@@ -22,13 +22,11 @@ httpClient.interceptors.request.use((config) => {
     config.headers['Cache-Control'] = 'no-cache'
     config.headers['Pragma'] = 'no-cache'
   } else {
-    const csrfToken = document.cookie
-      .split('; ')
-      .find((row) => row.startsWith('frappe_csrf_token='))
-      ?.split('=')[1]
+    const match = document.cookie.split('; ').find((row) => row.startsWith('frappe_csrf_token='))
+    const csrfToken = match ? decodeURIComponent(match.slice('frappe_csrf_token='.length)) : undefined
 
     if (csrfToken && csrfToken !== 'None') {
-      config.headers['X-Frappe-CSRF-Token'] = decodeURIComponent(csrfToken)
+      config.headers['X-Frappe-CSRF-Token'] = csrfToken
     }
   }
   return config

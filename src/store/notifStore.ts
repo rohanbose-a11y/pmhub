@@ -18,9 +18,12 @@ const loadIds = (username: string): Set<string> => {
   }
 }
 
+const MAX_READ_IDS = 2000
+
 const saveIds = (username: string, ids: Set<string>) => {
   try {
-    localStorage.setItem(storageKey(username), JSON.stringify([...ids]))
+    const arr = [...ids]
+    localStorage.setItem(storageKey(username), JSON.stringify(arr.slice(-MAX_READ_IDS)))
   } catch {
     // storage unavailable — fail silently
   }

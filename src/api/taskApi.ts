@@ -161,12 +161,11 @@ type AnyTaskInput = UpdateTaskInput | CreateTaskInput
 
 /** Full payload — includes all optional ERPNext fields. */
 const toPayload = (input: AnyTaskInput) => {
-  const u = input as UpdateTaskInput
   return {
     subject: input.subject?.trim(),
     project: input.project?.trim() || undefined,
     priority: input.priority,
-    ...('isMilestone' in input && { is_milestone: (input as UpdateTaskInput).isMilestone ? 1 : 0 }),
+    ...('isMilestone' in input && { is_milestone: input.isMilestone ? 1 : 0 }),
     ...(input.isGroup !== undefined && { is_group: input.isGroup ? 1 : 0 }),
     parent_task: input.parentTask?.trim() || undefined,
     exp_start_date: input.startDate || undefined,
@@ -177,18 +176,18 @@ const toPayload = (input: AnyTaskInput) => {
     // depends_on_tasks is a read-only computed field in ERPNext; the writable
     // field is the depends_on child table (doctype: "Task Depends On").
     ...('dependsOnTasks' in input && {
-      depends_on: u.dependsOnTasks
-        ? u.dependsOnTasks.split(',').map((id) => ({ task: id.trim() })).filter((r) => r.task)
+      depends_on: input.dependsOnTasks
+        ? input.dependsOnTasks.split(',').map((id) => ({ task: id.trim() })).filter((r) => r.task)
         : [],
     }),
-    ...('status'      in input && { status:       u.status }),
-    ...('reviewDate'  in input && { review_date:  u.reviewDate  || undefined }),
-    ...('closingDate' in input && { closing_date: u.closingDate || undefined }),
-    ...('department'  in input && { department:   u.department?.trim() || undefined }),
-    ...('color'       in input && { color:        u.color || undefined }),
-    ...('completedBy' in input && { completed_by: u.completedBy || undefined }),
-    ...('completedOn' in input && { completed_on: u.completedOn || undefined }),
-    ...('comments'    in input && { custom_comments: JSON.stringify(u.comments ?? []) }),
+    ...('status'      in input && { status:       input.status }),
+    ...('reviewDate'  in input && { review_date:  input.reviewDate  || undefined }),
+    ...('closingDate' in input && { closing_date: input.closingDate || undefined }),
+    ...('department'  in input && { department:   input.department?.trim() || undefined }),
+    ...('color'       in input && { color:        input.color || undefined }),
+    ...('completedBy' in input && { completed_by: input.completedBy || undefined }),
+    ...('completedOn' in input && { completed_on: input.completedOn || undefined }),
+    ...('comments'    in input && { custom_comments: JSON.stringify(input.comments ?? []) }),
   }
 }
 
@@ -199,17 +198,16 @@ const toPayload = (input: AnyTaskInput) => {
  * description (HTML may fail on some ERPNext versions), and computed fields.
  */
 const toPayloadCore = (input: AnyTaskInput) => {
-  const u = input as UpdateTaskInput
   return {
     subject: input.subject?.trim(),
     project: input.project?.trim() || undefined,
     priority: input.priority,
     ...(input.activityType?.trim() && { custom_kra: input.activityType.trim() }),
     parent_task: input.parentTask?.trim() || undefined,
-    ...('status'      in input && { status: u.status }),
-    ...('completedBy' in input && u.completedBy && { completed_by: u.completedBy }),
-    ...('completedOn' in input && u.completedOn && { completed_on: u.completedOn }),
-    ...('comments'    in input && { custom_comments: JSON.stringify(u.comments ?? []) }),
+    ...('status'      in input && { status: input.status }),
+    ...('completedBy' in input && input.completedBy && { completed_by: input.completedBy }),
+    ...('completedOn' in input && input.completedOn && { completed_on: input.completedOn }),
+    ...('comments'    in input && { custom_comments: JSON.stringify(input.comments ?? []) }),
   }
 }
 
@@ -219,14 +217,13 @@ const toPayloadCore = (input: AnyTaskInput) => {
  * project is kept here because it may be mandatory on the server.
  */
 const toPayloadMinimal = (input: AnyTaskInput) => {
-  const u = input as UpdateTaskInput
   return {
     subject: input.subject?.trim(),
     project: input.project?.trim() || undefined,
     priority: input.priority,
-    ...('status'      in input && { status: u.status }),
-    ...('completedBy' in input && u.completedBy && { completed_by: u.completedBy }),
-    ...('completedOn' in input && u.completedOn && { completed_on: u.completedOn }),
+    ...('status'      in input && { status: input.status }),
+    ...('completedBy' in input && input.completedBy && { completed_by: input.completedBy }),
+    ...('completedOn' in input && input.completedOn && { completed_on: input.completedOn }),
   }
 }
 

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
+import DOMPurify from 'dompurify'
 
 import type { Task, TaskComment, UpdateTaskInput } from '../types/task.types'
 import { autoRepeatApi, WEEKDAYS } from '../../../api/autoRepeatApi'
@@ -1088,7 +1089,7 @@ export function TaskDetailModal({
               ) : description ? (
                 <div
                   className="text-[13.5px] text-slate-700 leading-relaxed cursor-text rounded-lg px-2 py-1.5 -mx-2 hover:bg-slate-50 transition-colors mb-4 rich-text-display"
-                  dangerouslySetInnerHTML={{ __html: description }}
+                  dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(description) }}
                   onClick={() => setIsEditingDesc(true)}
                 />
               ) : (

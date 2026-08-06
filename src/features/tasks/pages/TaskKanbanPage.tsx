@@ -374,13 +374,18 @@ export function TaskKanbanPage() {
     return m
   }, [projects])
 
-  const filteredTasks = useMemo(() => {
+  // tasksForCounts excludes showClosed so header stats match List view
+  const tasksForCounts = useMemo(() => {
     let t = tasks
     if (myTasksOnly && username) t = t.filter((task) => myTaskIds.has(task.id))
     if (projectFilter !== 'all')  t = t.filter((task) => task.project === projectFilter)
-    if (!showClosed) t = t.filter((task) => isActive(task.status))
     return t
-  }, [tasks, myTasksOnly, myTaskIds, projectFilter, username, showClosed])
+  }, [tasks, myTasksOnly, myTaskIds, projectFilter, username])
+
+  const filteredTasks = useMemo(() => {
+    if (!showClosed) return tasksForCounts.filter((task) => isActive(task.status))
+    return tasksForCounts
+  }, [tasksForCounts, showClosed])
 
   // ── Group by column ───────────────────────────────────────────────────────
 
@@ -479,12 +484,15 @@ export function TaskKanbanPage() {
 
   // ── Stats ─────────────────────────────────────────────────────────────────
 
+  const totalCount   = tasksForCounts.length
   const overdueCount = useMemo(
-    () => filteredTasks.filter((t) => isActive(t.status) && t.dueDate && new Date(t.dueDate) < today).length,
-    [filteredTasks, today],
+    () => tasksForCounts.filter((t) => isActive(t.status) && t.dueDate && new Date(t.dueDate) < today).length,
+    [tasksForCounts, today],
   )
-
-  const totalCount = filteredTasks.length
+  const doneCount = useMemo(
+    () => tasksForCounts.filter((t) => !isActive(t.status) && t.status !== 'Cancelled').length,
+    [tasksForCounts],
+  )
 
   const isLoading = status === 'loading'
 
@@ -507,6 +515,7 @@ export function TaskKanbanPage() {
         onProjectFilterChange={setProjectFilter}
         onRefresh={() => username && void loadWorkspace(username)}
         onShowClosedChange={setShowClosed}
+        doneCount={doneCount}
         overdueCount={overdueCount}
         projectFilter={projectFilter}
         projects={projects}

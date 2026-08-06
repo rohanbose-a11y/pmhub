@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import DOMPurify from 'dompurify'
 import Quill from 'quill'
 import 'quill/dist/quill.snow.css'
 
@@ -37,17 +38,19 @@ export function RichTextEditor({ defaultValue, onChange, placeholder }: RichText
     })
 
     if (defaultValue) {
-      quill.clipboard.dangerouslyPasteHTML(defaultValue)
+      quill.clipboard.dangerouslyPasteHTML(DOMPurify.sanitize(defaultValue))
       // Move cursor to end after setting content
       quill.setSelection(quill.getLength(), 0)
     }
 
-    quill.on('text-change', () => {
+    const handleChange = () => {
       const html = quill.root.innerHTML
       onChangeRef.current(html === '<p><br></p>' ? '' : html)
-    })
+    }
+    quill.on('text-change', handleChange)
 
     return () => {
+      quill.off('text-change', handleChange)
       container.innerHTML = ''
     }
   }, []) // intentionally run once — treats editor as uncontrolled

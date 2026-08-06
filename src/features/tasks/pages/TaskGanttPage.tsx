@@ -274,13 +274,18 @@ export function TaskGanttPage() {
     return m
   }, [projects])
 
-  const filteredTasks = useMemo(() => {
+  // tasksForCounts excludes showClosed so header stats match List view
+  const tasksForCounts = useMemo(() => {
     let t = tasks
     if (myTasksOnly && username) t = t.filter((tk) => myTaskIds.has(tk.id))
     if (projectFilter !== 'all')  t = t.filter((tk) => tk.project === projectFilter)
-    if (!showClosed) t = t.filter((tk) => isActiveStatus(tk.status))
     return t
-  }, [tasks, myTasksOnly, myTaskIds, projectFilter, username, showClosed])
+  }, [tasks, myTasksOnly, myTaskIds, projectFilter, username])
+
+  const filteredTasks = useMemo(() => {
+    if (!showClosed) return tasksForCounts.filter((tk) => isActiveStatus(tk.status))
+    return tasksForCounts
+  }, [tasksForCounts, showClosed])
 
   const datedTasks = useMemo(
     () => filteredTasks.filter((t) => t.startDate || t.dueDate),
@@ -558,11 +563,15 @@ export function TaskGanttPage() {
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const isLoading    = status === 'loading'
-  const totalCount   = filteredTasks.length
+  const totalCount   = tasksForCounts.length
   const overdueCount = useMemo(() => {
     const t = new Date(); t.setHours(0, 0, 0, 0)
-    return filteredTasks.filter((tk) => tk.dueDate && isActiveStatus(tk.status) && new Date(tk.dueDate) < t).length
-  }, [filteredTasks])
+    return tasksForCounts.filter((tk) => tk.dueDate && isActiveStatus(tk.status) && new Date(tk.dueDate) < t).length
+  }, [tasksForCounts])
+  const doneCount    = useMemo(
+    () => tasksForCounts.filter((tk) => !isActiveStatus(tk.status) && tk.status !== 'Cancelled').length,
+    [tasksForCounts],
+  )
 
   // Cursor class for the chart scroll area
   const chartCursor = barDragState
@@ -581,6 +590,7 @@ export function TaskGanttPage() {
         onProjectFilterChange={setProjectFilter}
         onRefresh={() => username && void loadWorkspace(username)}
         onShowClosedChange={setShowClosed}
+        doneCount={doneCount}
         overdueCount={overdueCount}
         projectFilter={projectFilter}
         projects={projects}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   prepareForFullSync,
   createErpEvent,
@@ -190,12 +190,18 @@ export function CalendarPage() {
   const [search,      setSearch]      = useState('')
   const [filter,      setFilter]      = useState<FilterKey>('all')
 
-  const [events,     setEvents]     = useState<Meeting[]>([])
-  const [loading,    setLoading]    = useState(false)
-  const [syncing,    setSyncing]    = useState(false)
-  const [syncError,  setSyncError]  = useState('')
-  const [needsReAuth,  setNeedsReAuth]  = useState(false)
-  const [calendars,  setCalendars]  = useState<GoogleCalendarConfig[]>([])
+  const [events,      setEvents]      = useState<Meeting[]>([])
+  const [loading,     setLoading]     = useState(false)
+  const [syncing,     setSyncing]     = useState(false)
+  const [syncError,   setSyncError]   = useState('')
+  const [needsReAuth, setNeedsReAuth] = useState(false)
+  const [calendars,   setCalendars]   = useState<GoogleCalendarConfig[]>([])
+  const [lastSynced,  setLastSynced]  = useState<Date | null>(null)
+
+  // Refs so the auto-sync interval never captures a stale closure
+  const calendarsRef  = useRef<GoogleCalendarConfig[]>([])
+  const isSyncingRef  = useRef(false)
+  useEffect(() => { calendarsRef.current = calendars }, [calendars])
 
   // Add Calendar modal
   const [showAdd,       setShowAdd]       = useState(false)
@@ -246,8 +252,27 @@ export function CalendarPage() {
   const month = viewDate.getMonth()
   const weeks = useMemo(() => buildCalendarGrid(year, month), [year, month])
 
+  // Load calendars once — auto-sync immediately if any are connected
   useEffect(() => {
-    getGoogleCalendars().then(setCalendars).catch(() => setCalendars([]))
+    let cancelled = false
+    getGoogleCalendars()
+      .then(cals => {
+        if (cancelled) return
+        setCalendars(cals)
+        calendarsRef.current = cals
+        if (cals.length > 0) runSync(cals)
+      })
+      .catch(() => { if (!cancelled) setCalendars([]) })
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Auto-sync every 5 minutes — uses refs so interval never captures stale state
+  useEffect(() => {
+    const FIVE_MIN = 5 * 60 * 1000
+    const id = setInterval(() => runSync(calendarsRef.current), FIVE_MIN)
+    return () => clearInterval(id)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -261,26 +286,16 @@ export function CalendarPage() {
     return () => { cancelled = true }
   }, [year, month])
 
-  async function handleReAuthorize() {
-    if (!calendars[0]) return
-    try {
-      const url = await getGoogleCalendarAuthUrl(calendars[0].name)
-      window.open(url, '_blank')
-    } catch {
-      setSyncError('Could not get authorization URL. Re-authorize from ERPNext desk.')
-    }
-  }
-
-  async function handleSync() {
-    if (syncing) return
+  async function runSync(cals: GoogleCalendarConfig[]) {
+    if (!cals.length || isSyncingRef.current) return
+    isSyncingRef.current = true
     setSyncing(true)
     setSyncError('')
     setNeedsReAuth(false)
     try {
-      await Promise.allSettled(calendars.map(c => prepareForFullSync(c.name)))
-      const syncResults = await Promise.all(calendars.map(c => syncGoogleCalendar(c.name)))
+      await Promise.allSettled(cals.map(c => prepareForFullSync(c.name)))
+      const syncResults = await Promise.all(cals.map(c => syncGoogleCalendar(c.name)))
       console.log('[Sync] messages from ERPNext:', syncResults.flat())
-
       const now = new Date()
       const from = `${now.getFullYear() - 1}-${String(now.getMonth() + 1).padStart(2,'0')}-01`
       const farYear = now.getFullYear() + 1
@@ -289,13 +304,27 @@ export function CalendarPage() {
       const to = `${farYear}-${String(farMonth).padStart(2,'0')}-${String(farLast).padStart(2,'0')}`
       const erp = await getCalendarEvents(from, to)
       setEvents(erp.map(erpToMeeting))
+      setLastSynced(new Date())
     } catch (e: unknown) {
       const raw = (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? ''
       const isAuthErr = /no google|credential|authoriz|oauth|token/i.test(raw)
       setSyncError(isAuthErr ? 'Google Calendar not authorized for pull. Re-authorize below.' : (raw || 'Sync failed. Try again.'))
       setNeedsReAuth(isAuthErr)
     } finally {
+      isSyncingRef.current = false
       setSyncing(false)
+    }
+  }
+
+  function handleSync() { runSync(calendars) }
+
+  async function handleReAuthorize() {
+    if (!calendars[0]) return
+    try {
+      const url = await getGoogleCalendarAuthUrl(calendars[0].name)
+      window.open(url, '_blank')
+    } catch {
+      setSyncError('Could not get authorization URL. Re-authorize from ERPNext desk.')
     }
   }
 
@@ -535,15 +564,22 @@ export function CalendarPage() {
               <button disabled className="h-8 px-3 rounded-lg text-[12px] font-semibold border border-slate-200 text-slate-400 cursor-not-allowed">Sync</button>
             </div>
           ) : (
-            <button type="button" onClick={handleSync} disabled={syncing}
-              className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-semibold text-white flex-shrink-0 transition-opacity hover:opacity-90 disabled:opacity-50"
-              style={{ background: BRAND }}>
-              <svg fill="none" viewBox="0 0 16 16" width="12" height="12" className={syncing ? 'animate-spin' : ''}>
-                <path d="M13.5 8a5.5 5.5 0 1 1-1.1-3.3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                <path d="M12 2.5l.5 2.5-2.5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-              {syncing ? 'Syncing…' : 'Sync'}
-            </button>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {lastSynced && !syncing && (
+                <span className="text-[10.5px] text-slate-400 hidden md:block">
+                  Synced {lastSynced.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              )}
+              <button type="button" onClick={handleSync} disabled={syncing}
+                className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                style={{ background: BRAND }}>
+                <svg fill="none" viewBox="0 0 16 16" width="12" height="12" className={syncing ? 'animate-spin' : ''}>
+                  <path d="M13.5 8a5.5 5.5 0 1 1-1.1-3.3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  <path d="M12 2.5l.5 2.5-2.5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+                {syncing ? 'Syncing…' : 'Sync'}
+              </button>
+            </div>
           )}
         </div>
 

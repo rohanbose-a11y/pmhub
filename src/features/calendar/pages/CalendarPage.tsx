@@ -583,12 +583,12 @@ export function CalendarPage() {
           </div>
 
           {/* Day cells */}
-          <div className="flex-1 overflow-y-auto" style={{ borderLeft: '1px solid #f1f5f9' }}>
-            <div className="grid grid-cols-7">
+          <div className="flex-1 overflow-hidden" style={{ borderLeft: '1px solid #f1f5f9' }}>
+            <div className="grid grid-cols-7 h-full" style={{ gridTemplateRows: `repeat(${weeks.length}, 1fr)` }}>
               {weeks.map((week, wi) =>
                 week.map((day, di) => {
                   if (!day) return (
-                    <div key={`${wi}-${di}`} className="min-h-[108px]"
+                    <div key={`${wi}-${di}`}
                       style={{ borderRight: '1px solid #f1f5f9', borderBottom: '1px solid #f1f5f9', background: '#fafafa' }} />
                   )
                   const ymd = `${year}-${String(month + 1).padStart(2,'0')}-${String(day).padStart(2,'0')}`
@@ -602,7 +602,7 @@ export function CalendarPage() {
                     <div
                       key={ymd}
                       onClick={() => setSelectedDay(ymd)}
-                      className="min-h-[108px] p-2 cursor-pointer flex flex-col transition-colors"
+                      className="p-2 cursor-pointer flex flex-col transition-colors overflow-hidden"
                       style={{
                         borderRight: '1px solid #f1f5f9',
                         borderBottom: '1px solid #f1f5f9',

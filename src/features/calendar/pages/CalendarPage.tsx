@@ -780,8 +780,8 @@ export function CalendarPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: 'rgba(15,10,30,0.55)', backdropFilter: 'blur(4px)' }}
           onClick={e => { if (e.target === e.currentTarget) setShowEvent(false) }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl flex overflow-hidden"
-            style={{ maxHeight: '82vh', height: '82vh' }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[1020px] flex overflow-hidden"
+            style={{ maxHeight: '88vh', height: '88vh' }}>
 
             {/* ── Left panel: form ── */}
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
@@ -809,7 +809,8 @@ export function CalendarPage() {
               </div>
 
               {/* Scrollable form body */}
-              <div className="overflow-y-auto flex-1 px-6 py-4">
+              <div className="overflow-y-auto flex-1 px-6 py-4 [&::-webkit-scrollbar]:hidden"
+                style={{ scrollbarWidth: 'none' }}>
                 {evtTab === 'details' && (
                   <div className="space-y-4">
                     <div>

@@ -62,6 +62,15 @@ export async function createGoogleCalendar(payload: {
   return data.data
 }
 
+export async function getGoogleCalendarAuthUrl(calendarName: string): Promise<string> {
+  const { data } = await httpClient.get<{ message: string | { url: string } }>(
+    '/api/method/frappe.integrations.doctype.google_calendar.google_calendar.authorize_access',
+    { params: { g_calendar: calendarName, reauthorize: 0 } },
+  )
+  const msg = data.message
+  return typeof msg === 'string' ? msg : msg.url
+}
+
 export async function syncGoogleCalendar(account: string): Promise<void> {
   await httpClient.post(
     '/api/method/frappe.integrations.doctype.google_calendar.google_calendar.sync',

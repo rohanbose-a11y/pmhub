@@ -777,286 +777,375 @@ export function CalendarPage() {
 
       {/* ══ Add Event Modal ══ */}
       {showEvent && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-3"
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(15,10,30,0.55)', backdropFilter: 'blur(4px)' }}
           onClick={e => { if (e.target === e.currentTarget) setShowEvent(false) }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full h-full flex flex-col overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl flex overflow-hidden"
+            style={{ maxHeight: '82vh', height: '82vh' }}>
 
-            <div className="flex items-center justify-between px-6 pt-6 pb-4 flex-shrink-0">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: '#f5f3ff' }}>
-                  <svg fill="none" viewBox="0 0 20 20" width="15" height="15">
-                    <circle cx="10" cy="10" r="7.5" stroke={BRAND} strokeWidth="1.5"/>
-                    <path d="M10 6.5v7M6.5 10h7" stroke={BRAND} strokeWidth="1.5" strokeLinecap="round"/>
-                  </svg>
-                </div>
-                <h2 className="text-[15px] font-bold text-slate-900">New Event</h2>
-              </div>
-              <button type="button" onClick={() => setShowEvent(false)}
-                className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 transition-colors">
-                <svg fill="none" viewBox="0 0 16 16" width="14" height="14">
-                  <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            {/* ── Left panel: gradient preview sidebar ── */}
+            <div className="w-52 flex-shrink-0 flex flex-col p-5 relative overflow-hidden"
+              style={{ background: 'linear-gradient(160deg, #5b21b6 0%, #7c3aed 55%, #8b5cf6 100%)' }}>
+              <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full opacity-10" style={{ background: 'white' }} />
+              <div className="absolute -bottom-6 -left-8 w-28 h-28 rounded-full opacity-10" style={{ background: 'white' }} />
+
+              {/* Icon + title */}
+              <div className="w-11 h-11 rounded-2xl flex items-center justify-center mb-4 relative z-10"
+                style={{ background: 'rgba(255,255,255,0.18)' }}>
+                <svg fill="none" viewBox="0 0 20 20" width="17" height="17">
+                  <rect x="2.5" y="3.5" width="15" height="14" rx="2.5" stroke="white" strokeWidth="1.5"/>
+                  <path d="M6.5 2v3M13.5 2v3M2.5 8h15M10 11v4M8 13h4" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
                 </svg>
-              </button>
-            </div>
+              </div>
+              <h2 className="text-[17px] font-bold text-white mb-0.5 relative z-10">New Event</h2>
+              <p className="text-[11.5px] mb-5 relative z-10" style={{ color: 'rgba(255,255,255,0.55)' }}>Add to your calendar</p>
 
-            <div className="flex items-center gap-0.5 px-6 flex-shrink-0" style={{ borderBottom: '1px solid #f1f5f9' }}>
-              {(['details', 'participants'] as const).map(t => (
-                <button key={t} type="button" onClick={() => setEvtTab(t)}
-                  className="h-9 px-4 text-[12.5px] font-semibold capitalize border-b-2 transition-colors"
-                  style={evtTab === t
-                    ? { color: BRAND, borderColor: BRAND }
-                    : { color: '#94a3b8', borderColor: 'transparent' }}>
-                  {t}
-                </button>
-              ))}
-            </div>
+              {/* Date preview */}
+              <div className="rounded-xl p-3 mb-3 relative z-10"
+                style={{ background: 'rgba(255,255,255,0.14)' }}>
+                <p className="text-[9.5px] font-bold uppercase tracking-widest mb-1"
+                  style={{ color: 'rgba(255,255,255,0.5)' }}>Date</p>
+                <p className="text-[13.5px] font-bold text-white leading-snug">
+                  {evtDate
+                    ? new Date(evtDate + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+                    : '—'}
+                </p>
+                {evtAllDay
+                  ? <p className="text-[11px] mt-0.5" style={{ color: 'rgba(255,255,255,0.6)' }}>All day</p>
+                  : evtStartTime
+                    ? <p className="text-[11px] mt-0.5" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                        {fmtTime(evtStartTime)}{evtEndTime && evtEndTime !== evtStartTime ? ` – ${fmtTime(evtEndTime)}` : ''}
+                      </p>
+                    : null}
+              </div>
 
-            <div className="overflow-y-auto px-6 pb-2 flex-1">
-              {evtTab === 'details' && (
-                <div className="space-y-4 pt-4">
-                  <div>
-                    <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">
-                      Subject <span className="text-red-400">*</span>
-                    </label>
-                    <input type="text" value={evtSubject} onChange={e => setEvtSubject(e.target.value)}
-                      placeholder="Event title…" autoFocus
-                      className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent placeholder:text-slate-400"
-                      style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Event Category</label>
-                      <select value={evtCategory} onChange={e => setEvtCategory(e.target.value)}
-                        className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent bg-white"
-                        style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}>
-                        {['Event','Meeting','Call','Email','Other'].map(o => <option key={o}>{o}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Event Type</label>
-                      <select value={evtType} onChange={e => setEvtType(e.target.value)}
-                        className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent bg-white"
-                        style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}>
-                        {['Public','Private','Confidential'].map(o => <option key={o}>{o}</option>)}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Color</label>
-                      <div className="flex items-center gap-2">
-                        <input type="color" value={evtColor || '#7B3FF2'} onChange={e => setEvtColor(e.target.value)}
-                          className="w-9 h-9 rounded-lg border border-slate-200 cursor-pointer p-0.5 bg-white" />
-                        <span className="text-[12px] text-slate-500">{evtColor || 'Choose a color'}</span>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Status</label>
-                      <select value={evtStatus} onChange={e => setEvtStatus(e.target.value)}
-                        className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent bg-white"
-                        style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}>
-                        {['Open','Closed','Cancelled'].map(o => <option key={o}>{o}</option>)}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Location</label>
-                    <input type="text" value={evtLocation} onChange={e => setEvtLocation(e.target.value)}
-                      placeholder="Optional location…"
-                      className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent placeholder:text-slate-400"
-                      style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Date</label>
-                    <input type="date" value={evtDate} onChange={e => setEvtDate(e.target.value)}
-                      className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent"
-                      style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
-                    />
-                  </div>
-
-                  {!evtAllDay && (
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Starts on</label>
-                        <input type="time" value={evtStartTime} onChange={e => setEvtStartTime(e.target.value)}
-                          className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent"
-                          style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Ends on</label>
-                        <input type="time" value={evtEndTime} onChange={e => setEvtEndTime(e.target.value)}
-                          className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent"
-                          style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  <div>
-                    <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Attending</label>
-                    <select value={evtAttending} onChange={e => setEvtAttending(e.target.value)}
-                      className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent bg-white"
-                      style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}>
-                      {['Yes','No','Maybe'].map(o => <option key={o}>{o}</option>)}
-                    </select>
-                  </div>
-
-                  <div className="space-y-2.5 pt-0.5">
-                    {[
-                      { label: 'All Day',           val: evtAllDay, set: setEvtAllDay },
-                      { label: 'Repeat this Event', val: evtRepeat, set: setEvtRepeat },
-                    ].map(({ label, val, set }) => (
-                      <label key={label} className="flex items-center gap-2.5 cursor-pointer select-none">
-                        <input type="checkbox" checked={val} onChange={e => set(e.target.checked)}
-                          className="w-4 h-4 rounded accent-violet-600" />
-                        <span className="text-[12.5px] text-slate-700">{label}</span>
-                      </label>
-                    ))}
-
-                    <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                      <input type="checkbox" checked={evtSyncGCal}
-                        onChange={e => { setEvtSyncGCal(e.target.checked); if (!e.target.checked) setEvtVideoConf(false) }}
-                        className="w-4 h-4 rounded accent-violet-600" />
-                      <span className="text-[12.5px] text-slate-700">Sync with Google Calendar</span>
-                    </label>
-
-                    {evtSyncGCal && (
-                      <div className="ml-6 pl-3 border-l-2 border-slate-100">
-                        <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                          <input type="checkbox" checked={evtVideoConf} onChange={e => setEvtVideoConf(e.target.checked)}
-                            className="w-4 h-4 rounded accent-violet-600" />
-                          <div>
-                            <span className="text-[12.5px] text-slate-700 font-medium">Add Video Conferencing</span>
-                            <span className="ml-1.5 text-[11px] text-slate-400">via Google Meet</span>
-                          </div>
-                        </label>
-                      </div>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Google Calendar</label>
-                    <select value={evtGCalLink} onChange={e => setEvtGCalLink(e.target.value)}
-                      className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent bg-white"
-                      style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}>
-                      <option value="">— None —</option>
-                      {calendars.map(c => <option key={c.name} value={c.name}>{c.calendar_name}</option>)}
-                    </select>
-                  </div>
-
-                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                    <input type="checkbox" checked={evtPulled} onChange={e => setEvtPulled(e.target.checked)}
-                      className="w-4 h-4 rounded accent-violet-600" />
-                    <span className="text-[12.5px] text-slate-700">Pulled from Google Calendar</span>
-                  </label>
-
-                  <div>
-                    <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Description</label>
-                    <textarea value={evtDesc} onChange={e => setEvtDesc(e.target.value)}
-                      rows={3} placeholder="Optional notes…"
-                      className="w-full px-3 py-2 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent placeholder:text-slate-400 resize-none"
-                      style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
-                    />
-                  </div>
-
-                  {evtError && <p className="text-[11.5px] text-red-500">{evtError}</p>}
+              {/* Subject preview */}
+              {evtSubject ? (
+                <div className="rounded-xl p-3 mb-3 relative z-10" style={{ background: 'rgba(255,255,255,0.1)' }}>
+                  <p className="text-[9.5px] font-bold uppercase tracking-widest mb-1"
+                    style={{ color: 'rgba(255,255,255,0.5)' }}>Event</p>
+                  <p className="text-[13px] font-semibold text-white leading-snug line-clamp-3">{evtSubject}</p>
+                </div>
+              ) : (
+                <div className="rounded-xl p-3 mb-3 relative z-10"
+                  style={{ background: 'rgba(255,255,255,0.07)', border: '1px dashed rgba(255,255,255,0.2)' }}>
+                  <p className="text-[12px]" style={{ color: 'rgba(255,255,255,0.38)' }}>Start typing a title…</p>
                 </div>
               )}
 
-              {evtTab === 'participants' && (
-                <div className="pt-4 space-y-4">
-                  <div className="flex items-end gap-2">
-                    <div className="w-36 flex-shrink-0">
-                      <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Reference Type</label>
-                      <select value={pDoctype} onChange={e => { setPDoctype(e.target.value); setPQuery(''); setPResults([]); setPSelected(null) }}
-                        className="w-full h-9 px-2 text-[12.5px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent bg-white"
-                        style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}>
-                        {CRM_DOCTYPES.map(d => <option key={d} value={d}>{d}</option>)}
-                      </select>
-                    </div>
-                    <div className="flex-1 relative">
-                      <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Reference Name</label>
-                      <input type="text"
-                        value={pSelected ? pSelected.display : pQuery}
-                        onChange={e => { setPSelected(null); handleParticipantSearch(e.target.value) }}
-                        placeholder={`Search ${pDoctype}…`}
+              {/* Location preview */}
+              {evtLocation && (
+                <div className="flex items-start gap-1.5 relative z-10 mb-2">
+                  <svg fill="none" viewBox="0 0 14 14" width="11" height="11" className="mt-0.5 flex-shrink-0"
+                    style={{ color: 'rgba(255,255,255,0.5)' }}>
+                    <path d="M7 1C4.79 1 3 2.79 3 5c0 3.25 4 8 4 8s4-4.75 4-8c0-2.21-1.79-4-4-4z" stroke="currentColor" strokeWidth="1.2"/>
+                    <circle cx="7" cy="5" r="1.5" stroke="currentColor" strokeWidth="1.2"/>
+                  </svg>
+                  <p className="text-[11.5px] leading-snug line-clamp-2" style={{ color: 'rgba(255,255,255,0.6)' }}>{evtLocation}</p>
+                </div>
+              )}
+
+              <div className="flex-1" />
+
+              {/* Participant count */}
+              {evtParticipants.length > 0 && (
+                <div className="flex items-center gap-2 relative z-10">
+                  <svg fill="none" viewBox="0 0 14 14" width="12" height="12" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                    <circle cx="5.5" cy="4" r="2.5" stroke="currentColor" strokeWidth="1.1"/>
+                    <path d="M1 12v-1a4.5 4.5 0 0 1 9 0v1" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/>
+                  </svg>
+                  <span className="text-[11.5px]" style={{ color: 'rgba(255,255,255,0.65)' }}>
+                    {evtParticipants.length} participant{evtParticipants.length !== 1 ? 's' : ''}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* ── Right panel: form ── */}
+            <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+
+              {/* Tabs + close */}
+              <div className="flex items-center justify-between px-6 pt-4 pb-3 flex-shrink-0"
+                style={{ borderBottom: '1px solid #f1f5f9' }}>
+                <div className="flex gap-1 p-1 rounded-xl" style={{ background: '#f5f3ff' }}>
+                  {(['details', 'participants'] as const).map(t => (
+                    <button key={t} type="button" onClick={() => setEvtTab(t)}
+                      className="h-8 px-5 rounded-lg text-[12px] font-semibold capitalize transition-all"
+                      style={evtTab === t
+                        ? { background: 'white', color: BRAND, boxShadow: '0 1px 3px rgba(123,63,242,0.15)' }
+                        : { color: '#a78bfa', background: 'transparent' }}>
+                      {t}
+                    </button>
+                  ))}
+                </div>
+                <button type="button" onClick={() => setShowEvent(false)}
+                  className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
+                  <svg fill="none" viewBox="0 0 16 16" width="14" height="14">
+                    <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                </button>
+              </div>
+
+              {/* Scrollable form body */}
+              <div className="overflow-y-auto flex-1 px-6 py-4">
+                {evtTab === 'details' && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">
+                        Subject <span className="text-red-400">*</span>
+                      </label>
+                      <input type="text" value={evtSubject} onChange={e => setEvtSubject(e.target.value)}
+                        placeholder="Event title…" autoFocus
                         className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent placeholder:text-slate-400"
                         style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
                       />
-                      {pResults.length > 0 && !pSelected && (
-                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-10 overflow-hidden max-h-48 overflow-y-auto">
-                          {pSearching && <div className="px-3 py-2 text-[12px] text-slate-400">Searching…</div>}
-                          {pResults.map(r => (
-                            <button key={r.name} type="button"
-                              onClick={() => { setPSelected(r); setPResults([]) }}
-                              className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-50 transition-colors">
-                              <span className="text-[12.5px] font-medium text-slate-800">{r.display}</span>
-                              <span className="text-[11px] text-slate-400 ml-auto">{r.name}</span>
-                            </button>
-                          ))}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Date</label>
+                        <input type="date" value={evtDate} onChange={e => setEvtDate(e.target.value)}
+                          className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent"
+                          style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
+                        />
+                      </div>
+                      <div className="flex items-end pb-2">
+                        <label className="flex items-center gap-2 cursor-pointer select-none">
+                          <input type="checkbox" checked={evtAllDay} onChange={e => setEvtAllDay(e.target.checked)}
+                            className="w-4 h-4 rounded accent-violet-600" />
+                          <span className="text-[12.5px] text-slate-700">All Day</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    {!evtAllDay && (
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Start Time</label>
+                          <input type="time" value={evtStartTime} onChange={e => setEvtStartTime(e.target.value)}
+                            className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent"
+                            style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">End Time</label>
+                          <input type="time" value={evtEndTime} onChange={e => setEvtEndTime(e.target.value)}
+                            className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent"
+                            style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Category</label>
+                        <select value={evtCategory} onChange={e => setEvtCategory(e.target.value)}
+                          className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent bg-white"
+                          style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}>
+                          {['Event','Meeting','Call','Email','Other'].map(o => <option key={o}>{o}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Type</label>
+                        <select value={evtType} onChange={e => setEvtType(e.target.value)}
+                          className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent bg-white"
+                          style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}>
+                          {['Public','Private','Confidential'].map(o => <option key={o}>{o}</option>)}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Status</label>
+                        <select value={evtStatus} onChange={e => setEvtStatus(e.target.value)}
+                          className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent bg-white"
+                          style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}>
+                          {['Open','Closed','Cancelled'].map(o => <option key={o}>{o}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Attending</label>
+                        <select value={evtAttending} onChange={e => setEvtAttending(e.target.value)}
+                          className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent bg-white"
+                          style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}>
+                          {['Yes','No','Maybe'].map(o => <option key={o}>{o}</option>)}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Color</label>
+                        <div className="flex items-center gap-2">
+                          <input type="color" value={evtColor || '#7B3FF2'} onChange={e => setEvtColor(e.target.value)}
+                            className="w-9 h-9 rounded-lg border border-slate-200 cursor-pointer p-0.5 bg-white" />
+                          <span className="text-[12px] text-slate-500 truncate">{evtColor || 'Pick a color'}</span>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Location</label>
+                        <input type="text" value={evtLocation} onChange={e => setEvtLocation(e.target.value)}
+                          placeholder="Optional…"
+                          className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent placeholder:text-slate-400"
+                          style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-2 pt-0.5">
+                      <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                        <input type="checkbox" checked={evtRepeat} onChange={e => setEvtRepeat(e.target.checked)}
+                          className="w-4 h-4 rounded accent-violet-600" />
+                        <span className="text-[12.5px] text-slate-700">Repeat this Event</span>
+                      </label>
+                      <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                        <input type="checkbox" checked={evtSyncGCal}
+                          onChange={e => { setEvtSyncGCal(e.target.checked); if (!e.target.checked) setEvtVideoConf(false) }}
+                          className="w-4 h-4 rounded accent-violet-600" />
+                        <span className="text-[12.5px] text-slate-700">Sync with Google Calendar</span>
+                      </label>
+
+                      {evtSyncGCal && (
+                        <div className="ml-6 pl-3 border-l-2 border-slate-100 space-y-3">
+                          <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                            <input type="checkbox" checked={evtVideoConf} onChange={e => setEvtVideoConf(e.target.checked)}
+                              className="w-4 h-4 rounded accent-violet-600" />
+                            <span className="text-[12.5px] text-slate-700">Add Video Conferencing</span>
+                            <span className="text-[11px] text-slate-400">via Google Meet</span>
+                          </label>
+                          <div>
+                            <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Google Calendar</label>
+                            <select value={evtGCalLink} onChange={e => setEvtGCalLink(e.target.value)}
+                              className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent bg-white"
+                              style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}>
+                              <option value="">— None —</option>
+                              {calendars.map(c => <option key={c.name} value={c.name}>{c.calendar_name}</option>)}
+                            </select>
+                          </div>
                         </div>
                       )}
                     </div>
-                    <button type="button" onClick={addParticipant} disabled={!pSelected}
-                      className="h-9 px-3 rounded-lg text-[12.5px] font-semibold text-white flex-shrink-0 transition-opacity hover:opacity-90 disabled:opacity-40"
-                      style={{ background: BRAND }}>
-                      Add
-                    </button>
-                  </div>
 
-                  {evtParticipants.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-16 text-center">
-                      <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-3" style={{ background: '#f5f3ff' }}>
-                        <svg fill="none" viewBox="0 0 24 24" width="20" height="20">
-                          <circle cx="9" cy="7" r="4" stroke={BRAND} strokeWidth="1.5"/>
-                          <path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" stroke={BRAND} strokeWidth="1.5" strokeLinecap="round"/>
-                          <path d="M19 8v6M16 11h6" stroke={BRAND} strokeWidth="1.5" strokeLinecap="round"/>
+                    <div>
+                      <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Description</label>
+                      <textarea value={evtDesc} onChange={e => setEvtDesc(e.target.value)}
+                        rows={3} placeholder="Optional notes…"
+                        className="w-full px-3 py-2 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent placeholder:text-slate-400 resize-none"
+                        style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
+                      />
+                    </div>
+
+                    {evtError && (
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: '#fff5f5' }}>
+                        <svg fill="none" viewBox="0 0 14 14" width="12" height="12" className="text-red-400 flex-shrink-0">
+                          <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.3"/>
+                          <path d="M7 4.5v3M7 8.5v.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
                         </svg>
+                        <p className="text-[11.5px] text-red-500">{evtError}</p>
                       </div>
-                      <p className="text-[13px] font-semibold text-slate-600">No participants yet</p>
-                      <p className="text-[12px] text-slate-400 mt-1">Search and add participants above</p>
-                    </div>
-                  ) : (
-                    <div className="rounded-xl border border-slate-100 overflow-hidden divide-y divide-slate-100">
-                      {evtParticipants.map((p, i) => (
-                        <div key={i} className="flex items-center gap-3 px-4 py-3">
-                          <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
-                            style={{ background: '#f5f3ff', color: BRAND }}>
-                            {p.reference_doctype}
-                          </span>
-                          <span className="text-[13px] font-medium text-slate-800 flex-1 truncate">{p.display}</span>
-                          <span className="text-[11px] text-slate-400 truncate max-w-[120px]">{p.reference_docname}</span>
-                          <button type="button" onClick={() => removeParticipant(i)}
-                            className="w-6 h-6 flex items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-400 transition-colors flex-shrink-0">
-                            <svg fill="none" viewBox="0 0 16 16" width="12" height="12">
-                              <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                            </svg>
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+                    )}
+                  </div>
+                )}
 
-            <div className="flex items-center justify-end gap-2 px-6 py-4 flex-shrink-0" style={{ borderTop: '1px solid #f1f5f9' }}>
-              <button type="button" onClick={() => setShowEvent(false)}
-                className="h-9 px-4 rounded-lg text-[13px] font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors">
-                Cancel
-              </button>
-              <button type="button" onClick={handleAddEvent} disabled={evtSaving}
-                className="h-9 px-4 rounded-lg text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-                style={{ background: BRAND }}>
-                {evtSaving ? 'Saving…' : 'Save Event'}
-              </button>
+                {evtTab === 'participants' && (
+                  <div className="space-y-4">
+                    <div className="flex items-end gap-2">
+                      <div className="w-36 flex-shrink-0">
+                        <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Reference Type</label>
+                        <select value={pDoctype} onChange={e => { setPDoctype(e.target.value); setPQuery(''); setPResults([]); setPSelected(null) }}
+                          className="w-full h-9 px-2 text-[12.5px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent bg-white"
+                          style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}>
+                          {CRM_DOCTYPES.map(d => <option key={d} value={d}>{d}</option>)}
+                        </select>
+                      </div>
+                      <div className="flex-1 relative">
+                        <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Reference Name</label>
+                        <input type="text"
+                          value={pSelected ? pSelected.display : pQuery}
+                          onChange={e => { setPSelected(null); handleParticipantSearch(e.target.value) }}
+                          placeholder={`Search ${pDoctype}…`}
+                          className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent placeholder:text-slate-400"
+                          style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
+                        />
+                        {pResults.length > 0 && !pSelected && (
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-10 overflow-hidden max-h-48 overflow-y-auto">
+                            {pSearching && <div className="px-3 py-2 text-[12px] text-slate-400">Searching…</div>}
+                            {pResults.map(r => (
+                              <button key={r.name} type="button"
+                                onClick={() => { setPSelected(r); setPResults([]) }}
+                                className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-50 transition-colors">
+                                <span className="text-[12.5px] font-medium text-slate-800">{r.display}</span>
+                                <span className="text-[11px] text-slate-400 ml-auto">{r.name}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <button type="button" onClick={addParticipant} disabled={!pSelected}
+                        className="h-9 px-3 rounded-lg text-[12.5px] font-semibold text-white flex-shrink-0 transition-opacity hover:opacity-90 disabled:opacity-40"
+                        style={{ background: BRAND }}>
+                        Add
+                      </button>
+                    </div>
+
+                    {evtParticipants.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-16 text-center">
+                        <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-3" style={{ background: '#f5f3ff' }}>
+                          <svg fill="none" viewBox="0 0 24 24" width="20" height="20">
+                            <circle cx="9" cy="7" r="4" stroke={BRAND} strokeWidth="1.5"/>
+                            <path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" stroke={BRAND} strokeWidth="1.5" strokeLinecap="round"/>
+                            <path d="M19 8v6M16 11h6" stroke={BRAND} strokeWidth="1.5" strokeLinecap="round"/>
+                          </svg>
+                        </div>
+                        <p className="text-[13px] font-semibold text-slate-600">No participants yet</p>
+                        <p className="text-[12px] text-slate-400 mt-1">Search and add participants above</p>
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border border-slate-100 overflow-hidden divide-y divide-slate-100">
+                        {evtParticipants.map((p, i) => (
+                          <div key={i} className="flex items-center gap-3 px-4 py-3">
+                            <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
+                              style={{ background: '#f5f3ff', color: BRAND }}>
+                              {p.reference_doctype}
+                            </span>
+                            <span className="text-[13px] font-medium text-slate-800 flex-1 truncate">{p.display}</span>
+                            <span className="text-[11px] text-slate-400 truncate max-w-[120px]">{p.reference_docname}</span>
+                            <button type="button" onClick={() => removeParticipant(i)}
+                              className="w-6 h-6 flex items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-400 transition-colors flex-shrink-0">
+                              <svg fill="none" viewBox="0 0 16 16" width="12" height="12">
+                                <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                              </svg>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="flex items-center justify-between px-6 py-4 flex-shrink-0"
+                style={{ borderTop: '1px solid #f1f5f9' }}>
+                <span className="text-[12px] text-slate-400">
+                  {evtParticipants.length > 0
+                    ? `${evtParticipants.length} participant${evtParticipants.length !== 1 ? 's' : ''}`
+                    : ''}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={() => setShowEvent(false)}
+                    className="h-9 px-4 rounded-lg text-[13px] font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors">
+                    Cancel
+                  </button>
+                  <button type="button" onClick={handleAddEvent} disabled={evtSaving}
+                    className="h-9 px-5 rounded-lg text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                    style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)' }}>
+                    {evtSaving ? 'Saving…' : 'Save Event'}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

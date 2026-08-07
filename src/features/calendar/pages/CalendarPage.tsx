@@ -219,6 +219,7 @@ export function CalendarPage() {
   const [evtStatus,      setEvtStatus]      = useState('Open')
   const [evtAttending,   setEvtAttending]   = useState('Yes')
   const [evtSyncGCal,    setEvtSyncGCal]    = useState(false)
+  const [evtVideoConf,   setEvtVideoConf]   = useState(false)
   const [evtDesc,        setEvtDesc]        = useState('')
   const [evtSaving,      setEvtSaving]      = useState(false)
   const [evtError,       setEvtError]       = useState('')
@@ -328,6 +329,7 @@ export function CalendarPage() {
     setEvtStatus('Open')
     setEvtAttending('Yes')
     setEvtSyncGCal(false)
+    setEvtVideoConf(false)
     setEvtDesc('')
     setEvtError('')
     setShowEvent(true)
@@ -356,8 +358,9 @@ export function CalendarPage() {
         location:               evtLocation.trim() || undefined,
         status:                 evtStatus,
         attending:              evtAttending,
-        sync_with_google_calendar: evtSyncGCal ? 1 : 0,
-        description:            evtDesc.trim() || undefined,
+        sync_with_google_calendar: evtSyncGCal   ? 1 : 0,
+        add_video_conferencing:    evtVideoConf  ? 1 : 0,
+        description:               evtDesc.trim() || undefined,
       })
       // re-fetch current month
       const { from, to } = monthRange(year, month)
@@ -880,9 +883,8 @@ export function CalendarPage() {
               {/* Checkboxes */}
               <div className="space-y-2.5 pt-0.5">
                 {[
-                  { label: 'All Day',                    val: evtAllDay,   set: setEvtAllDay },
-                  { label: 'Repeat this Event',          val: evtRepeat,   set: setEvtRepeat },
-                  { label: 'Sync with Google Calendar',  val: evtSyncGCal, set: setEvtSyncGCal },
+                  { label: 'All Day',           val: evtAllDay, set: setEvtAllDay },
+                  { label: 'Repeat this Event', val: evtRepeat, set: setEvtRepeat },
                 ].map(({ label, val, set }) => (
                   <label key={label} className="flex items-center gap-2.5 cursor-pointer select-none">
                     <input type="checkbox" checked={val} onChange={e => set(e.target.checked)}
@@ -890,6 +892,27 @@ export function CalendarPage() {
                     <span className="text-[12.5px] text-slate-700">{label}</span>
                   </label>
                 ))}
+
+                {/* Sync with Google Calendar + conditional Meet option */}
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <input type="checkbox" checked={evtSyncGCal}
+                    onChange={e => { setEvtSyncGCal(e.target.checked); if (!e.target.checked) setEvtVideoConf(false) }}
+                    className="w-4 h-4 rounded accent-violet-600" />
+                  <span className="text-[12.5px] text-slate-700">Sync with Google Calendar</span>
+                </label>
+
+                {evtSyncGCal && (
+                  <div className="ml-6 pl-3 border-l-2 border-slate-100">
+                    <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                      <input type="checkbox" checked={evtVideoConf} onChange={e => setEvtVideoConf(e.target.checked)}
+                        className="w-4 h-4 rounded accent-violet-600" />
+                      <div>
+                        <span className="text-[12.5px] text-slate-700 font-medium">Add Video Conferencing</span>
+                        <span className="ml-1.5 text-[11px] text-slate-400">via Google Meet</span>
+                      </div>
+                    </label>
+                  </div>
+                )}
               </div>
 
               {/* Description */}

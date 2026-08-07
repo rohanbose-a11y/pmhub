@@ -195,6 +195,7 @@ export function CalendarPage() {
   const [addUser,       setAddUser]       = useState('')
   const [addPull,       setAddPull]       = useState(true)
   const [addPublic,     setAddPublic]     = useState(false)
+  const [addPush,       setAddPush]       = useState(false)
   const [addSaving,     setAddSaving]     = useState(false)
   const [addError,      setAddError]      = useState('')
 
@@ -243,6 +244,7 @@ export function CalendarPage() {
     setAddUser(currentUser?.username ?? '')
     setAddPull(true)
     setAddPublic(false)
+    setAddPush(false)
     setAddError('')
     setShowAdd(true)
   }
@@ -254,10 +256,11 @@ export function CalendarPage() {
     setAddError('')
     try {
       await createGoogleCalendar({
-        calendar_name:           addName.trim(),
-        user:                    addUser.trim(),
-        pull_from_google_calendar: addPull  ? 1 : 0,
+        calendar_name:             addName.trim(),
+        user:                      addUser.trim(),
+        pull_from_google_calendar: addPull   ? 1 : 0,
         sync_as_public:            addPublic ? 1 : 0,
+        push_to_google_calendar:   addPush   ? 1 : 0,
       })
       const fresh = await getGoogleCalendars()
       setCalendars(fresh)
@@ -726,7 +729,16 @@ export function CalendarPage() {
                     onChange={e => setAddPublic(e.target.checked)}
                     className="w-4 h-4 rounded accent-violet-600"
                   />
-                  <span className="text-[12.5px] text-slate-700">Sync events as public</span>
+                  <span className="text-[12.5px] text-slate-700">Sync events from Google as public</span>
+                </label>
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={addPush}
+                    onChange={e => setAddPush(e.target.checked)}
+                    className="w-4 h-4 rounded accent-violet-600"
+                  />
+                  <span className="text-[12.5px] text-slate-700">Push to Google Calendar</span>
                 </label>
               </div>
 

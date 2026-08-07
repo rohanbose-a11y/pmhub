@@ -52,6 +52,7 @@ export async function createGoogleCalendar(payload: {
   user: string
   pull_from_google_calendar: 0 | 1
   sync_as_public: 0 | 1
+  push_to_google_calendar: 0 | 1
 }): Promise<GoogleCalendarConfig> {
   const { data } = await httpClient.post<{ data: GoogleCalendarConfig }>('/api/resource/Google Calendar', {
     doctype: 'Google Calendar',

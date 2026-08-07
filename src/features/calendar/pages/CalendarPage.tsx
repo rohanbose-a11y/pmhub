@@ -1,4 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import {
+  getCalendarEvents,
+  getGoogleCalendars,
+  syncGoogleCalendar,
+  type ErpEvent,
+  type GoogleCalendarConfig,
+} from '../../../api/calendarApi'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -18,132 +25,12 @@ interface Meeting {
   description?: string
 }
 
-// ─── Mock Data ────────────────────────────────────────────────────────────────
-
-const MOCK_MEETINGS: Meeting[] = [
-  {
-    id: '1',
-    title: 'Team Standup',
-    date: '2026-08-05',
-    startTime: '09:00',
-    endTime: '09:30',
-    organizer: 'Rohan Bose',
-    organizerEmail: 'rohan.bose@sauramandala.org',
-    status: 'Completed',
-    color: '#6366f1',
-    description: 'Daily sync to discuss blockers and progress',
-  },
-  {
-    id: '2',
-    title: 'Sprint Planning',
-    date: '2026-08-06',
-    startTime: '10:00',
-    endTime: '11:30',
-    organizer: 'Rohan Bose',
-    organizerEmail: 'rohan.bose@sauramandala.org',
-    status: 'Completed',
-    color: '#8b5cf6',
-    description: 'Plan tasks and goals for the upcoming sprint',
-  },
-  {
-    id: '3',
-    title: 'Design Review',
-    date: '2026-08-06',
-    startTime: '14:00',
-    endTime: '15:00',
-    organizer: 'Sarah Chen',
-    organizerEmail: 'sarah.chen@sauramandala.org',
-    status: 'Ongoing',
-    color: '#ec4899',
-    description: 'Review new UI mockups with the design team',
-  },
-  {
-    id: '4',
-    title: 'Client Presentation',
-    date: '2026-08-06',
-    startTime: '17:00',
-    endTime: '18:00',
-    organizer: 'Neil Kumar',
-    organizerEmail: 'neil@sauramandala.org',
-    status: 'Upcoming',
-    color: '#f59e0b',
-    description: 'Present Q3 progress to the client stakeholders',
-  },
-  {
-    id: '5',
-    title: 'Product Roadmap Discussion',
-    date: '2026-08-07',
-    startTime: '11:00',
-    endTime: '12:30',
-    organizer: 'Rohan Bose',
-    organizerEmail: 'rohan.bose@sauramandala.org',
-    status: 'Upcoming',
-    color: '#10b981',
-  },
-  {
-    id: '6',
-    title: '1:1 with Manager',
-    date: '2026-08-08',
-    startTime: '09:00',
-    endTime: '09:30',
-    organizer: 'Atanu Das',
-    organizerEmail: 'atanu@sauramandala.org',
-    status: 'Upcoming',
-    color: '#6366f1',
-  },
-  {
-    id: '7',
-    title: 'Monthly All-Hands',
-    date: '2026-08-12',
-    startTime: '10:00',
-    endTime: '11:30',
-    organizer: 'Rohan Bose',
-    organizerEmail: 'rohan.bose@sauramandala.org',
-    status: 'Upcoming',
-    color: '#7B3FF2',
-    description: 'Company-wide meeting to share updates and wins',
-  },
-  {
-    id: '8',
-    title: 'Team Offsite Planning',
-    date: '2026-08-15',
-    startTime: '14:00',
-    endTime: '16:00',
-    organizer: 'Sarah Chen',
-    organizerEmail: 'sarah.chen@sauramandala.org',
-    status: 'Upcoming',
-    color: '#f97316',
-  },
-  {
-    id: '9',
-    title: 'Tech Stack Review',
-    date: '2026-08-19',
-    startTime: '15:00',
-    endTime: '16:00',
-    organizer: 'Neil Kumar',
-    organizerEmail: 'neil@sauramandala.org',
-    status: 'Upcoming',
-    color: '#14b8a6',
-  },
-  {
-    id: '10',
-    title: 'Quarterly Planning',
-    date: '2026-08-27',
-    startTime: '09:00',
-    endTime: '12:00',
-    organizer: 'Rohan Bose',
-    organizerEmail: 'rohan.bose@sauramandala.org',
-    status: 'Upcoming',
-    color: '#8b5cf6',
-    description: 'Plan goals and OKRs for Q4 2026',
-  },
-]
-
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const BRAND   = '#7B3FF2'
+const BRAND    = '#7B3FF2'
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTHS   = ['January','February','March','April','May','June','July','August','September','October','November','December']
+const COLORS   = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6','#f97316','#14b8a6']
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -152,6 +39,7 @@ function toYMD(d: Date): string {
 }
 
 function fmtTime(t: string): string {
+  if (!t) return ''
   const [h, m] = t.split(':').map(Number)
   const ampm = h >= 12 ? 'PM' : 'AM'
   return `${h % 12 || 12}:${String(m).padStart(2,'0')} ${ampm}`
@@ -167,11 +55,54 @@ function initials(name: string): string {
   return name.split(' ').slice(0, 2).map(p => p[0]).join('').toUpperCase()
 }
 
-function avatarColor(name: string): string {
-  const COLORS = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6','#f97316','#14b8a6']
+function hashColor(seed: string): string {
   let h = 0
-  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0
   return COLORS[h % COLORS.length]
+}
+
+/** "john.doe@example.com" → "John Doe" */
+function formatOwner(email: string): string {
+  const local = email.split('@')[0]
+  return local.split(/[._-]/).map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(' ')
+}
+
+function deriveStatus(startsOn: string, endsOn: string | null): MeetingStatus {
+  const now   = new Date()
+  const start = new Date(startsOn)
+  const end   = endsOn ? new Date(endsOn) : new Date(start.getTime() + 30 * 60_000)
+  if (now > end)   return 'Completed'
+  if (now >= start) return 'Ongoing'
+  return 'Upcoming'
+}
+
+function parseDT(dt: string): { date: string; time: string } {
+  const [date, time = '00:00:00'] = dt.includes(' ') ? dt.split(' ') : [dt, '00:00:00']
+  return { date, time: time.slice(0, 5) }
+}
+
+function erpToMeeting(e: ErpEvent): Meeting {
+  const { date, time: startTime } = parseDT(e.starts_on)
+  const endTime = e.ends_on ? parseDT(e.ends_on).time : startTime
+  return {
+    id:             e.name,
+    title:          e.subject,
+    date,
+    startTime,
+    endTime,
+    organizer:      formatOwner(e.owner),
+    organizerEmail: e.owner,
+    status:         deriveStatus(e.starts_on, e.ends_on),
+    color:          hashColor(e.google_calendar ?? e.name),
+    description:    e.description ?? undefined,
+  }
+}
+
+function monthRange(year: number, month: number) {
+  const y = String(year)
+  const m = String(month + 1).padStart(2, '0')
+  const last = new Date(year, month + 1, 0).getDate()
+  return { from: `${y}-${m}-01`, to: `${y}-${m}-${String(last).padStart(2, '0')}` }
 }
 
 // ─── Calendar Grid ────────────────────────────────────────────────────────────
@@ -191,7 +122,6 @@ function buildCalendarGrid(year: number, month: number): (number | null)[][] {
 
 function MeetingCard({ meeting }: { meeting: Meeting }) {
   const sc = statusCfg(meeting.status)
-  const ac = avatarColor(meeting.organizer)
   return (
     <div
       className="rounded-xl border border-slate-100 bg-white p-3.5 hover:shadow-sm transition-shadow cursor-pointer"
@@ -210,19 +140,21 @@ function MeetingCard({ meeting }: { meeting: Meeting }) {
 
       <div className="space-y-1.5">
         {/* Time */}
-        <div className="flex items-center gap-1.5 text-[11.5px] text-slate-500">
-          <svg fill="none" viewBox="0 0 16 16" width="12" height="12" className="flex-shrink-0 text-slate-400">
-            <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.4"/>
-            <path d="M8 5v3.5l2 1.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-          </svg>
-          {fmtTime(meeting.startTime)} – {fmtTime(meeting.endTime)}
-        </div>
+        {meeting.startTime && (
+          <div className="flex items-center gap-1.5 text-[11.5px] text-slate-500">
+            <svg fill="none" viewBox="0 0 16 16" width="12" height="12" className="flex-shrink-0 text-slate-400">
+              <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.4"/>
+              <path d="M8 5v3.5l2 1.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+            </svg>
+            {fmtTime(meeting.startTime)}{meeting.endTime && meeting.endTime !== meeting.startTime ? ` – ${fmtTime(meeting.endTime)}` : ''}
+          </div>
+        )}
 
         {/* Organizer */}
         <div className="flex items-center gap-1.5 text-[11.5px] text-slate-500">
           <div
             className="w-4 h-4 rounded-full flex items-center justify-center text-[7px] font-bold text-white flex-shrink-0"
-            style={{ background: ac }}
+            style={{ background: hashColor(meeting.organizer) }}
           >
             {initials(meeting.organizer)}
           </div>
@@ -240,55 +172,96 @@ function MeetingCard({ meeting }: { meeting: Meeting }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export function CalendarPage() {
-  const today = new Date()
+  const today    = new Date()
   const todayYMD = toYMD(today)
 
-  const [viewDate, setViewDate]       = useState(new Date(today.getFullYear(), today.getMonth(), 1))
+  const [viewDate,    setViewDate]    = useState(new Date(today.getFullYear(), today.getMonth(), 1))
   const [selectedDay, setSelectedDay] = useState(todayYMD)
-  const [search, setSearch]           = useState('')
-  const [filter, setFilter]           = useState<FilterKey>('today')
+  const [search,      setSearch]      = useState('')
+  const [filter,      setFilter]      = useState<FilterKey>('today')
+
+  const [events,     setEvents]     = useState<Meeting[]>([])
+  const [loading,    setLoading]    = useState(false)
+  const [syncing,    setSyncing]    = useState(false)
+  const [syncError,  setSyncError]  = useState('')
+  const [calendars,  setCalendars]  = useState<GoogleCalendarConfig[]>([])
 
   const year  = viewDate.getFullYear()
   const month = viewDate.getMonth()
   const weeks = useMemo(() => buildCalendarGrid(year, month), [year, month])
 
-  // Meetings on each day of the current view
+  // Fetch configured Google Calendars once on mount
+  useEffect(() => {
+    getGoogleCalendars()
+      .then(setCalendars)
+      .catch(() => setCalendars([]))
+  }, [])
+
+  // Fetch events whenever the view month changes
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    const { from, to } = monthRange(year, month)
+    getCalendarEvents(from, to)
+      .then(erp => { if (!cancelled) setEvents(erp.map(erpToMeeting)) })
+      .catch(() => { if (!cancelled) setEvents([]) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [year, month])
+
+  // Sync all enabled Google Calendars then re-fetch
+  async function handleSync() {
+    if (syncing) return
+    setSyncing(true)
+    setSyncError('')
+    try {
+      await Promise.all(calendars.map(c => syncGoogleCalendar(c.name)))
+      const { from, to } = monthRange(year, month)
+      const erp = await getCalendarEvents(from, to)
+      setEvents(erp.map(erpToMeeting))
+    } catch {
+      setSyncError('Sync failed. Try again.')
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  // Meetings indexed by date for the calendar grid dots
   const meetingsByDate = useMemo(() => {
     const m = new Map<string, Meeting[]>()
-    MOCK_MEETINGS.forEach(mtg => {
+    events.forEach(mtg => {
       const list = m.get(mtg.date) ?? []
       list.push(mtg)
       m.set(mtg.date, list)
     })
     return m
-  }, [])
+  }, [events])
 
-  // Panel meetings: filtered by filter + search
+  // Sidebar panel list — filtered by tab + search
   const panelMeetings = useMemo(() => {
     const q = search.toLowerCase()
-    const todayD = new Date(todayYMD)
-    const weekEnd = new Date(todayD); weekEnd.setDate(todayD.getDate() + 6)
+    const todayD   = new Date(todayYMD)
+    const weekEnd  = new Date(todayD); weekEnd.setDate(todayD.getDate() + 6)
     const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0)
 
-    return MOCK_MEETINGS.filter(m => {
+    return events.filter(m => {
       const d = new Date(m.date)
-      if (filter === 'today')  { if (m.date !== todayYMD) return false }
-      if (filter === 'week')   { if (d < todayD || d > weekEnd) return false }
-      if (filter === 'month')  { if (d < todayD || d > monthEnd) return false }
-      if (q) {
-        if (!m.title.toLowerCase().includes(q) && !m.organizer.toLowerCase().includes(q)) return false
-      }
+      if (filter === 'today' && m.date !== todayYMD) return false
+      if (filter === 'week'  && (d < todayD || d > weekEnd))  return false
+      if (filter === 'month' && (d < todayD || d > monthEnd)) return false
+      if (q && !m.title.toLowerCase().includes(q) && !m.organizer.toLowerCase().includes(q)) return false
       return true
     }).sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime))
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter, search, todayYMD])
+  }, [events, filter, search, todayYMD])
 
-  // Selected day meetings (for calendar click)
   const dayMeetings = meetingsByDate.get(selectedDay) ?? []
 
   const prevMonth = () => setViewDate(new Date(year, month - 1, 1))
   const nextMonth = () => setViewDate(new Date(year, month + 1, 1))
   const goToday   = () => { setViewDate(new Date(today.getFullYear(), today.getMonth(), 1)); setSelectedDay(todayYMD) }
+
+  const hasCalendars = calendars.length > 0
 
   return (
     <main className="flex flex-col h-screen overflow-hidden bg-slate-50 animate-fade-in">
@@ -297,7 +270,7 @@ export function CalendarPage() {
       <div className="flex-shrink-0 bg-white border-b border-slate-100 px-5 py-3">
         <div className="flex flex-col sm:flex-row sm:items-center gap-3">
 
-          {/* Title + Connect button */}
+          {/* Title */}
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#f5f3ff' }}>
               <svg fill="none" viewBox="0 0 20 20" width="16" height="16">
@@ -309,44 +282,53 @@ export function CalendarPage() {
             </div>
             <div>
               <h1 className="text-[15px] font-bold text-slate-900 leading-tight">Calendar</h1>
-              <p className="text-[11px] text-slate-400 leading-none mt-0.5">View and manage your meetings</p>
+              <p className="text-[11px] text-slate-400 leading-none mt-0.5">
+                {hasCalendars
+                  ? `${calendars.length} Google Calendar${calendars.length > 1 ? 's' : ''} connected`
+                  : 'No Google Calendar connected — set up in ERPNext'}
+              </p>
             </div>
           </div>
 
           {/* Search */}
-          <div className="flex items-center gap-1.5 flex-1 max-w-xs">
-            <div className="relative flex-1">
-              <svg fill="none" viewBox="0 0 16 16" width="13" height="13" className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400">
-                <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.4"/>
-                <path d="M10.5 10.5L13.5 13.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-              </svg>
-              <input
-                type="text"
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search meetings…"
-                className="w-full h-8 pl-8 pr-3 text-[12.5px] text-slate-700 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent placeholder:text-slate-400"
-                style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
-              />
-            </div>
+          <div className="relative flex-1 max-w-xs">
+            <svg fill="none" viewBox="0 0 16 16" width="13" height="13" className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400">
+              <circle cx="6.5" cy="6.5" r="4.5" stroke="currentColor" strokeWidth="1.4"/>
+              <path d="M10.5 10.5L13.5 13.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+            </svg>
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search events…"
+              className="w-full h-8 pl-8 pr-3 text-[12.5px] text-slate-700 bg-slate-50 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent placeholder:text-slate-400"
+              style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
+            />
           </div>
 
-          {/* Connect Google Calendar button */}
+          {/* Sync button */}
           <button
             type="button"
-            className="flex items-center gap-2 h-8 px-3 rounded-lg text-[12.5px] font-semibold text-white flex-shrink-0 transition-opacity hover:opacity-90"
+            onClick={handleSync}
+            disabled={!hasCalendars || syncing}
+            className="flex items-center gap-2 h-8 px-3 rounded-lg text-[12.5px] font-semibold text-white flex-shrink-0 transition-opacity hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ background: BRAND }}
           >
-            {/* Google "G" icon */}
-            <svg viewBox="0 0 18 18" width="14" height="14" fill="none">
-              <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#fff" opacity=".9"/>
-              <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#fff" opacity=".8"/>
-              <path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#fff" opacity=".7"/>
-              <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#fff" opacity=".9"/>
+            <svg
+              fill="none" viewBox="0 0 16 16" width="13" height="13"
+              className={syncing ? 'animate-spin' : ''}
+            >
+              <path d="M13.5 8a5.5 5.5 0 1 1-1.1-3.3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              <path d="M12 2.5l.5 2.5-2.5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            Connect Google Calendar
+            {syncing ? 'Syncing…' : 'Sync Google Calendar'}
           </button>
         </div>
+
+        {/* Error message */}
+        {syncError && (
+          <p className="mt-2 text-[11.5px] text-red-500">{syncError}</p>
+        )}
 
         {/* Filter tabs */}
         <div className="flex items-center gap-1 mt-3">
@@ -385,6 +367,11 @@ export function CalendarPage() {
               >
                 Today
               </button>
+              {loading && (
+                <svg fill="none" viewBox="0 0 16 16" width="13" height="13" className="animate-spin text-slate-400 ml-1">
+                  <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" strokeDasharray="28" strokeDashoffset="10"/>
+                </svg>
+              )}
             </div>
             <div className="flex items-center gap-1">
               <button type="button" onClick={prevMonth}
@@ -430,7 +417,6 @@ export function CalendarPage() {
                     className="bg-white h-20 sm:h-24 p-1.5 cursor-pointer transition-colors hover:bg-slate-50 flex flex-col"
                     style={isSelected && !isToday ? { background: '#faf5ff' } : undefined}
                   >
-                    {/* Day number */}
                     <div className="flex justify-end mb-1">
                       <span
                         className="w-6 h-6 flex items-center justify-center rounded-full text-[12px] font-semibold leading-none"
@@ -442,7 +428,6 @@ export function CalendarPage() {
                       </span>
                     </div>
 
-                    {/* Meeting dots / chips */}
                     <div className="flex flex-col gap-0.5 overflow-hidden">
                       {dayMtgs.slice(0, 2).map(m => (
                         <div
@@ -468,7 +453,7 @@ export function CalendarPage() {
           {dayMeetings.length > 0 && (
             <div className="mt-4 lg:hidden">
               <h3 className="text-[12px] font-semibold text-slate-500 uppercase tracking-wide mb-2">
-                {selectedDay === todayYMD ? "Today's Meetings" : `Meetings on ${selectedDay}`}
+                {selectedDay === todayYMD ? "Today's Events" : `Events on ${selectedDay}`}
               </h3>
               <div className="space-y-2">
                 {dayMeetings.map(m => <MeetingCard key={m.id} meeting={m} />)}
@@ -477,7 +462,7 @@ export function CalendarPage() {
           )}
         </div>
 
-        {/* ── Meetings Sidebar ── */}
+        {/* ── Events Sidebar ── */}
         <div className="hidden lg:flex flex-col w-80 xl:w-96 flex-shrink-0 bg-slate-50 overflow-hidden">
 
           {/* Sidebar header */}
@@ -485,13 +470,13 @@ export function CalendarPage() {
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-[13px] font-bold text-slate-800">
-                  {filter === 'today' ? "Today's Meetings"
+                  {filter === 'today' ? "Today's Events"
                     : filter === 'week' ? 'This Week'
                     : filter === 'month' ? 'This Month'
-                    : 'All Meetings'}
+                    : 'All Events'}
                 </h3>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  {panelMeetings.length} meeting{panelMeetings.length !== 1 ? 's' : ''}
+                  {panelMeetings.length} event{panelMeetings.length !== 1 ? 's' : ''}
                 </p>
               </div>
               <div
@@ -503,7 +488,7 @@ export function CalendarPage() {
             </div>
           </div>
 
-          {/* Meeting list */}
+          {/* Event list */}
           <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2 scrollbar-none">
             {panelMeetings.length === 0 ? (
 
@@ -516,19 +501,23 @@ export function CalendarPage() {
                     <path d="M8 14h4M8 17.5h6" stroke={BRAND} strokeWidth="1.5" strokeLinecap="round" opacity=".5"/>
                   </svg>
                 </div>
-                <p className="text-[13.5px] font-semibold text-slate-600 mb-1">No meetings found</p>
+                <p className="text-[13.5px] font-semibold text-slate-600 mb-1">No events found</p>
                 <p className="text-[12px] text-slate-400 leading-relaxed">
                   {search
                     ? `No results for "${search}"`
-                    : 'Connect Google Calendar to sync your meetings automatically'}
+                    : hasCalendars
+                      ? 'Click Sync to pull latest events from Google Calendar'
+                      : 'Set up Google Calendar in ERPNext, then sync here'}
                 </p>
-                {!search && (
+                {!search && hasCalendars && (
                   <button
                     type="button"
-                    className="mt-4 h-8 px-4 rounded-lg text-[12px] font-semibold text-white transition-opacity hover:opacity-90"
+                    onClick={handleSync}
+                    disabled={syncing}
+                    className="mt-4 h-8 px-4 rounded-lg text-[12px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
                     style={{ background: BRAND }}
                   >
-                    Connect Google Calendar
+                    {syncing ? 'Syncing…' : 'Sync Now'}
                   </button>
                 )}
               </div>
@@ -566,8 +555,8 @@ export function CalendarPage() {
             )}
           </div>
 
-          {/* Sidebar footer — connect nudge */}
-          {panelMeetings.length > 0 && (
+          {/* Sidebar footer */}
+          {hasCalendars && (
             <div className="px-3 py-3 border-t border-slate-200 bg-white">
               <div className="flex items-center gap-2.5 p-2.5 rounded-xl" style={{ background: '#f5f3ff' }}>
                 <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: BRAND }}>
@@ -577,15 +566,19 @@ export function CalendarPage() {
                   </svg>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[11.5px] font-semibold text-slate-700 leading-tight">Sync Google Calendar</p>
-                  <p className="text-[10.5px] text-slate-400 mt-0.5 leading-tight">Auto-import your meetings</p>
+                  <p className="text-[11.5px] font-semibold text-slate-700 leading-tight">
+                    {calendars.map(c => c.calendar_name).join(', ')}
+                  </p>
+                  <p className="text-[10.5px] text-slate-400 mt-0.5 leading-tight">Google Calendar synced</p>
                 </div>
                 <button
                   type="button"
-                  className="flex-shrink-0 h-6 px-2.5 rounded-full text-[10.5px] font-semibold text-white transition-opacity hover:opacity-90"
+                  onClick={handleSync}
+                  disabled={syncing}
+                  className="flex-shrink-0 h-6 px-2.5 rounded-full text-[10.5px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
                   style={{ background: BRAND }}
                 >
-                  Connect
+                  {syncing ? '…' : 'Sync'}
                 </button>
               </div>
             </div>

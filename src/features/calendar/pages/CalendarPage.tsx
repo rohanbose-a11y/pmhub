@@ -780,8 +780,8 @@ export function CalendarPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: 'rgba(15,10,30,0.55)', backdropFilter: 'blur(4px)' }}
           onClick={e => { if (e.target === e.currentTarget) setShowEvent(false) }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[1020px] flex overflow-hidden"
-            style={{ maxHeight: '88vh', height: '88vh' }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[1180px] flex overflow-hidden"
+            style={{ maxHeight: '94vh', height: '94vh' }}>
 
             {/* ── Left panel: form ── */}
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden">

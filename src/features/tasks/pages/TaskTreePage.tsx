@@ -58,7 +58,6 @@ function fmtDue(v: string | null): { text: string; overdue: boolean } {
   const d = new Date(v); d.setHours(0, 0, 0, 0)
   const now = new Date(); now.setHours(0, 0, 0, 0)
   const diff = Math.round((d.getTime() - now.getTime()) / 86_400_000)
-  const overdue = diff < 0
   if (diff < 0)   return { text: d.toLocaleDateString('en', { month: 'short', day: 'numeric' }), overdue: true }
   if (diff === 0) return { text: 'Today',    overdue: false }
   if (diff === 1) return { text: 'Tomorrow', overdue: false }

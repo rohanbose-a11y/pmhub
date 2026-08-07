@@ -191,8 +191,9 @@ export function CalendarPage() {
 
   const [events,     setEvents]     = useState<Meeting[]>([])
   const [loading,    setLoading]    = useState(false)
-  const [syncing,    setSyncing]    = useState(false)
-  const [syncError,  setSyncError]  = useState('')
+  const [syncing,      setSyncing]      = useState(false)
+  const [syncError,    setSyncError]    = useState('')
+  const [needsReAuth,  setNeedsReAuth]  = useState(false)
   const [calendars,  setCalendars]  = useState<GoogleCalendarConfig[]>([])
 
   // Add Calendar modal
@@ -264,10 +265,21 @@ export function CalendarPage() {
   }, [year, month])
 
   // Sync all enabled Google Calendars then re-fetch
+  async function handleReAuthorize() {
+    if (!calendars[0]) return
+    try {
+      const url = await getGoogleCalendarAuthUrl(calendars[0].name)
+      window.open(url, '_blank')
+    } catch {
+      setSyncError('Could not get authorization URL. Re-authorize from ERPNext desk.')
+    }
+  }
+
   async function handleSync() {
     if (syncing) return
     setSyncing(true)
     setSyncError('')
+    setNeedsReAuth(false)
     try {
       // Enable pull direction + clear incremental sync token so ERPNext
       // does a full re-fetch from Google Calendar (not just changes since
@@ -286,8 +298,13 @@ export function CalendarPage() {
       const to = `${farYear}-${String(farMonth).padStart(2,'0')}-${String(farLast).padStart(2,'0')}`
       const erp = await getCalendarEvents(from, to)
       setEvents(erp.map(erpToMeeting))
-    } catch {
-      setSyncError('Sync failed. Try again.')
+    } catch (e: unknown) {
+      const raw = (e as { response?: { data?: { message?: string } } })?.response?.data?.message ?? ''
+      const isAuthErr = /no google|credential|authoriz|oauth|token/i.test(raw)
+      setSyncError(isAuthErr
+        ? 'Google Calendar not authorized for pull. Re-authorize below.'
+        : (raw || 'Sync failed. Try again.'))
+      setNeedsReAuth(isAuthErr)
     } finally {
       setSyncing(false)
     }
@@ -581,7 +598,16 @@ export function CalendarPage() {
 
         {/* Error message */}
         {syncError && (
-          <p className="mt-2 text-[11.5px] text-red-500">{syncError}</p>
+          <div className="mt-2 flex items-center gap-3 flex-wrap">
+            <p className="text-[11.5px] text-red-500">{syncError}</p>
+            {needsReAuth && calendars[0] && (
+              <button type="button" onClick={handleReAuthorize}
+                className="flex items-center gap-1.5 h-6 px-2.5 rounded-lg text-[11.5px] font-semibold text-white flex-shrink-0"
+                style={{ background: '#ea4335' }}>
+                Re-authorize Google
+              </button>
+            )}
+          </div>
         )}
 
         {/* Filter tabs */}

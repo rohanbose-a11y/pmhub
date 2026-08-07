@@ -352,8 +352,8 @@ export function CalendarPage() {
               <h1 className="text-[15px] font-bold text-slate-900 leading-tight">Calendar</h1>
               <p className="text-[11px] text-slate-400 leading-none mt-0.5">
                 {hasCalendars
-                  ? `${calendars.length} Google Calendar${calendars.length > 1 ? 's' : ''} connected`
-                  : 'No Google Calendar connected — set up in ERPNext'}
+                  ? `${calendars.length} calendar${calendars.length > 1 ? 's' : ''} connected`
+                  : 'No calendar connected'}
               </p>
             </div>
           </div>
@@ -374,38 +374,44 @@ export function CalendarPage() {
             />
           </div>
 
-          {/* Add Calendar button */}
-          <button
-            type="button"
-            onClick={openAddModal}
-            className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12.5px] font-semibold flex-shrink-0 border transition-colors hover:bg-slate-50"
-            style={{ color: BRAND, borderColor: '#ddd6fe' }}
-          >
-            <svg fill="none" viewBox="0 0 16 16" width="13" height="13">
-              <rect x="2" y="3" width="12" height="11" rx="2" stroke="currentColor" strokeWidth="1.4"/>
-              <path d="M5 1.5v3M11 1.5v3M2 7h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-              <path d="M8 10v3M6.5 11.5h3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-            </svg>
-            Add Calendar
-          </button>
-
-          {/* Sync button */}
-          <button
-            type="button"
-            onClick={handleSync}
-            disabled={!hasCalendars || syncing}
-            className="flex items-center gap-2 h-8 px-3 rounded-lg text-[12.5px] font-semibold text-white flex-shrink-0 transition-opacity hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{ background: BRAND }}
-          >
-            <svg
-              fill="none" viewBox="0 0 16 16" width="13" height="13"
-              className={syncing ? 'animate-spin' : ''}
-            >
-              <path d="M13.5 8a5.5 5.5 0 1 1-1.1-3.3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-              <path d="M12 2.5l.5 2.5-2.5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-            {syncing ? 'Syncing…' : 'Sync'}
-          </button>
+          {/* Buttons: flow when not connected, just Sync when connected */}
+          {!hasCalendars ? (
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              {/* Step 1 — Add */}
+              <button type="button" onClick={openAddModal}
+                className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12.5px] font-semibold text-white transition-opacity hover:opacity-90"
+                style={{ background: BRAND }}>
+                <svg fill="none" viewBox="0 0 16 16" width="12" height="12">
+                  <rect x="2" y="3" width="12" height="11" rx="2" stroke="currentColor" strokeWidth="1.4"/>
+                  <path d="M5 1.5v3M11 1.5v3M2 7h12M8 10v3M6.5 11.5h3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                </svg>
+                Add Calendar
+              </button>
+              <span className="text-slate-300 text-[11px] select-none">›</span>
+              {/* Step 2 — Authorize (disabled until a calendar is added) */}
+              <button disabled
+                className="h-8 px-3 rounded-lg text-[12.5px] font-semibold border border-slate-200 text-slate-400 cursor-not-allowed">
+                Authorize
+              </button>
+              <span className="text-slate-300 text-[11px] select-none">›</span>
+              {/* Step 3 — Sync (disabled) */}
+              <button disabled
+                className="h-8 px-3 rounded-lg text-[12.5px] font-semibold border border-slate-200 text-slate-400 cursor-not-allowed">
+                Sync
+              </button>
+            </div>
+          ) : (
+            <button type="button" onClick={handleSync} disabled={syncing}
+              className="flex items-center gap-2 h-8 px-3 rounded-lg text-[12.5px] font-semibold text-white flex-shrink-0 transition-opacity hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ background: BRAND }}>
+              <svg fill="none" viewBox="0 0 16 16" width="13" height="13"
+                className={syncing ? 'animate-spin' : ''}>
+                <path d="M13.5 8a5.5 5.5 0 1 1-1.1-3.3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                <path d="M12 2.5l.5 2.5-2.5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              {syncing ? 'Syncing…' : 'Sync'}
+            </button>
+          )}
         </div>
 
         {/* Error message */}
@@ -638,34 +644,6 @@ export function CalendarPage() {
             )}
           </div>
 
-          {/* Sidebar footer */}
-          {hasCalendars && (
-            <div className="px-3 py-3 border-t border-slate-200 bg-white">
-              <div className="flex items-center gap-2.5 p-2.5 rounded-xl" style={{ background: '#f5f3ff' }}>
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: BRAND }}>
-                  <svg viewBox="0 0 18 18" width="14" height="14" fill="none">
-                    <rect x="2" y="3" width="14" height="13" rx="2" stroke="white" strokeWidth="1.4"/>
-                    <path d="M6 1.5v3M12 1.5v3M2 7h14" stroke="white" strokeWidth="1.4" strokeLinecap="round"/>
-                  </svg>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-[11.5px] font-semibold text-slate-700 leading-tight">
-                    {calendars.map(c => c.calendar_name).join(', ')}
-                  </p>
-                  <p className="text-[10.5px] text-slate-400 mt-0.5 leading-tight">Google Calendar synced</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleSync}
-                  disabled={syncing}
-                  className="flex-shrink-0 h-6 px-2.5 rounded-full text-[10.5px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-                  style={{ background: BRAND }}
-                >
-                  {syncing ? '…' : 'Sync'}
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 

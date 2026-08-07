@@ -30,21 +30,5 @@ httpClient.interceptors.request.use((config) => {
     }
   }
 
-  console.log(`[API] ${method} ${config.url}`, config.params ?? config.data ?? '')
   return config
 })
-
-httpClient.interceptors.response.use(
-  (response) => {
-    console.log(`[API] ${response.status} ${response.config.url}`, response.data)
-    return response
-  },
-  (error) => {
-    const res = error?.response
-    console.error(
-      `[API] ${res?.status ?? 'ERR'} ${error?.config?.url}`,
-      res?.data ?? error?.message,
-    )
-    return Promise.reject(error)
-  },
-)

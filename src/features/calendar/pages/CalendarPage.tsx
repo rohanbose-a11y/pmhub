@@ -194,8 +194,8 @@ export function CalendarPage() {
   const [addName,       setAddName]       = useState('')
   const [addUser,       setAddUser]       = useState('')
   const [addPull,       setAddPull]       = useState(true)
-  const [addPublic,     setAddPublic]     = useState(false)
-  const [addPush,       setAddPush]       = useState(false)
+  const [addPublic,     setAddPublic]     = useState(true)
+  const [addPush,       setAddPush]       = useState(true)
   const [addSaving,     setAddSaving]     = useState(false)
   const [addError,      setAddError]      = useState('')
 
@@ -240,11 +240,11 @@ export function CalendarPage() {
   }
 
   function openAddModal() {
-    setAddName('')
+    setAddName(currentUser?.fullName ?? '')
     setAddUser(currentUser?.username ?? '')
     setAddPull(true)
-    setAddPublic(false)
-    setAddPush(false)
+    setAddPublic(true)
+    setAddPush(true)
     setAddError('')
     setShowAdd(true)
   }

@@ -76,7 +76,14 @@ export async function createErpEvent(payload: {
   starts_on: string          // "YYYY-MM-DD HH:MM:SS"
   ends_on?: string
   all_day?: 0 | 1
+  event_category?: string
   event_type?: string
+  color?: string
+  repeat_this_event?: 0 | 1
+  location?: string
+  status?: string
+  attending?: string
+  sync_with_google_calendar?: 0 | 1
   description?: string
 }): Promise<ErpEvent> {
   const { data } = await httpClient.post<{ data: ErpEvent }>('/api/resource/Event', {

@@ -211,7 +211,14 @@ export function CalendarPage() {
   const [evtStartTime,   setEvtStartTime]   = useState('09:00')
   const [evtEndTime,     setEvtEndTime]     = useState('10:00')
   const [evtAllDay,      setEvtAllDay]      = useState(false)
-  const [evtType,        setEvtType]        = useState('Public')
+  const [evtCategory,    setEvtCategory]    = useState('Event')
+  const [evtType,        setEvtType]        = useState('Private')
+  const [evtColor,       setEvtColor]       = useState('')
+  const [evtRepeat,      setEvtRepeat]      = useState(false)
+  const [evtLocation,    setEvtLocation]    = useState('')
+  const [evtStatus,      setEvtStatus]      = useState('Open')
+  const [evtAttending,   setEvtAttending]   = useState('Yes')
+  const [evtSyncGCal,    setEvtSyncGCal]    = useState(false)
   const [evtDesc,        setEvtDesc]        = useState('')
   const [evtSaving,      setEvtSaving]      = useState(false)
   const [evtError,       setEvtError]       = useState('')
@@ -313,7 +320,14 @@ export function CalendarPage() {
     setEvtStartTime('09:00')
     setEvtEndTime('10:00')
     setEvtAllDay(false)
-    setEvtType('Public')
+    setEvtCategory('Event')
+    setEvtType('Private')
+    setEvtColor('')
+    setEvtRepeat(false)
+    setEvtLocation('')
+    setEvtStatus('Open')
+    setEvtAttending('Yes')
+    setEvtSyncGCal(false)
     setEvtDesc('')
     setEvtError('')
     setShowEvent(true)
@@ -331,12 +345,19 @@ export function CalendarPage() {
         ? `${evtDate} 23:59:59`
         : `${evtDate} ${evtEndTime}:00`
       await createErpEvent({
-        subject:     evtSubject.trim(),
+        subject:                evtSubject.trim(),
         starts_on,
         ends_on,
-        all_day:     evtAllDay ? 1 : 0,
-        event_type:  evtType,
-        description: evtDesc.trim() || undefined,
+        all_day:                evtAllDay  ? 1 : 0,
+        event_category:         evtCategory,
+        event_type:             evtType,
+        color:                  evtColor   || undefined,
+        repeat_this_event:      evtRepeat  ? 1 : 0,
+        location:               evtLocation.trim() || undefined,
+        status:                 evtStatus,
+        attending:              evtAttending,
+        sync_with_google_calendar: evtSyncGCal ? 1 : 0,
+        description:            evtDesc.trim() || undefined,
       })
       // re-fetch current month
       const { from, to } = monthRange(year, month)
@@ -720,10 +741,10 @@ export function CalendarPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: 'rgba(0,0,0,0.4)' }}
           onClick={e => { if (e.target === e.currentTarget) setShowEvent(false) }}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg flex flex-col max-h-[90vh]">
 
             {/* Header */}
-            <div className="flex items-center justify-between mb-5">
+            <div className="flex items-center justify-between px-6 pt-6 pb-4 flex-shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: '#f5f3ff' }}>
                   <svg fill="none" viewBox="0 0 20 20" width="15" height="15">
@@ -731,7 +752,7 @@ export function CalendarPage() {
                     <path d="M10 6.5v7M6.5 10h7" stroke={BRAND} strokeWidth="1.5" strokeLinecap="round"/>
                   </svg>
                 </div>
-                <h2 className="text-[15px] font-bold text-slate-900">Add Event</h2>
+                <h2 className="text-[15px] font-bold text-slate-900">New Event</h2>
               </div>
               <button type="button" onClick={() => setShowEvent(false)}
                 className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 transition-colors">
@@ -741,14 +762,75 @@ export function CalendarPage() {
               </button>
             </div>
 
-            <div className="space-y-4">
+            {/* Scrollable body */}
+            <div className="overflow-y-auto px-6 pb-2 space-y-4 flex-1">
+
               {/* Subject */}
               <div>
                 <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">
                   Subject <span className="text-red-400">*</span>
                 </label>
                 <input type="text" value={evtSubject} onChange={e => setEvtSubject(e.target.value)}
-                  placeholder="Meeting, event title…" autoFocus
+                  placeholder="Event title…" autoFocus
+                  className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent placeholder:text-slate-400"
+                  style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
+                />
+              </div>
+
+              {/* Event Category + Event Type (2 col) */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Event Category</label>
+                  <select value={evtCategory} onChange={e => setEvtCategory(e.target.value)}
+                    className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent bg-white"
+                    style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}>
+                    <option value="Event">Event</option>
+                    <option value="Meeting">Meeting</option>
+                    <option value="Call">Call</option>
+                    <option value="Email">Email</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Event Type</label>
+                  <select value={evtType} onChange={e => setEvtType(e.target.value)}
+                    className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent bg-white"
+                    style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}>
+                    <option value="Public">Public</option>
+                    <option value="Private">Private</option>
+                    <option value="Confidential">Confidential</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Color + Status (2 col) */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Color</label>
+                  <div className="flex items-center gap-2">
+                    <input type="color" value={evtColor || '#7B3FF2'} onChange={e => setEvtColor(e.target.value)}
+                      className="w-9 h-9 rounded-lg border border-slate-200 cursor-pointer p-0.5 bg-white"
+                    />
+                    <span className="text-[12px] text-slate-500">{evtColor || 'Choose a color'}</span>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Status</label>
+                  <select value={evtStatus} onChange={e => setEvtStatus(e.target.value)}
+                    className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent bg-white"
+                    style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}>
+                    <option value="Open">Open</option>
+                    <option value="Closed">Closed</option>
+                    <option value="Cancelled">Cancelled</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Location */}
+              <div>
+                <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Location</label>
+                <input type="text" value={evtLocation} onChange={e => setEvtLocation(e.target.value)}
+                  placeholder="Optional location…"
                   className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent placeholder:text-slate-400"
                   style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
                 />
@@ -763,25 +845,18 @@ export function CalendarPage() {
                 />
               </div>
 
-              {/* All Day toggle */}
-              <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                <input type="checkbox" checked={evtAllDay} onChange={e => setEvtAllDay(e.target.checked)}
-                  className="w-4 h-4 rounded accent-violet-600" />
-                <span className="text-[12.5px] text-slate-700">All Day</span>
-              </label>
-
-              {/* Time range (hidden when all day) */}
+              {/* Time range */}
               {!evtAllDay && (
-                <div className="flex items-center gap-3">
-                  <div className="flex-1">
-                    <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Start Time</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Starts on</label>
                     <input type="time" value={evtStartTime} onChange={e => setEvtStartTime(e.target.value)}
                       className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent"
                       style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
                     />
                   </div>
-                  <div className="flex-1">
-                    <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">End Time</label>
+                  <div>
+                    <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Ends on</label>
                     <input type="time" value={evtEndTime} onChange={e => setEvtEndTime(e.target.value)}
                       className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent"
                       style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
@@ -790,16 +865,31 @@ export function CalendarPage() {
                 </div>
               )}
 
-              {/* Event Type */}
+              {/* Attending */}
               <div>
-                <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Event Type</label>
-                <select value={evtType} onChange={e => setEvtType(e.target.value)}
+                <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Attending</label>
+                <select value={evtAttending} onChange={e => setEvtAttending(e.target.value)}
                   className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent bg-white"
                   style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}>
-                  <option value="Public">Public</option>
-                  <option value="Private">Private</option>
-                  <option value="Confidential">Confidential</option>
+                  <option value="Yes">Yes</option>
+                  <option value="No">No</option>
+                  <option value="Maybe">Maybe</option>
                 </select>
+              </div>
+
+              {/* Checkboxes */}
+              <div className="space-y-2.5 pt-0.5">
+                {[
+                  { label: 'All Day',                    val: evtAllDay,   set: setEvtAllDay },
+                  { label: 'Repeat this Event',          val: evtRepeat,   set: setEvtRepeat },
+                  { label: 'Sync with Google Calendar',  val: evtSyncGCal, set: setEvtSyncGCal },
+                ].map(({ label, val, set }) => (
+                  <label key={label} className="flex items-center gap-2.5 cursor-pointer select-none">
+                    <input type="checkbox" checked={val} onChange={e => set(e.target.checked)}
+                      className="w-4 h-4 rounded accent-violet-600" />
+                    <span className="text-[12.5px] text-slate-700">{label}</span>
+                  </label>
+                ))}
               </div>
 
               {/* Description */}
@@ -815,7 +905,8 @@ export function CalendarPage() {
               {evtError && <p className="text-[11.5px] text-red-500">{evtError}</p>}
             </div>
 
-            <div className="flex items-center justify-end gap-2 mt-6">
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-slate-100 flex-shrink-0">
               <button type="button" onClick={() => setShowEvent(false)}
                 className="h-9 px-4 rounded-lg text-[13px] font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors">
                 Cancel
@@ -823,7 +914,7 @@ export function CalendarPage() {
               <button type="button" onClick={handleAddEvent} disabled={evtSaving}
                 className="h-9 px-4 rounded-lg text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
                 style={{ background: BRAND }}>
-                {evtSaving ? 'Saving…' : 'Add Event'}
+                {evtSaving ? 'Saving…' : 'Save Event'}
               </button>
             </div>
           </div>

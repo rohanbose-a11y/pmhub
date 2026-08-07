@@ -6,6 +6,7 @@ import { useWorkStore } from '../../store/workStore'
 import { useNotifStore } from '../../store/notifStore'
 import { useNotificationSound } from '../../hooks/useNotificationSound'
 import { appNavItems, MobileBottomNav } from './MobileBottomNav'
+import { UserAvatar } from './UserAvatar'
 import { useWhatsAppScheduler } from '../../features/whatsapp/useWhatsAppScheduler'
 
 // ─── Command-palette types ────────────────────────────────────────────────────
@@ -310,11 +311,6 @@ export function AppShellLayout() {
   const syncDot   = workspaceStatus === 'loading' ? '#F59E0B' : workspaceError ? '#EF4444' : '#22C55E'
   const syncLabel = workspaceStatus === 'loading' ? 'Syncing' : workspaceError ? 'Error' : 'Live'
 
-  // User initials
-  const userInitials = username
-    ? username.replace(/[@.]/g, ' ').split(/\s+/).filter(Boolean).map((p) => p[0]).join('').toUpperCase().slice(0, 2)
-    : 'U'
-
   // Mobile page label
   const currentItem = appNavItems.find((item) => location.pathname.startsWith(item.to)) ?? appNavItems[0]
   const pageLabel   = isNotificationsPage ? 'Notifications' : currentItem.label
@@ -441,13 +437,8 @@ export function AppShellLayout() {
         </Link>
 
         {/* User avatar */}
-        <Link to="/profile" style={{ textDecoration: 'none' }}>
-          <div
-            style={{ width: 30, height: 30, borderRadius: '50%', background: '#7B3FF2', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', flexShrink: 0, userSelect: 'none' }}
-            title={username ?? ''}
-          >
-            {userInitials}
-          </div>
+        <Link to="/profile" style={{ textDecoration: 'none' }} title={username ?? ''}>
+          <UserAvatar name={username ?? ''} fullName={user?.fullName} size="sm" />
         </Link>
       </header>
 

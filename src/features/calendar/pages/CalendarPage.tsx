@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
+  createErpEvent,
   createGoogleCalendar,
   getCalendarEvents,
   getGoogleCalendars,
@@ -203,6 +204,18 @@ export function CalendarPage() {
   const [addedCalName,     setAddedCalName]     = useState('')  // doc name after creation
   const [authorizing,      setAuthorizing]      = useState(false)
 
+  // Add Event modal
+  const [showEvent,      setShowEvent]      = useState(false)
+  const [evtSubject,     setEvtSubject]     = useState('')
+  const [evtDate,        setEvtDate]        = useState('')
+  const [evtStartTime,   setEvtStartTime]   = useState('09:00')
+  const [evtEndTime,     setEvtEndTime]     = useState('10:00')
+  const [evtAllDay,      setEvtAllDay]      = useState(false)
+  const [evtType,        setEvtType]        = useState('Public')
+  const [evtDesc,        setEvtDesc]        = useState('')
+  const [evtSaving,      setEvtSaving]      = useState(false)
+  const [evtError,       setEvtError]       = useState('')
+
   const year  = viewDate.getFullYear()
   const month = viewDate.getMonth()
   const weeks = useMemo(() => buildCalendarGrid(year, month), [year, month])
@@ -294,6 +307,50 @@ export function CalendarPage() {
     }
   }
 
+  function openEventModal() {
+    setEvtSubject('')
+    setEvtDate(selectedDay)
+    setEvtStartTime('09:00')
+    setEvtEndTime('10:00')
+    setEvtAllDay(false)
+    setEvtType('Public')
+    setEvtDesc('')
+    setEvtError('')
+    setShowEvent(true)
+  }
+
+  async function handleAddEvent() {
+    if (!evtSubject.trim()) { setEvtError('Subject is required.'); return }
+    setEvtSaving(true)
+    setEvtError('')
+    try {
+      const starts_on = evtAllDay
+        ? `${evtDate} 00:00:00`
+        : `${evtDate} ${evtStartTime}:00`
+      const ends_on = evtAllDay
+        ? `${evtDate} 23:59:59`
+        : `${evtDate} ${evtEndTime}:00`
+      await createErpEvent({
+        subject:     evtSubject.trim(),
+        starts_on,
+        ends_on,
+        all_day:     evtAllDay ? 1 : 0,
+        event_type:  evtType,
+        description: evtDesc.trim() || undefined,
+      })
+      // re-fetch current month
+      const { from, to } = monthRange(year, month)
+      const erp = await getCalendarEvents(from, to)
+      setEvents(erp.map(erpToMeeting))
+      setShowEvent(false)
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+      setEvtError(msg ?? 'Failed to create event.')
+    } finally {
+      setEvtSaving(false)
+    }
+  }
+
   // Meetings indexed by date for the calendar grid dots
   const meetingsByDate = useMemo(() => {
     const m = new Map<string, Meeting[]>()
@@ -373,6 +430,17 @@ export function CalendarPage() {
               style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
             />
           </div>
+
+          {/* Add Event — always visible */}
+          <button type="button" onClick={openEventModal}
+            className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12.5px] font-semibold flex-shrink-0 border transition-colors hover:bg-slate-50"
+            style={{ color: BRAND, borderColor: '#ddd6fe' }}>
+            <svg fill="none" viewBox="0 0 16 16" width="12" height="12">
+              <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.4"/>
+              <path d="M8 5v6M5 8h6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+            </svg>
+            Add Event
+          </button>
 
           {/* Buttons: flow when not connected, just Sync when connected */}
           {!hasCalendars ? (
@@ -646,6 +714,121 @@ export function CalendarPage() {
 
         </div>
       </div>
+
+      {/* ══ Add Event Modal ══ */}
+      {showEvent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.4)' }}
+          onClick={e => { if (e.target === e.currentTarget) setShowEvent(false) }}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+
+            {/* Header */}
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: '#f5f3ff' }}>
+                  <svg fill="none" viewBox="0 0 20 20" width="15" height="15">
+                    <circle cx="10" cy="10" r="7.5" stroke={BRAND} strokeWidth="1.5"/>
+                    <path d="M10 6.5v7M6.5 10h7" stroke={BRAND} strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                </div>
+                <h2 className="text-[15px] font-bold text-slate-900">Add Event</h2>
+              </div>
+              <button type="button" onClick={() => setShowEvent(false)}
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 transition-colors">
+                <svg fill="none" viewBox="0 0 16 16" width="14" height="14">
+                  <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Subject */}
+              <div>
+                <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">
+                  Subject <span className="text-red-400">*</span>
+                </label>
+                <input type="text" value={evtSubject} onChange={e => setEvtSubject(e.target.value)}
+                  placeholder="Meeting, event title…" autoFocus
+                  className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent placeholder:text-slate-400"
+                  style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
+                />
+              </div>
+
+              {/* Date */}
+              <div>
+                <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Date</label>
+                <input type="date" value={evtDate} onChange={e => setEvtDate(e.target.value)}
+                  className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent"
+                  style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
+                />
+              </div>
+
+              {/* All Day toggle */}
+              <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                <input type="checkbox" checked={evtAllDay} onChange={e => setEvtAllDay(e.target.checked)}
+                  className="w-4 h-4 rounded accent-violet-600" />
+                <span className="text-[12.5px] text-slate-700">All Day</span>
+              </label>
+
+              {/* Time range (hidden when all day) */}
+              {!evtAllDay && (
+                <div className="flex items-center gap-3">
+                  <div className="flex-1">
+                    <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Start Time</label>
+                    <input type="time" value={evtStartTime} onChange={e => setEvtStartTime(e.target.value)}
+                      className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent"
+                      style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">End Time</label>
+                    <input type="time" value={evtEndTime} onChange={e => setEvtEndTime(e.target.value)}
+                      className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent"
+                      style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Event Type */}
+              <div>
+                <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Event Type</label>
+                <select value={evtType} onChange={e => setEvtType(e.target.value)}
+                  className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent bg-white"
+                  style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}>
+                  <option value="Public">Public</option>
+                  <option value="Private">Private</option>
+                  <option value="Confidential">Confidential</option>
+                </select>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Description</label>
+                <textarea value={evtDesc} onChange={e => setEvtDesc(e.target.value)}
+                  rows={3} placeholder="Optional notes…"
+                  className="w-full px-3 py-2 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent placeholder:text-slate-400 resize-none"
+                  style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
+                />
+              </div>
+
+              {evtError && <p className="text-[11.5px] text-red-500">{evtError}</p>}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 mt-6">
+              <button type="button" onClick={() => setShowEvent(false)}
+                className="h-9 px-4 rounded-lg text-[13px] font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors">
+                Cancel
+              </button>
+              <button type="button" onClick={handleAddEvent} disabled={evtSaving}
+                className="h-9 px-4 rounded-lg text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                style={{ background: BRAND }}>
+                {evtSaving ? 'Saving…' : 'Add Event'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ══ Add Calendar Modal ══ */}
       {showAdd && (

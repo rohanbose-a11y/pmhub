@@ -71,6 +71,21 @@ export async function getGoogleCalendarAuthUrl(calendarName: string): Promise<st
   return typeof msg === 'string' ? msg : msg.url
 }
 
+export async function createErpEvent(payload: {
+  subject: string
+  starts_on: string          // "YYYY-MM-DD HH:MM:SS"
+  ends_on?: string
+  all_day?: 0 | 1
+  event_type?: string
+  description?: string
+}): Promise<ErpEvent> {
+  const { data } = await httpClient.post<{ data: ErpEvent }>('/api/resource/Event', {
+    doctype: 'Event',
+    ...payload,
+  })
+  return data.data
+}
+
 export async function syncGoogleCalendar(account: string): Promise<void> {
   await httpClient.post(
     '/api/method/frappe.integrations.doctype.google_calendar.google_calendar.sync',

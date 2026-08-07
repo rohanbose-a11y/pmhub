@@ -5,7 +5,10 @@ import {
   getCalendarEvents,
   getGoogleCalendars,
   getGoogleCalendarAuthUrl,
+  searchDoctype,
   syncGoogleCalendar,
+  CRM_DOCTYPES,
+  type DoctypeRecord,
   type ErpEvent,
   type GoogleCalendarConfig,
 } from '../../../api/calendarApi'
@@ -225,6 +228,16 @@ export function CalendarPage() {
   const [evtDesc,        setEvtDesc]        = useState('')
   const [evtSaving,      setEvtSaving]      = useState(false)
   const [evtError,       setEvtError]       = useState('')
+  const [evtTab,         setEvtTab]         = useState<'details' | 'participants'>('details')
+
+  // Participants tab
+  interface Participant { reference_doctype: string; reference_docname: string; display: string }
+  const [evtParticipants,  setEvtParticipants]  = useState<Participant[]>([])
+  const [pDoctype,         setPDoctype]         = useState(CRM_DOCTYPES[0])
+  const [pQuery,           setPQuery]           = useState('')
+  const [pResults,         setPResults]         = useState<DoctypeRecord[]>([])
+  const [pSearching,       setPSearching]       = useState(false)
+  const [pSelected,        setPSelected]        = useState<DoctypeRecord | null>(null)
 
   const year  = viewDate.getFullYear()
   const month = viewDate.getMonth()
@@ -336,6 +349,12 @@ export function CalendarPage() {
     setEvtPulled(false)
     setEvtDesc('')
     setEvtError('')
+    setEvtTab('details')
+    setEvtParticipants([])
+    setPDoctype(CRM_DOCTYPES[0])
+    setPQuery('')
+    setPResults([])
+    setPSelected(null)
     setShowEvent(true)
   }
 
@@ -366,6 +385,11 @@ export function CalendarPage() {
         add_video_conferencing:      evtVideoConf          ? 1 : 0,
         google_calendar:             evtGCalLink           || undefined,
         pulled_from_google_calendar: evtPulled             ? 1 : 0,
+        event_participants: evtParticipants.map(p => ({
+          doctype:            'Event Participants' as const,
+          reference_doctype:  p.reference_doctype,
+          reference_docname:  p.reference_docname,
+        })),
         description:                 evtDesc.trim()        || undefined,
       })
       // re-fetch current month
@@ -379,6 +403,35 @@ export function CalendarPage() {
     } finally {
       setEvtSaving(false)
     }
+  }
+
+  async function handleParticipantSearch(q: string) {
+    setPQuery(q)
+    setPSelected(null)
+    if (!q.trim()) { setPResults([]); return }
+    setPSearching(true)
+    try {
+      const results = await searchDoctype(pDoctype, q)
+      setPResults(results)
+    } catch { setPResults([]) }
+    finally { setPSearching(false) }
+  }
+
+  function addParticipant() {
+    if (!pSelected) return
+    if (evtParticipants.some(p => p.reference_doctype === pDoctype && p.reference_docname === pSelected.name)) return
+    setEvtParticipants(prev => [...prev, {
+      reference_doctype: pDoctype,
+      reference_docname: pSelected.name,
+      display:           pSelected.display,
+    }])
+    setPSelected(null)
+    setPQuery('')
+    setPResults([])
+  }
+
+  function removeParticipant(i: number) {
+    setEvtParticipants(prev => prev.filter((_, idx) => idx !== i))
   }
 
   // Meetings indexed by date for the calendar grid dots
@@ -770,8 +823,22 @@ export function CalendarPage() {
               </button>
             </div>
 
+            {/* Tabs */}
+            <div className="flex items-center gap-0.5 px-6 pb-0 flex-shrink-0 border-b border-slate-100">
+              {(['details', 'participants'] as const).map(t => (
+                <button key={t} type="button" onClick={() => setEvtTab(t)}
+                  className="h-9 px-4 text-[12.5px] font-semibold capitalize border-b-2 transition-colors"
+                  style={evtTab === t
+                    ? { color: BRAND, borderColor: BRAND }
+                    : { color: '#94a3b8', borderColor: 'transparent' }}>
+                  {t}
+                </button>
+              ))}
+            </div>
+
             {/* Scrollable body */}
-            <div className="overflow-y-auto px-6 pb-2 space-y-4 flex-1">
+            <div className="overflow-y-auto px-6 pb-2 flex-1">
+            {evtTab === 'details' && <div className="space-y-4 pt-4">
 
               {/* Subject */}
               <div>
@@ -951,6 +1018,95 @@ export function CalendarPage() {
               </div>
 
               {evtError && <p className="text-[11.5px] text-red-500">{evtError}</p>}
+            </div>}
+
+            {/* ── Participants tab ── */}
+            {evtTab === 'participants' && (
+              <div className="pt-4 space-y-4">
+
+                {/* Add participant row */}
+                <div className="flex items-end gap-2">
+                  {/* Doctype select */}
+                  <div className="w-36 flex-shrink-0">
+                    <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Reference Type</label>
+                    <select value={pDoctype} onChange={e => { setPDoctype(e.target.value); setPQuery(''); setPResults([]); setPSelected(null) }}
+                      className="w-full h-9 px-2 text-[12.5px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent bg-white"
+                      style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}>
+                      {CRM_DOCTYPES.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </div>
+
+                  {/* Search / select name */}
+                  <div className="flex-1 relative">
+                    <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Reference Name</label>
+                    <input type="text"
+                      value={pSelected ? pSelected.display : pQuery}
+                      onChange={e => { setPSelected(null); handleParticipantSearch(e.target.value) }}
+                      placeholder={`Search ${pDoctype}…`}
+                      className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent placeholder:text-slate-400"
+                      style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
+                    />
+                    {/* Dropdown results */}
+                    {pResults.length > 0 && !pSelected && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-10 overflow-hidden max-h-48 overflow-y-auto">
+                        {pSearching && (
+                          <div className="px-3 py-2 text-[12px] text-slate-400">Searching…</div>
+                        )}
+                        {pResults.map(r => (
+                          <button key={r.name} type="button"
+                            onClick={() => { setPSelected(r); setPResults([]) }}
+                            className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-50 transition-colors">
+                            <span className="text-[12.5px] font-medium text-slate-800">{r.display}</span>
+                            <span className="text-[11px] text-slate-400 ml-auto">{r.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Add button */}
+                  <button type="button" onClick={addParticipant} disabled={!pSelected}
+                    className="h-9 px-3 rounded-lg text-[12.5px] font-semibold text-white flex-shrink-0 transition-opacity hover:opacity-90 disabled:opacity-40"
+                    style={{ background: BRAND }}>
+                    Add
+                  </button>
+                </div>
+
+                {/* Participants list */}
+                {evtParticipants.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 text-center">
+                    <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-3" style={{ background: '#f5f3ff' }}>
+                      <svg fill="none" viewBox="0 0 24 24" width="20" height="20">
+                        <circle cx="9" cy="7" r="4" stroke={BRAND} strokeWidth="1.5"/>
+                        <path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2" stroke={BRAND} strokeWidth="1.5" strokeLinecap="round"/>
+                        <path d="M19 8v6M16 11h6" stroke={BRAND} strokeWidth="1.5" strokeLinecap="round"/>
+                      </svg>
+                    </div>
+                    <p className="text-[13px] font-semibold text-slate-600">No participants yet</p>
+                    <p className="text-[12px] text-slate-400 mt-1">Search and add participants above</p>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-slate-100 overflow-hidden divide-y divide-slate-100">
+                    {evtParticipants.map((p, i) => (
+                      <div key={i} className="flex items-center gap-3 px-4 py-3">
+                        <span className="text-[10.5px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
+                          style={{ background: '#f5f3ff', color: BRAND }}>
+                          {p.reference_doctype}
+                        </span>
+                        <span className="text-[13px] font-medium text-slate-800 flex-1 truncate">{p.display}</span>
+                        <span className="text-[11px] text-slate-400 truncate max-w-[120px]">{p.reference_docname}</span>
+                        <button type="button" onClick={() => removeParticipant(i)}
+                          className="w-6 h-6 flex items-center justify-center rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-400 transition-colors flex-shrink-0">
+                          <svg fill="none" viewBox="0 0 16 16" width="12" height="12">
+                            <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             </div>
 
             {/* Footer */}

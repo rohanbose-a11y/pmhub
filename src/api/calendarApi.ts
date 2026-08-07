@@ -71,6 +71,32 @@ export async function getGoogleCalendarAuthUrl(calendarName: string): Promise<st
   return typeof msg === 'string' ? msg : msg.url
 }
 
+// CRM doctype → field used as the human-readable display name
+const CRM_DISPLAY_FIELD: Record<string, string> = {
+  Lead:        'lead_name',
+  Contact:     'full_name',
+  Customer:    'customer_name',
+  Prospect:    'company_name',
+  Opportunity: 'name',
+}
+
+export const CRM_DOCTYPES = Object.keys(CRM_DISPLAY_FIELD)
+
+export interface DoctypeRecord { name: string; display: string }
+
+export async function searchDoctype(doctype: string, query: string): Promise<DoctypeRecord[]> {
+  const displayField = CRM_DISPLAY_FIELD[doctype] ?? 'name'
+  const fields = displayField !== 'name' ? ['name', displayField] : ['name']
+  const filters = query
+    ? JSON.stringify([[displayField, 'like', `%${query}%`]])
+    : undefined
+  const { data } = await httpClient.get<{ data: Record<string, string>[] }>(
+    `/api/resource/${encodeURIComponent(doctype)}`,
+    { params: { fields: JSON.stringify(fields), ...(filters ? { filters } : {}), limit: 20 } },
+  )
+  return data.data.map(r => ({ name: r.name, display: r[displayField] || r.name }))
+}
+
 export async function createErpEvent(payload: {
   subject: string
   starts_on: string          // "YYYY-MM-DD HH:MM:SS"
@@ -87,6 +113,7 @@ export async function createErpEvent(payload: {
   add_video_conferencing?: 0 | 1
   google_calendar?: string
   pulled_from_google_calendar?: 0 | 1
+  event_participants?: { doctype: 'Event Participants'; reference_doctype: string; reference_docname: string }[]
   description?: string
 }): Promise<ErpEvent> {
   const { data } = await httpClient.post<{ data: ErpEvent }>('/api/resource/Event', {

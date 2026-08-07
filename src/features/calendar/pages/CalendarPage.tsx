@@ -447,7 +447,7 @@ export function CalendarPage() {
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <main className="flex flex-col h-screen overflow-hidden bg-white animate-fade-in">
+    <main className="flex flex-col overflow-hidden bg-white animate-fade-in h-screen md:h-[calc(100vh-48px)]">
 
       {/* ══ Header ══ */}
       <header className="flex-shrink-0 bg-white" style={{ borderBottom: '1px solid #f1f5f9' }}>

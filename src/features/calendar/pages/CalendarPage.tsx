@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
+  createGoogleCalendar,
   getCalendarEvents,
   getGoogleCalendars,
   syncGoogleCalendar,
   type ErpEvent,
   type GoogleCalendarConfig,
 } from '../../../api/calendarApi'
+import { useAuthStore } from '../../../store/authStore'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -174,6 +176,7 @@ function MeetingCard({ meeting }: { meeting: Meeting }) {
 export function CalendarPage() {
   const today    = new Date()
   const todayYMD = toYMD(today)
+  const currentUser = useAuthStore(s => s.user)
 
   const [viewDate,    setViewDate]    = useState(new Date(today.getFullYear(), today.getMonth(), 1))
   const [selectedDay, setSelectedDay] = useState(todayYMD)
@@ -185,6 +188,15 @@ export function CalendarPage() {
   const [syncing,    setSyncing]    = useState(false)
   const [syncError,  setSyncError]  = useState('')
   const [calendars,  setCalendars]  = useState<GoogleCalendarConfig[]>([])
+
+  // Add Calendar modal
+  const [showAdd,       setShowAdd]       = useState(false)
+  const [addName,       setAddName]       = useState('')
+  const [addUser,       setAddUser]       = useState('')
+  const [addPull,       setAddPull]       = useState(true)
+  const [addPublic,     setAddPublic]     = useState(false)
+  const [addSaving,     setAddSaving]     = useState(false)
+  const [addError,      setAddError]      = useState('')
 
   const year  = viewDate.getFullYear()
   const month = viewDate.getMonth()
@@ -223,6 +235,38 @@ export function CalendarPage() {
       setSyncError('Sync failed. Try again.')
     } finally {
       setSyncing(false)
+    }
+  }
+
+  function openAddModal() {
+    setAddName('')
+    setAddUser(currentUser?.username ?? '')
+    setAddPull(true)
+    setAddPublic(false)
+    setAddError('')
+    setShowAdd(true)
+  }
+
+  async function handleAddCalendar() {
+    if (!addName.trim()) { setAddError('Calendar name is required.'); return }
+    if (!addUser.trim()) { setAddError('User is required.'); return }
+    setAddSaving(true)
+    setAddError('')
+    try {
+      await createGoogleCalendar({
+        calendar_name:           addName.trim(),
+        user:                    addUser.trim(),
+        pull_from_google_calendar: addPull  ? 1 : 0,
+        sync_as_public:            addPublic ? 1 : 0,
+      })
+      const fresh = await getGoogleCalendars()
+      setCalendars(fresh)
+      setShowAdd(false)
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+      setAddError(msg ?? 'Failed to add calendar.')
+    } finally {
+      setAddSaving(false)
     }
   }
 
@@ -306,6 +350,21 @@ export function CalendarPage() {
             />
           </div>
 
+          {/* Add Calendar button */}
+          <button
+            type="button"
+            onClick={openAddModal}
+            className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12.5px] font-semibold flex-shrink-0 border transition-colors hover:bg-slate-50"
+            style={{ color: BRAND, borderColor: '#ddd6fe' }}
+          >
+            <svg fill="none" viewBox="0 0 16 16" width="13" height="13">
+              <rect x="2" y="3" width="12" height="11" rx="2" stroke="currentColor" strokeWidth="1.4"/>
+              <path d="M5 1.5v3M11 1.5v3M2 7h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+              <path d="M8 10v3M6.5 11.5h3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+            </svg>
+            Add Calendar
+          </button>
+
           {/* Sync button */}
           <button
             type="button"
@@ -321,7 +380,7 @@ export function CalendarPage() {
               <path d="M13.5 8a5.5 5.5 0 1 1-1.1-3.3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
               <path d="M12 2.5l.5 2.5-2.5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            {syncing ? 'Syncing…' : 'Sync Google Calendar'}
+            {syncing ? 'Syncing…' : 'Sync'}
           </button>
         </div>
 
@@ -585,6 +644,119 @@ export function CalendarPage() {
           )}
         </div>
       </div>
+
+      {/* ══ Add Calendar Modal ══ */}
+      {showAdd && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(0,0,0,0.4)' }}
+          onClick={e => { if (e.target === e.currentTarget) setShowAdd(false) }}
+        >
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            {/* Modal header */}
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: '#f5f3ff' }}>
+                  <svg fill="none" viewBox="0 0 20 20" width="15" height="15">
+                    <rect x="2.5" y="3.5" width="15" height="14" rx="2.5" stroke={BRAND} strokeWidth="1.5"/>
+                    <path d="M6.5 2v3M13.5 2v3M2.5 8h15" stroke={BRAND} strokeWidth="1.5" strokeLinecap="round"/>
+                    <path d="M10 11v4M8 13h4" stroke={BRAND} strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                </div>
+                <h2 className="text-[15px] font-bold text-slate-900">Add Google Calendar</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAdd(false)}
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 transition-colors"
+              >
+                <svg fill="none" viewBox="0 0 16 16" width="14" height="14">
+                  <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Calendar Name */}
+              <div>
+                <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">
+                  Calendar Name <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={addName}
+                  onChange={e => setAddName(e.target.value)}
+                  placeholder="e.g. Team Calendar"
+                  autoFocus
+                  className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent placeholder:text-slate-400"
+                  style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
+                />
+              </div>
+
+              {/* User */}
+              <div>
+                <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">
+                  User <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={addUser}
+                  onChange={e => setAddUser(e.target.value)}
+                  placeholder="user@example.com"
+                  className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent placeholder:text-slate-400"
+                  style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
+                />
+              </div>
+
+              {/* Checkboxes */}
+              <div className="space-y-2.5 pt-1">
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={addPull}
+                    onChange={e => setAddPull(e.target.checked)}
+                    className="w-4 h-4 rounded accent-violet-600"
+                  />
+                  <span className="text-[12.5px] text-slate-700">Pull from Google Calendar</span>
+                </label>
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={addPublic}
+                    onChange={e => setAddPublic(e.target.checked)}
+                    className="w-4 h-4 rounded accent-violet-600"
+                  />
+                  <span className="text-[12.5px] text-slate-700">Sync events as public</span>
+                </label>
+              </div>
+
+              {addError && (
+                <p className="text-[11.5px] text-red-500">{addError}</p>
+              )}
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-end gap-2 mt-6">
+              <button
+                type="button"
+                onClick={() => setShowAdd(false)}
+                className="h-9 px-4 rounded-lg text-[13px] font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleAddCalendar}
+                disabled={addSaving}
+                className="h-9 px-4 rounded-lg text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                style={{ background: BRAND }}
+              >
+                {addSaving ? 'Adding…' : 'Add Calendar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   )
 }

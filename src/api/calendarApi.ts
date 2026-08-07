@@ -123,6 +123,16 @@ export async function createErpEvent(payload: {
   return data.data
 }
 
+/**
+ * Clear next_sync_token so ERPNext does a full re-fetch from Google Calendar
+ * instead of an incremental sync (which misses historical events).
+ */
+export async function clearSyncToken(calendarName: string): Promise<void> {
+  await httpClient.put(`/api/resource/Google Calendar/${encodeURIComponent(calendarName)}`, {
+    next_sync_token: '',
+  })
+}
+
 export async function syncGoogleCalendar(account: string): Promise<void> {
   await httpClient.post(
     '/api/method/frappe.integrations.doctype.google_calendar.google_calendar.sync',

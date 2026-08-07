@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
+  clearSyncToken,
   createErpEvent,
   createGoogleCalendar,
   getCalendarEvents,
@@ -268,8 +269,20 @@ export function CalendarPage() {
     setSyncing(true)
     setSyncError('')
     try {
+      // Clear next_sync_token first so ERPNext does a full re-fetch from
+      // Google Calendar, not just incremental changes since last sync.
+      // Without this, historical events are never pulled.
+      await Promise.all(calendars.map(c => clearSyncToken(c.name)))
       await Promise.all(calendars.map(c => syncGoogleCalendar(c.name)))
-      const { from, to } = monthRange(year, month)
+
+      // After full sync, fetch a wide range (1 yr back → 1 yr ahead) so
+      // historical events appear without requiring month navigation.
+      const now = new Date()
+      const from = `${now.getFullYear() - 1}-${String(now.getMonth() + 1).padStart(2,'0')}-01`
+      const farYear = now.getFullYear() + 1
+      const farMonth = now.getMonth() + 1
+      const farLast = new Date(farYear, farMonth, 0).getDate()
+      const to = `${farYear}-${String(farMonth).padStart(2,'0')}-${String(farLast).padStart(2,'0')}`
       const erp = await getCalendarEvents(from, to)
       setEvents(erp.map(erpToMeeting))
     } catch {

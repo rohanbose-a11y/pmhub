@@ -220,6 +220,8 @@ export function CalendarPage() {
   const [evtAttending,   setEvtAttending]   = useState('Yes')
   const [evtSyncGCal,    setEvtSyncGCal]    = useState(false)
   const [evtVideoConf,   setEvtVideoConf]   = useState(false)
+  const [evtGCalLink,    setEvtGCalLink]    = useState('')
+  const [evtPulled,      setEvtPulled]      = useState(false)
   const [evtDesc,        setEvtDesc]        = useState('')
   const [evtSaving,      setEvtSaving]      = useState(false)
   const [evtError,       setEvtError]       = useState('')
@@ -330,6 +332,8 @@ export function CalendarPage() {
     setEvtAttending('Yes')
     setEvtSyncGCal(false)
     setEvtVideoConf(false)
+    setEvtGCalLink('')
+    setEvtPulled(false)
     setEvtDesc('')
     setEvtError('')
     setShowEvent(true)
@@ -359,8 +363,10 @@ export function CalendarPage() {
         status:                 evtStatus,
         attending:              evtAttending,
         sync_with_google_calendar: evtSyncGCal   ? 1 : 0,
-        add_video_conferencing:    evtVideoConf  ? 1 : 0,
-        description:               evtDesc.trim() || undefined,
+        add_video_conferencing:      evtVideoConf          ? 1 : 0,
+        google_calendar:             evtGCalLink           || undefined,
+        pulled_from_google_calendar: evtPulled             ? 1 : 0,
+        description:                 evtDesc.trim()        || undefined,
       })
       // re-fetch current month
       const { from, to } = monthRange(year, month)
@@ -914,6 +920,26 @@ export function CalendarPage() {
                   </div>
                 )}
               </div>
+
+              {/* Google Calendar link */}
+              <div>
+                <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Google Calendar</label>
+                <select value={evtGCalLink} onChange={e => setEvtGCalLink(e.target.value)}
+                  className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent bg-white"
+                  style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}>
+                  <option value="">— None —</option>
+                  {calendars.map(c => (
+                    <option key={c.name} value={c.name}>{c.calendar_name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Pulled from Google Calendar */}
+              <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                <input type="checkbox" checked={evtPulled} onChange={e => setEvtPulled(e.target.checked)}
+                  className="w-4 h-4 rounded accent-violet-600" />
+                <span className="text-[12.5px] text-slate-700">Pulled from Google Calendar</span>
+              </label>
 
               {/* Description */}
               <div>

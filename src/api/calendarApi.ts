@@ -85,6 +85,8 @@ export async function createErpEvent(payload: {
   attending?: string
   sync_with_google_calendar?: 0 | 1
   add_video_conferencing?: 0 | 1
+  google_calendar?: string
+  pulled_from_google_calendar?: 0 | 1
   description?: string
 }): Promise<ErpEvent> {
   const { data } = await httpClient.post<{ data: ErpEvent }>('/api/resource/Event', {

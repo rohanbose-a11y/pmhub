@@ -747,10 +747,9 @@ export function CalendarPage() {
 
       {/* ══ Add Event Modal ══ */}
       {showEvent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: 'rgba(0,0,0,0.4)' }}
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-3"
           onClick={e => { if (e.target === e.currentTarget) setShowEvent(false) }}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg flex flex-col max-h-[90vh]">
+          <div className="bg-white rounded-xl shadow-2xl w-full h-full flex flex-col overflow-hidden">
 
             {/* Header */}
             <div className="flex items-center justify-between px-6 pt-6 pb-4 flex-shrink-0">

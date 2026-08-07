@@ -124,11 +124,14 @@ export async function createErpEvent(payload: {
 }
 
 /**
- * Clear next_sync_token so ERPNext does a full re-fetch from Google Calendar
- * instead of an incremental sync (which misses historical events).
+ * Before syncing: enable pull direction and clear the incremental sync token
+ * so ERPNext does a full re-fetch from Google Calendar instead of only pulling
+ * changes since the last sync (which misses historical and externally-created events).
+ * Non-throwing — callers should proceed with sync even if this PUT is rejected.
  */
-export async function clearSyncToken(calendarName: string): Promise<void> {
+export async function prepareForFullSync(calendarName: string): Promise<void> {
   await httpClient.put(`/api/resource/Google Calendar/${encodeURIComponent(calendarName)}`, {
+    pull_from_google_calendar: 1,
     next_sync_token: '',
   })
 }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  clearSyncToken,
+  prepareForFullSync,
   createErpEvent,
   createGoogleCalendar,
   getCalendarEvents,
@@ -269,10 +269,11 @@ export function CalendarPage() {
     setSyncing(true)
     setSyncError('')
     try {
-      // Clear next_sync_token first so ERPNext does a full re-fetch from
-      // Google Calendar, not just incremental changes since last sync.
-      // Without this, historical events are never pulled.
-      await Promise.all(calendars.map(c => clearSyncToken(c.name)))
+      // Enable pull direction + clear incremental sync token so ERPNext
+      // does a full re-fetch from Google Calendar (not just changes since
+      // last sync). Failures are swallowed — sync still runs even if the
+      // PUT is rejected (e.g. Frappe field permissions).
+      await Promise.allSettled(calendars.map(c => prepareForFullSync(c.name)))
       await Promise.all(calendars.map(c => syncGoogleCalendar(c.name)))
 
       // After full sync, fetch a wide range (1 yr back → 1 yr ahead) so

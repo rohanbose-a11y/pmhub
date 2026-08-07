@@ -556,6 +556,20 @@ export function AppShellLayout() {
             )}
           </NavLink>
 
+          <NavLink to="/calendar" style={{ textDecoration: 'none' }}>
+            {({ isActive }) => (
+              <div style={navItem(isActive)}>
+                <svg fill="none" viewBox="0 0 24 24" width={16} height={16} style={{ flexShrink: 0 }}>
+                  <rect x="3" y="4" width="18" height="17" rx="3" stroke="currentColor" strokeWidth="1.6"/>
+                  <path d="M8 2v4M16 2v4M3 9h18" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6"/>
+                  <rect x="7" y="12" width="3" height="3" rx="0.75" fill="currentColor" opacity=".5"/>
+                  <rect x="12" y="12" width="3" height="3" rx="0.75" fill="currentColor"/>
+                </svg>
+                <span style={{ fontSize: 13, fontWeight: isActive ? 600 : 400 }}>Calendar</span>
+              </div>
+            )}
+          </NavLink>
+
           <NavLink to="/notifications" style={{ textDecoration: 'none' }}>
             {({ isActive }) => (
               <div style={navItem(isActive)}>

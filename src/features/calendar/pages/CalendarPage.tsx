@@ -539,16 +539,18 @@ export function CalendarPage() {
             />
           </div>
 
-          {/* Add Event */}
-          <button type="button" onClick={openEventModal}
-            className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-semibold border transition-colors hover:bg-violet-50 flex-shrink-0"
-            style={{ color: BRAND, borderColor: '#ddd6fe' }}>
-            <svg fill="none" viewBox="0 0 14 14" width="11" height="11">
-              <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.4"/>
-              <path d="M7 4.5v5M4.5 7h5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-            </svg>
-            Add Event
-          </button>
+          {/* Add Event — only shown once a Google Calendar is connected */}
+          {hasCalendars && (
+            <button type="button" onClick={openEventModal}
+              className="flex items-center gap-1.5 h-8 px-3 rounded-lg text-[12px] font-semibold border transition-colors hover:bg-violet-50 flex-shrink-0"
+              style={{ color: BRAND, borderColor: '#ddd6fe' }}>
+              <svg fill="none" viewBox="0 0 14 14" width="11" height="11">
+                <circle cx="7" cy="7" r="5.5" stroke="currentColor" strokeWidth="1.4"/>
+                <path d="M7 4.5v5M4.5 7h5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+              </svg>
+              Add Event
+            </button>
+          )}
 
           {/* Calendar connect / Sync */}
           {!hasCalendars ? (

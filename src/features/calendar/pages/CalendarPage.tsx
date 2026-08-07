@@ -780,88 +780,10 @@ export function CalendarPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: 'rgba(15,10,30,0.55)', backdropFilter: 'blur(4px)' }}
           onClick={e => { if (e.target === e.currentTarget) setShowEvent(false) }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl flex overflow-hidden"
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl flex overflow-hidden"
             style={{ maxHeight: '82vh', height: '82vh' }}>
 
-            {/* ── Left panel: gradient preview sidebar ── */}
-            <div className="w-52 flex-shrink-0 flex flex-col p-5 relative overflow-hidden"
-              style={{ background: 'linear-gradient(160deg, #5b21b6 0%, #7c3aed 55%, #8b5cf6 100%)' }}>
-              <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full opacity-10" style={{ background: 'white' }} />
-              <div className="absolute -bottom-6 -left-8 w-28 h-28 rounded-full opacity-10" style={{ background: 'white' }} />
-
-              {/* Icon + title */}
-              <div className="w-11 h-11 rounded-2xl flex items-center justify-center mb-4 relative z-10"
-                style={{ background: 'rgba(255,255,255,0.18)' }}>
-                <svg fill="none" viewBox="0 0 20 20" width="17" height="17">
-                  <rect x="2.5" y="3.5" width="15" height="14" rx="2.5" stroke="white" strokeWidth="1.5"/>
-                  <path d="M6.5 2v3M13.5 2v3M2.5 8h15M10 11v4M8 13h4" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
-                </svg>
-              </div>
-              <h2 className="text-[17px] font-bold text-white mb-0.5 relative z-10">New Event</h2>
-              <p className="text-[11.5px] mb-5 relative z-10" style={{ color: 'rgba(255,255,255,0.55)' }}>Add to your calendar</p>
-
-              {/* Date preview */}
-              <div className="rounded-xl p-3 mb-3 relative z-10"
-                style={{ background: 'rgba(255,255,255,0.14)' }}>
-                <p className="text-[9.5px] font-bold uppercase tracking-widest mb-1"
-                  style={{ color: 'rgba(255,255,255,0.5)' }}>Date</p>
-                <p className="text-[13.5px] font-bold text-white leading-snug">
-                  {evtDate
-                    ? new Date(evtDate + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
-                    : '—'}
-                </p>
-                {evtAllDay
-                  ? <p className="text-[11px] mt-0.5" style={{ color: 'rgba(255,255,255,0.6)' }}>All day</p>
-                  : evtStartTime
-                    ? <p className="text-[11px] mt-0.5" style={{ color: 'rgba(255,255,255,0.6)' }}>
-                        {fmtTime(evtStartTime)}{evtEndTime && evtEndTime !== evtStartTime ? ` – ${fmtTime(evtEndTime)}` : ''}
-                      </p>
-                    : null}
-              </div>
-
-              {/* Subject preview */}
-              {evtSubject ? (
-                <div className="rounded-xl p-3 mb-3 relative z-10" style={{ background: 'rgba(255,255,255,0.1)' }}>
-                  <p className="text-[9.5px] font-bold uppercase tracking-widest mb-1"
-                    style={{ color: 'rgba(255,255,255,0.5)' }}>Event</p>
-                  <p className="text-[13px] font-semibold text-white leading-snug line-clamp-3">{evtSubject}</p>
-                </div>
-              ) : (
-                <div className="rounded-xl p-3 mb-3 relative z-10"
-                  style={{ background: 'rgba(255,255,255,0.07)', border: '1px dashed rgba(255,255,255,0.2)' }}>
-                  <p className="text-[12px]" style={{ color: 'rgba(255,255,255,0.38)' }}>Start typing a title…</p>
-                </div>
-              )}
-
-              {/* Location preview */}
-              {evtLocation && (
-                <div className="flex items-start gap-1.5 relative z-10 mb-2">
-                  <svg fill="none" viewBox="0 0 14 14" width="11" height="11" className="mt-0.5 flex-shrink-0"
-                    style={{ color: 'rgba(255,255,255,0.5)' }}>
-                    <path d="M7 1C4.79 1 3 2.79 3 5c0 3.25 4 8 4 8s4-4.75 4-8c0-2.21-1.79-4-4-4z" stroke="currentColor" strokeWidth="1.2"/>
-                    <circle cx="7" cy="5" r="1.5" stroke="currentColor" strokeWidth="1.2"/>
-                  </svg>
-                  <p className="text-[11.5px] leading-snug line-clamp-2" style={{ color: 'rgba(255,255,255,0.6)' }}>{evtLocation}</p>
-                </div>
-              )}
-
-              <div className="flex-1" />
-
-              {/* Participant count */}
-              {evtParticipants.length > 0 && (
-                <div className="flex items-center gap-2 relative z-10">
-                  <svg fill="none" viewBox="0 0 14 14" width="12" height="12" style={{ color: 'rgba(255,255,255,0.6)' }}>
-                    <circle cx="5.5" cy="4" r="2.5" stroke="currentColor" strokeWidth="1.1"/>
-                    <path d="M1 12v-1a4.5 4.5 0 0 1 9 0v1" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/>
-                  </svg>
-                  <span className="text-[11.5px]" style={{ color: 'rgba(255,255,255,0.65)' }}>
-                    {evtParticipants.length} participant{evtParticipants.length !== 1 ? 's' : ''}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* ── Right panel: form ── */}
+            {/* ── Left panel: form ── */}
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
 
               {/* Tabs + close */}
@@ -1146,6 +1068,84 @@ export function CalendarPage() {
                   </button>
                 </div>
               </div>
+            </div>
+
+            {/* ── Right panel: preview sidebar ── */}
+            <div className="w-52 flex-shrink-0 flex flex-col p-5 relative overflow-hidden"
+              style={{ background: 'linear-gradient(160deg, #5b21b6 0%, #7c3aed 55%, #8b5cf6 100%)' }}>
+              <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full opacity-10" style={{ background: 'white' }} />
+              <div className="absolute -bottom-6 -left-8 w-28 h-28 rounded-full opacity-10" style={{ background: 'white' }} />
+
+              {/* Icon + title */}
+              <div className="w-11 h-11 rounded-2xl flex items-center justify-center mb-4 relative z-10"
+                style={{ background: 'rgba(255,255,255,0.18)' }}>
+                <svg fill="none" viewBox="0 0 20 20" width="17" height="17">
+                  <rect x="2.5" y="3.5" width="15" height="14" rx="2.5" stroke="white" strokeWidth="1.5"/>
+                  <path d="M6.5 2v3M13.5 2v3M2.5 8h15M10 11v4M8 13h4" stroke="white" strokeWidth="1.5" strokeLinecap="round"/>
+                </svg>
+              </div>
+              <h2 className="text-[17px] font-bold text-white mb-0.5 relative z-10">New Event</h2>
+              <p className="text-[11.5px] mb-5 relative z-10" style={{ color: 'rgba(255,255,255,0.55)' }}>Add to your calendar</p>
+
+              {/* Date preview */}
+              <div className="rounded-xl p-3 mb-3 relative z-10"
+                style={{ background: 'rgba(255,255,255,0.14)' }}>
+                <p className="text-[9.5px] font-bold uppercase tracking-widest mb-1"
+                  style={{ color: 'rgba(255,255,255,0.5)' }}>Date</p>
+                <p className="text-[13.5px] font-bold text-white leading-snug">
+                  {evtDate
+                    ? new Date(evtDate + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+                    : '—'}
+                </p>
+                {evtAllDay
+                  ? <p className="text-[11px] mt-0.5" style={{ color: 'rgba(255,255,255,0.6)' }}>All day</p>
+                  : evtStartTime
+                    ? <p className="text-[11px] mt-0.5" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                        {fmtTime(evtStartTime)}{evtEndTime && evtEndTime !== evtStartTime ? ` – ${fmtTime(evtEndTime)}` : ''}
+                      </p>
+                    : null}
+              </div>
+
+              {/* Subject preview */}
+              {evtSubject ? (
+                <div className="rounded-xl p-3 mb-3 relative z-10" style={{ background: 'rgba(255,255,255,0.1)' }}>
+                  <p className="text-[9.5px] font-bold uppercase tracking-widest mb-1"
+                    style={{ color: 'rgba(255,255,255,0.5)' }}>Event</p>
+                  <p className="text-[13px] font-semibold text-white leading-snug line-clamp-3">{evtSubject}</p>
+                </div>
+              ) : (
+                <div className="rounded-xl p-3 mb-3 relative z-10"
+                  style={{ background: 'rgba(255,255,255,0.07)', border: '1px dashed rgba(255,255,255,0.2)' }}>
+                  <p className="text-[12px]" style={{ color: 'rgba(255,255,255,0.38)' }}>Start typing a title…</p>
+                </div>
+              )}
+
+              {/* Location preview */}
+              {evtLocation && (
+                <div className="flex items-start gap-1.5 relative z-10 mb-2">
+                  <svg fill="none" viewBox="0 0 14 14" width="11" height="11" className="mt-0.5 flex-shrink-0"
+                    style={{ color: 'rgba(255,255,255,0.5)' }}>
+                    <path d="M7 1C4.79 1 3 2.79 3 5c0 3.25 4 8 4 8s4-4.75 4-8c0-2.21-1.79-4-4-4z" stroke="currentColor" strokeWidth="1.2"/>
+                    <circle cx="7" cy="5" r="1.5" stroke="currentColor" strokeWidth="1.2"/>
+                  </svg>
+                  <p className="text-[11.5px] leading-snug line-clamp-2" style={{ color: 'rgba(255,255,255,0.6)' }}>{evtLocation}</p>
+                </div>
+              )}
+
+              <div className="flex-1" />
+
+              {/* Participant count */}
+              {evtParticipants.length > 0 && (
+                <div className="flex items-center gap-2 relative z-10">
+                  <svg fill="none" viewBox="0 0 14 14" width="12" height="12" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                    <circle cx="5.5" cy="4" r="2.5" stroke="currentColor" strokeWidth="1.1"/>
+                    <path d="M1 12v-1a4.5 4.5 0 0 1 9 0v1" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/>
+                  </svg>
+                  <span className="text-[11.5px]" style={{ color: 'rgba(255,255,255,0.65)' }}>
+                    {evtParticipants.length} participant{evtParticipants.length !== 1 ? 's' : ''}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </div>

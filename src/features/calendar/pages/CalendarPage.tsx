@@ -3,6 +3,7 @@ import {
   createGoogleCalendar,
   getCalendarEvents,
   getGoogleCalendars,
+  getGoogleCalendarAuthUrl,
   syncGoogleCalendar,
   type ErpEvent,
   type GoogleCalendarConfig,
@@ -190,14 +191,17 @@ export function CalendarPage() {
   const [calendars,  setCalendars]  = useState<GoogleCalendarConfig[]>([])
 
   // Add Calendar modal
-  const [showAdd,       setShowAdd]       = useState(false)
-  const [addName,       setAddName]       = useState('')
-  const [addUser,       setAddUser]       = useState('')
-  const [addPull,       setAddPull]       = useState(true)
-  const [addPublic,     setAddPublic]     = useState(true)
-  const [addPush,       setAddPush]       = useState(true)
-  const [addSaving,     setAddSaving]     = useState(false)
-  const [addError,      setAddError]      = useState('')
+  const [showAdd,          setShowAdd]          = useState(false)
+  const [addStep,          setAddStep]          = useState<'form' | 'authorize'>('form')
+  const [addName,          setAddName]          = useState('')
+  const [addUser,          setAddUser]          = useState('')
+  const [addPull,          setAddPull]          = useState(true)
+  const [addPublic,        setAddPublic]        = useState(true)
+  const [addPush,          setAddPush]          = useState(true)
+  const [addSaving,        setAddSaving]        = useState(false)
+  const [addError,         setAddError]         = useState('')
+  const [addedCalName,     setAddedCalName]     = useState('')  // doc name after creation
+  const [authorizing,      setAuthorizing]      = useState(false)
 
   const year  = viewDate.getFullYear()
   const month = viewDate.getMonth()
@@ -240,12 +244,14 @@ export function CalendarPage() {
   }
 
   function openAddModal() {
+    setAddStep('form')
     setAddName(currentUser?.fullName ?? '')
     setAddUser(currentUser?.username ?? '')
     setAddPull(true)
     setAddPublic(true)
     setAddPush(true)
     setAddError('')
+    setAddedCalName('')
     setShowAdd(true)
   }
 
@@ -255,7 +261,7 @@ export function CalendarPage() {
     setAddSaving(true)
     setAddError('')
     try {
-      await createGoogleCalendar({
+      const created = await createGoogleCalendar({
         calendar_name:             addName.trim(),
         user:                      addUser.trim(),
         pull_from_google_calendar: addPull   ? 1 : 0,
@@ -264,12 +270,27 @@ export function CalendarPage() {
       })
       const fresh = await getGoogleCalendars()
       setCalendars(fresh)
-      setShowAdd(false)
+      setAddedCalName(created.name)
+      setAddStep('authorize')
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
       setAddError(msg ?? 'Failed to add calendar.')
     } finally {
       setAddSaving(false)
+    }
+  }
+
+  async function handleAuthorize() {
+    if (!addedCalName || authorizing) return
+    setAuthorizing(true)
+    try {
+      const url = await getGoogleCalendarAuthUrl(addedCalName)
+      window.open(url, '_blank')
+      setShowAdd(false)
+    } catch {
+      setAddError('Could not get authorization URL. Try again.')
+    } finally {
+      setAuthorizing(false)
     }
   }
 
@@ -656,116 +677,127 @@ export function CalendarPage() {
           onClick={e => { if (e.target === e.currentTarget) setShowAdd(false) }}
         >
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-            {/* Modal header */}
-            <div className="flex items-center justify-between mb-5">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: '#f5f3ff' }}>
-                  <svg fill="none" viewBox="0 0 20 20" width="15" height="15">
-                    <rect x="2.5" y="3.5" width="15" height="14" rx="2.5" stroke={BRAND} strokeWidth="1.5"/>
-                    <path d="M6.5 2v3M13.5 2v3M2.5 8h15" stroke={BRAND} strokeWidth="1.5" strokeLinecap="round"/>
-                    <path d="M10 11v4M8 13h4" stroke={BRAND} strokeWidth="1.5" strokeLinecap="round"/>
-                  </svg>
+
+            {/* ── Step 1: Form ── */}
+            {addStep === 'form' && <>
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: '#f5f3ff' }}>
+                    <svg fill="none" viewBox="0 0 20 20" width="15" height="15">
+                      <rect x="2.5" y="3.5" width="15" height="14" rx="2.5" stroke={BRAND} strokeWidth="1.5"/>
+                      <path d="M6.5 2v3M13.5 2v3M2.5 8h15" stroke={BRAND} strokeWidth="1.5" strokeLinecap="round"/>
+                      <path d="M10 11v4M8 13h4" stroke={BRAND} strokeWidth="1.5" strokeLinecap="round"/>
+                    </svg>
+                  </div>
+                  <h2 className="text-[15px] font-bold text-slate-900">Add Google Calendar</h2>
                 </div>
-                <h2 className="text-[15px] font-bold text-slate-900">Add Google Calendar</h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowAdd(false)}
-                className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 transition-colors"
-              >
-                <svg fill="none" viewBox="0 0 16 16" width="14" height="14">
-                  <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                </svg>
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {/* Calendar Name */}
-              <div>
-                <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">
-                  Calendar Name <span className="text-red-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={addName}
-                  onChange={e => setAddName(e.target.value)}
-                  placeholder="e.g. Team Calendar"
-                  autoFocus
-                  className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent placeholder:text-slate-400"
-                  style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
-                />
+                <button type="button" onClick={() => setShowAdd(false)}
+                  className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 transition-colors">
+                  <svg fill="none" viewBox="0 0 16 16" width="14" height="14">
+                    <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                </button>
               </div>
 
-              {/* User */}
-              <div>
-                <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">
-                  User <span className="text-red-400">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={addUser}
-                  onChange={e => setAddUser(e.target.value)}
-                  placeholder="user@example.com"
-                  className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent placeholder:text-slate-400"
-                  style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
-                />
-              </div>
-
-              {/* Checkboxes */}
-              <div className="space-y-2.5 pt-1">
-                <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={addPull}
-                    onChange={e => setAddPull(e.target.checked)}
-                    className="w-4 h-4 rounded accent-violet-600"
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">
+                    Calendar Name <span className="text-red-400">*</span>
+                  </label>
+                  <input type="text" value={addName} onChange={e => setAddName(e.target.value)}
+                    placeholder="e.g. Team Calendar" autoFocus
+                    className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent placeholder:text-slate-400"
+                    style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
                   />
-                  <span className="text-[12.5px] text-slate-700">Pull from Google Calendar</span>
-                </label>
-                <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={addPublic}
-                    onChange={e => setAddPublic(e.target.checked)}
-                    className="w-4 h-4 rounded accent-violet-600"
+                </div>
+                <div>
+                  <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">
+                    User <span className="text-red-400">*</span>
+                  </label>
+                  <input type="text" value={addUser} onChange={e => setAddUser(e.target.value)}
+                    placeholder="user@example.com"
+                    className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent placeholder:text-slate-400"
+                    style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
                   />
-                  <span className="text-[12.5px] text-slate-700">Sync events from Google as public</span>
-                </label>
-                <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={addPush}
-                    onChange={e => setAddPush(e.target.checked)}
-                    className="w-4 h-4 rounded accent-violet-600"
-                  />
-                  <span className="text-[12.5px] text-slate-700">Push to Google Calendar</span>
-                </label>
+                </div>
+                <div className="space-y-2.5 pt-1">
+                  {[
+                    { label: 'Pull from Google Calendar',       val: addPull,   set: setAddPull },
+                    { label: 'Sync events from Google as public', val: addPublic, set: setAddPublic },
+                    { label: 'Push to Google Calendar',         val: addPush,   set: setAddPush },
+                  ].map(({ label, val, set }) => (
+                    <label key={label} className="flex items-center gap-2.5 cursor-pointer select-none">
+                      <input type="checkbox" checked={val} onChange={e => set(e.target.checked)}
+                        className="w-4 h-4 rounded accent-violet-600" />
+                      <span className="text-[12.5px] text-slate-700">{label}</span>
+                    </label>
+                  ))}
+                </div>
+                {addError && <p className="text-[11.5px] text-red-500">{addError}</p>}
               </div>
 
-              {addError && (
-                <p className="text-[11.5px] text-red-500">{addError}</p>
-              )}
-            </div>
+              <div className="flex items-center justify-end gap-2 mt-6">
+                <button type="button" onClick={() => setShowAdd(false)}
+                  className="h-9 px-4 rounded-lg text-[13px] font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors">
+                  Cancel
+                </button>
+                <button type="button" onClick={handleAddCalendar} disabled={addSaving}
+                  className="h-9 px-4 rounded-lg text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                  style={{ background: BRAND }}>
+                  {addSaving ? 'Adding…' : 'Add Calendar'}
+                </button>
+              </div>
+            </>}
 
-            {/* Actions */}
-            <div className="flex items-center justify-end gap-2 mt-6">
-              <button
-                type="button"
-                onClick={() => setShowAdd(false)}
-                className="h-9 px-4 rounded-lg text-[13px] font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleAddCalendar}
-                disabled={addSaving}
-                className="h-9 px-4 rounded-lg text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-                style={{ background: BRAND }}
-              >
-                {addSaving ? 'Adding…' : 'Add Calendar'}
-              </button>
-            </div>
+            {/* ── Step 2: Authorize ── */}
+            {addStep === 'authorize' && <>
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: '#f0fdf4' }}>
+                    <svg fill="none" viewBox="0 0 20 20" width="15" height="15">
+                      <path d="M4 10l4 4 8-8" stroke="#16a34a" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </div>
+                  <h2 className="text-[15px] font-bold text-slate-900">Calendar Added</h2>
+                </div>
+                <button type="button" onClick={() => setShowAdd(false)}
+                  className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 transition-colors">
+                  <svg fill="none" viewBox="0 0 16 16" width="14" height="14">
+                    <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                  </svg>
+                </button>
+              </div>
+
+              <div className="rounded-xl p-4 mb-5" style={{ background: '#f5f3ff' }}>
+                <p className="text-[13px] font-semibold text-slate-800 mb-1">Authorize Google Calendar Access</p>
+                <p className="text-[12px] text-slate-500 leading-relaxed">
+                  Your calendar was created. Now authorize it so ERPNext can sync events with your Google account.
+                  You'll be redirected to Google — come back here and click Sync when done.
+                </p>
+              </div>
+
+              {addError && <p className="text-[11.5px] text-red-500 mb-3">{addError}</p>}
+
+              <div className="flex items-center justify-end gap-2">
+                <button type="button" onClick={() => setShowAdd(false)}
+                  className="h-9 px-4 rounded-lg text-[13px] font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors">
+                  Skip for now
+                </button>
+                <button type="button" onClick={handleAuthorize} disabled={authorizing}
+                  className="flex items-center gap-2 h-9 px-4 rounded-lg text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                  style={{ background: BRAND }}>
+                  {/* Google G icon */}
+                  <svg viewBox="0 0 18 18" width="13" height="13" fill="none">
+                    <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844a4.14 4.14 0 0 1-1.796 2.716v2.259h2.908C16.658 14.075 17.64 11.767 17.64 9.2z" fill="white" opacity=".9"/>
+                    <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="white" opacity=".8"/>
+                    <path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="white" opacity=".7"/>
+                    <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="white" opacity=".9"/>
+                  </svg>
+                  {authorizing ? 'Opening…' : 'Authorize Google Calendar'}
+                </button>
+              </div>
+            </>}
+
           </div>
         </div>
       )}

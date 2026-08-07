@@ -187,7 +187,7 @@ export function CalendarPage() {
   const [viewDate,    setViewDate]    = useState(new Date(today.getFullYear(), today.getMonth(), 1))
   const [selectedDay, setSelectedDay] = useState(todayYMD)
   const [search,      setSearch]      = useState('')
-  const [filter,      setFilter]      = useState<FilterKey>('today')
+  const [filter,      setFilter]      = useState<FilterKey>('all')
 
   const [events,     setEvents]     = useState<Meeting[]>([])
   const [loading,    setLoading]    = useState(false)

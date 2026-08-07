@@ -132,13 +132,15 @@ export async function createErpEvent(payload: {
 export async function prepareForFullSync(calendarName: string): Promise<void> {
   await httpClient.put(`/api/resource/Google Calendar/${encodeURIComponent(calendarName)}`, {
     pull_from_google_calendar: 1,
+    sync_as_public: 1,
     next_sync_token: '',
   })
 }
 
-export async function syncGoogleCalendar(account: string): Promise<void> {
-  await httpClient.post(
+export async function syncGoogleCalendar(account: string): Promise<string[]> {
+  const { data } = await httpClient.post<{ message: string[] }>(
     '/api/method/frappe.integrations.doctype.google_calendar.google_calendar.sync',
     { account },
   )
+  return data.message ?? []
 }

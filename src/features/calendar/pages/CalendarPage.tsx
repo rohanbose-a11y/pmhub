@@ -286,7 +286,8 @@ export function CalendarPage() {
       // last sync). Failures are swallowed — sync still runs even if the
       // PUT is rejected (e.g. Frappe field permissions).
       await Promise.allSettled(calendars.map(c => prepareForFullSync(c.name)))
-      await Promise.all(calendars.map(c => syncGoogleCalendar(c.name)))
+      const syncResults = await Promise.all(calendars.map(c => syncGoogleCalendar(c.name)))
+      console.log('[Sync] messages from ERPNext:', syncResults.flat())
 
       // After full sync, fetch a wide range (1 yr back → 1 yr ahead) so
       // historical events appear without requiring month navigation.

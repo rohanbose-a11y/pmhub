@@ -82,19 +82,20 @@ const CRM_DISPLAY_FIELD: Record<string, string> = {
 
 export const CRM_DOCTYPES = Object.keys(CRM_DISPLAY_FIELD)
 
-export interface DoctypeRecord { name: string; display: string }
+export interface DoctypeRecord { name: string; display: string; email?: string }
 
 export async function searchDoctype(doctype: string, query: string): Promise<DoctypeRecord[]> {
   const displayField = CRM_DISPLAY_FIELD[doctype] ?? 'name'
-  const fields = displayField !== 'name' ? ['name', displayField] : ['name']
+  const fields = ['name', displayField, 'email_id'].filter((f, i, a) => a.indexOf(f) === i)
   const filters = query
     ? JSON.stringify([[displayField, 'like', `%${query}%`]])
     : undefined
-  const { data } = await httpClient.get<{ data: Record<string, string>[] }>(
+  const { data, status } = await httpClient.get<{ data: Record<string, string>[] }>(
     `/api/resource/${encodeURIComponent(doctype)}`,
-    { params: { fields: JSON.stringify(fields), ...(filters ? { filters } : {}), limit: 20 } },
+    { params: { fields: JSON.stringify(fields), ...(filters ? { filters } : {}), limit: 20 }, validateStatus: (s) => s < 500 },
   )
-  return data.data.map(r => ({ name: r.name, display: r[displayField] || r.name }))
+  if (status !== 200) return []
+  return data.data.map(r => ({ name: r.name, display: r[displayField] || r.name, email: r.email_id || undefined }))
 }
 
 export async function createErpEvent(payload: {
@@ -113,7 +114,7 @@ export async function createErpEvent(payload: {
   add_video_conferencing?: 0 | 1
   google_calendar?: string
   pulled_from_google_calendar?: 0 | 1
-  event_participants?: { doctype: 'Event Participants'; reference_doctype: string; reference_docname: string }[]
+  event_participants?: { doctype: 'Event Participants'; reference_doctype: string; reference_docname: string; email?: string }[]
   description?: string
 }): Promise<ErpEvent> {
   const { data } = await httpClient.post<{ data: ErpEvent }>('/api/resource/Event', {

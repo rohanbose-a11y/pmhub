@@ -8,6 +8,7 @@ import { AssignTaskModal } from './AssignTaskModal'
 import type { Project } from '../../projects/types/project.types'
 import type { Task, TaskComment, CreateTaskInput } from '../types/task.types'
 import { autoRepeatApi, WEEKDAYS } from '../../../api/autoRepeatApi'
+import { AddEventModal } from '../../calendar/components/AddEventModal'
 import type { RepeatFrequency, Weekday } from '../../../api/autoRepeatApi'
 import { userApi } from '../../../api/userApi'
 import type { UserOption } from '../../../api/userApi'
@@ -144,7 +145,8 @@ export function CreateTaskModal({
 
   // ── Right panel ───────────────────────────────────────────────────────────
   const [commExpanded, setCommExpanded] = useState(false)
-  const [commTab, setCommTab] = useState<'repeat' | 'comments' | 'links' | 'activity'>('comments')
+  const [commTab, setCommTab] = useState<'repeat' | 'comments' | 'links' | 'activity' | 'meet'>('comments')
+  const [showAddEvent, setShowAddEvent] = useState(false)
   // ── Dropdown open states ───────────────────────────────────────────────────
   const [showPriorityMenu, setShowPriorityMenu] = useState(false)
   const [showActTypeMenu,  setShowActTypeMenu]  = useState(false)
@@ -371,7 +373,7 @@ export function CreateTaskModal({
         setEngDays(''); setParentTask(''); setIsMilestone(false); setIsGroup(false)
         setDescription(''); setDepTaskIds([]); setShowDepPicker(false); setDepPickerValue(''); setPendingAssignees([]); setEditorKey((k) => k + 1); setProjectError(false)
         setRepeatEnabled(false); setRepeatStart(''); setRepeatEnd(''); setRepeatOnDay(''); setRepeatOnWeekdays([]); setRepeatError(null)
-        setPendingComments([]); setCommentText(''); setPendingLinks([]); setLinkName(''); setLinkUrl('')
+        setPendingComments([]); setCommentText(''); setPendingLinks([]); setLinkName(''); setLinkUrl(''); setMeetUrl('')
         setTimeout(() => titleInputRef.current?.focus(), 60)
       } else {
         onSuccess()
@@ -876,6 +878,12 @@ export function CreateTaskModal({
                   badge: null,
                   icon: <svg fill="none" viewBox="0 0 14 14" width="15" height="15"><circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.3"/><path d="M7 4.5v3l2 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,
                 },
+                {
+                  tab: 'meet',
+                  label: 'Meet',
+                  badge: null,
+                  icon: <svg fill="none" viewBox="0 0 14 14" width="15" height="15"><rect x="1" y="3.5" width="8.5" height="7" rx="1.2" stroke="currentColor" strokeWidth="1.3"/><path d="M9.5 6.2l3-1.7v5l-3-1.7V6.2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>,
+                },
               ] as const).map(({ tab, label, icon, badge }) => (
                 <button
                   key={tab}
@@ -902,7 +910,7 @@ export function CreateTaskModal({
               {/* Header */}
               <div className="flex-shrink-0 flex items-center gap-2 px-3 h-11 border-b border-slate-100">
                 <span className="flex-1 text-[13px] font-semibold text-slate-700">
-                  {commTab === 'repeat' ? 'Repeat' : commTab === 'comments' ? 'Comments' : commTab === 'links' ? 'Links' : 'Activity'}
+                  {commTab === 'repeat' ? 'Repeat' : commTab === 'comments' ? 'Comments' : commTab === 'links' ? 'Links' : commTab === 'meet' ? 'Meet' : 'Activity'}
                 </span>
                 <button
                   type="button"
@@ -918,7 +926,7 @@ export function CreateTaskModal({
 
               {/* Tab bar — all 4 always visible */}
               <div className="flex-shrink-0 flex items-center border-b border-slate-100 px-1">
-                {(['repeat', 'comments', 'links', 'activity'] as const).map((tab) => (
+                {(['repeat', 'comments', 'links', 'activity', 'meet'] as const).map((tab) => (
                   <button
                     key={tab}
                     type="button"
@@ -930,7 +938,7 @@ export function CreateTaskModal({
                         : 'border-transparent text-slate-400 hover:text-slate-600',
                     ].join(' ')}
                   >
-                    {tab === 'repeat' ? 'Repeat' : tab === 'comments' ? 'Comments' : tab === 'links' ? 'Links' : 'Activity'}
+                    {tab === 'repeat' ? 'Repeat' : tab === 'comments' ? 'Comments' : tab === 'links' ? 'Links' : tab === 'meet' ? 'Meet' : 'Activity'}
                     {tab === 'repeat' && repeatError && (
                       <span className="ml-1 inline-flex w-1.5 h-1.5 rounded-full bg-rose-500 align-middle -mt-0.5"/>
                     )}
@@ -1119,6 +1127,33 @@ export function CreateTaskModal({
                     </div>
                     <p className="text-[12.5px] font-medium text-slate-600">No activity yet</p>
                     <p className="text-[11.5px] text-slate-400">Activity will appear after saving</p>
+                  </div>
+                )}
+                {commTab === 'meet' && (
+                  <div className="p-4 space-y-4">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#e8f0fe' }}>
+                        <svg fill="none" viewBox="0 0 20 20" width="16" height="16">
+                          <rect x="1" y="5" width="13" height="10" rx="2" stroke="#1a73e8" strokeWidth="1.5"/>
+                          <path d="M14 8.5l5-3v9l-5-3V8.5z" stroke="#1a73e8" strokeWidth="1.5" strokeLinejoin="round"/>
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-[13px] font-semibold text-slate-700">Google Meet</p>
+                        <p className="text-[11px] text-slate-400">Schedule a meeting for this task</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddEvent(true)}
+                      className="flex items-center justify-center gap-2 w-full h-9 rounded-lg text-[13px] font-medium transition-colors"
+                      style={{ background: '#f0f4ff', color: '#1a73e8', border: '1px solid #c5d8ff' }}
+                    >
+                      <svg fill="none" viewBox="0 0 16 16" width="13" height="13">
+                        <path d="M8 2v12M2 8h12" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6"/>
+                      </svg>
+                      Schedule Meeting
+                    </button>
                   </div>
                 )}
                 {commTab === 'links' && (
@@ -1496,6 +1531,14 @@ export function CreateTaskModal({
 
       </div>
     </div>
+
+    <AddEventModal
+      open={showAddEvent}
+      onClose={() => setShowAddEvent(false)}
+      defaultSubject={subject.trim() || undefined}
+      defaultAssignees={pendingAssignees}
+      zIndex={60}
+    />
 
     {/* Assign picker — local only, no API calls; selected users are passed to createTask */}
     {showAssignPicker && (

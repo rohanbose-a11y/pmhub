@@ -1,6 +1,7 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 
+import { userApi } from '../../../api/userApi'
 import { useEmployee } from '../../employees/hooks/useEmployee'
 import { useAuthStore } from '../../../store/authStore'
 import { useWorkStore } from '../../../store/workStore'
@@ -241,6 +242,7 @@ export function ProfilePage() {
   const [activeTab,   setActiveTab]   = useState<TabKey>('personal')
   const [copied,      setCopied]      = useState(false)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [imgUrl,      setImgUrl]      = useState<string | null>(null)
 
   const username    = user?.username ?? ''
   const fullName    = user?.fullName ?? username
@@ -248,6 +250,10 @@ export function ProfilePage() {
   const initials    = fullName.split(' ').slice(0, 2).map((n) => n[0]).join('').toUpperCase() || '?'
   const avatarColor = avBg(username)
   const isLoading   = wsStatus === 'loading'
+
+  useEffect(() => {
+    if (username) userApi.getImage(username).then((url) => { if (url) setImgUrl(url) })
+  }, [username])
 
   const { employee } = useEmployee(username)
 
@@ -294,7 +300,7 @@ export function ProfilePage() {
           >
 
             {/* ── Cover + avatar ─────────────────────────────────────────── */}
-            <div className="relative" style={{ marginBottom: 52 }}>
+            <div className="relative" style={{ marginBottom: 76 }}>
 
               {/* Cover gradient */}
               <div
@@ -320,28 +326,43 @@ export function ProfilePage() {
                 </svg>
 
                 {/* Ambient blobs */}
-                <div style={{ position: 'absolute', top: -28, right: '18%', width: 140, height: 140, borderRadius: '50%', background: 'rgba(255,255,255,0.08)', filter: 'blur(28px)' }}/>
-                <div style={{ position: 'absolute', bottom: -46, left: '5%',  width: 170, height: 170, borderRadius: '50%', background: 'rgba(99,102,241,0.22)', filter: 'blur(36px)' }}/>
+                <div style={{ position: 'absolute', top: -28, right: '18%', width: 140, height: 140, borderRadius: 24, background: 'rgba(255,255,255,0.08)', filter: 'blur(28px)' }}/>
+                <div style={{ position: 'absolute', bottom: -46, left: '5%',  width: 170, height: 170, borderRadius: 24, background: 'rgba(99,102,241,0.22)', filter: 'blur(36px)' }}/>
               </div>
 
               {/* Avatar */}
-              <div style={{ position: 'absolute', bottom: -38, left: 20 }}>
+              <div style={{ position: 'absolute', bottom: -60, left: 20 }}>
                 <div style={{ position: 'relative', display: 'inline-block' }}>
-                  <div
-                    className="flex items-center justify-center font-bold select-none"
-                    style={{
-                      width:        76,
-                      height:       76,
-                      borderRadius: 18,
-                      background:   avatarColor,
-                      fontSize:     26,
-                      color:        'white',
-                      border:       '3px solid white',
-                      boxShadow:    '0 4px 16px rgba(0,0,0,.18)',
-                    }}
-                  >
-                    {initials}
-                  </div>
+                  {imgUrl ? (
+                    <div style={{
+                      width: 116, height: 116, borderRadius: 24, overflow: 'hidden',
+                      border: '3px solid white', boxShadow: '0 4px 16px rgba(0,0,0,.18)',
+                      flexShrink: 0,
+                    }}>
+                      <img
+                        src={imgUrl}
+                        alt={fullName}
+                        onError={() => setImgUrl(null)}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                      />
+                    </div>
+                  ) : (
+                    <div
+                      className="flex items-center justify-center font-bold select-none"
+                      style={{
+                        width:        116,
+                        height:       116,
+                        borderRadius: 24,
+                        background:   avatarColor,
+                        fontSize:     34,
+                        color:        'white',
+                        border:       '3px solid white',
+                        boxShadow:    '0 4px 16px rgba(0,0,0,.18)',
+                      }}
+                    >
+                      {initials}
+                    </div>
+                  )}
 
                   {/* Online dot */}
                   <span
@@ -367,7 +388,7 @@ export function ProfilePage() {
                       right:      -3,
                       width:      24,
                       height:     24,
-                      borderRadius: '50%',
+                      borderRadius: 24,
                       background: '#1F2937',
                       border:     '2.5px solid white',
                       cursor:     'pointer',

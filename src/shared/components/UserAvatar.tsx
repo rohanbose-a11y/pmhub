@@ -32,10 +32,11 @@ function buildInitials(fullName?: string | null, fallback?: string): string {
 }
 
 const SIZES = {
-  xs: { wrap: 'w-5 h-5', font: 'text-[9px]' },
-  sm: { wrap: 'w-7 h-7', font: 'text-xs' },
-  md: { wrap: 'w-8 h-8', font: 'text-sm' },
-  lg: { wrap: 'w-14 h-14', font: 'text-xl' },
+  xs:  { wrap: 'w-5 h-5',    font: 'text-[9px]' },
+  sm:  { wrap: 'w-7 h-7',    font: 'text-xs'    },
+  md:  { wrap: 'w-8 h-8',    font: 'text-sm'    },
+  nav: { wrap: 'w-[38px] h-[38px]', font: 'text-sm' },
+  lg:  { wrap: 'w-14 h-14',  font: 'text-xl'    },
 } as const
 
 export interface UserAvatarProps {

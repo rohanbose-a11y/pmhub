@@ -438,7 +438,7 @@ export function AppShellLayout() {
 
         {/* User avatar */}
         <Link to="/profile" style={{ textDecoration: 'none' }} title={username ?? ''}>
-          <UserAvatar name={username ?? ''} fullName={user?.fullName} size="sm" />
+          <UserAvatar name={username ?? ''} fullName={user?.fullName} size="nav" className="ring-[1.5px] ring-white/50" />
         </Link>
       </header>
 

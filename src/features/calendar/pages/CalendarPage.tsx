@@ -1421,10 +1421,6 @@ export function CalendarPage() {
               {addError && <p className="text-[11.5px] text-red-500 mb-3">{addError}</p>}
 
               <div className="flex items-center justify-end gap-2">
-                <button type="button" onClick={() => setShowAdd(false)}
-                  className="h-9 px-4 rounded-lg text-[13px] font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors">
-                  Skip for now
-                </button>
                 <button type="button" onClick={handleAuthorize} disabled={authorizing}
                   className="flex items-center gap-2 h-9 px-4 rounded-lg text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
                   style={{ background: BRAND }}>

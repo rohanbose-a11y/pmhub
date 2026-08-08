@@ -373,7 +373,7 @@ export function CreateTaskModal({
         setEngDays(''); setParentTask(''); setIsMilestone(false); setIsGroup(false)
         setDescription(''); setDepTaskIds([]); setShowDepPicker(false); setDepPickerValue(''); setPendingAssignees([]); setEditorKey((k) => k + 1); setProjectError(false)
         setRepeatEnabled(false); setRepeatStart(''); setRepeatEnd(''); setRepeatOnDay(''); setRepeatOnWeekdays([]); setRepeatError(null)
-        setPendingComments([]); setCommentText(''); setPendingLinks([]); setLinkName(''); setLinkUrl(''); setMeetUrl('')
+        setPendingComments([]); setCommentText(''); setPendingLinks([]); setLinkName(''); setLinkUrl('')
         setTimeout(() => titleInputRef.current?.focus(), 60)
       } else {
         onSuccess()

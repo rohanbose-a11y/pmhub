@@ -1039,30 +1039,28 @@ export function CreateTaskModal({
                   </div>
                 )}
                 {commTab === 'meet' && (
-                  <div className="p-4 space-y-4">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#e8f0fe' }}>
-                        <svg fill="none" viewBox="0 0 20 20" width="16" height="16">
-                          <rect x="1" y="5" width="13" height="10" rx="2" stroke="#1a73e8" strokeWidth="1.5"/>
-                          <path d="M14 8.5l5-3v9l-5-3V8.5z" stroke="#1a73e8" strokeWidth="1.5" strokeLinejoin="round"/>
-                        </svg>
-                      </div>
-                      <div>
-                        <p className="text-[13px] font-semibold text-slate-700">Google Meet</p>
-                        <p className="text-[11px] text-slate-400">Schedule a meeting for this task</p>
-                      </div>
-                    </div>
+                  <div className="p-3 space-y-3">
                     <button
                       type="button"
                       onClick={() => setShowAddEvent(true)}
-                      className="flex items-center justify-center gap-2 w-full h-9 rounded-lg text-[13px] font-medium transition-colors"
+                      className="flex items-center justify-center gap-2 w-full h-9 rounded-lg text-[12.5px] font-medium transition-colors"
                       style={{ background: '#f0f4ff', color: '#1a73e8', border: '1px solid #c5d8ff' }}
                     >
-                      <svg fill="none" viewBox="0 0 16 16" width="13" height="13">
+                      <svg fill="none" viewBox="0 0 16 16" width="12" height="12">
                         <path d="M8 2v12M2 8h12" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6"/>
                       </svg>
                       Schedule Meeting
                     </button>
+                    <div className="flex flex-col items-center justify-center py-8 text-center">
+                      <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mb-2">
+                        <svg fill="none" viewBox="0 0 20 20" width="16" height="16" className="text-slate-400">
+                          <rect x="1" y="5" width="13" height="10" rx="2" stroke="currentColor" strokeWidth="1.4"/>
+                          <path d="M14 8.5l5-3v9l-5-3V8.5z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/>
+                        </svg>
+                      </div>
+                      <p className="text-[12px] text-slate-400">Meetings will appear here</p>
+                      <p className="text-[11px] text-slate-300 mt-0.5">after saving this task</p>
+                    </div>
                   </div>
                 )}
                 {commTab === 'links' && (
@@ -1473,6 +1471,7 @@ export function CreateTaskModal({
       open={showAddEvent}
       onClose={() => setShowAddEvent(false)}
       defaultSubject={subject.trim() || undefined}
+      defaultDescription={description || undefined}
       defaultAssignees={pendingAssignees}
       zIndex={60}
     />

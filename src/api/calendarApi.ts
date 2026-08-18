@@ -15,11 +15,27 @@ export interface ErpEvent {
   description: string | null
   event_type: string
   google_calendar: string | null
+  google_meet_link?: string | null
   owner: string
+  repeat_this_event?: number
+  repeat_on?: string | null
+  repeat_till?: string | null
 }
 
-const GCal_FIELDS  = ['name', 'calendar_name', 'enable', 'user']
-const EVENT_FIELDS = ['name', 'subject', 'starts_on', 'ends_on', 'description', 'event_type', 'google_calendar', 'owner']
+export interface EventParticipant {
+  name: string
+  reference_doctype: string
+  reference_docname: string
+  email: string
+}
+
+export interface ErpEventDetail extends ErpEvent {
+  location?: string | null
+  google_meet_link?: string | null
+  event_participants?: EventParticipant[]
+}
+
+const GCal_FIELDS = ['name', 'calendar_name', 'enable', 'user']
 
 export async function getGoogleCalendars(): Promise<GoogleCalendarConfig[]> {
   const { data } = await httpClient.get<{ data: GoogleCalendarConfig[] }>('/api/resource/Google Calendar', {
@@ -33,18 +49,79 @@ export async function getGoogleCalendars(): Promise<GoogleCalendarConfig[]> {
 }
 
 export async function getCalendarEvents(from: string, to: string): Promise<ErpEvent[]> {
-  const { data } = await httpClient.get<{ data: ErpEvent[] }>('/api/resource/Event', {
-    params: {
-      fields: JSON.stringify(EVENT_FIELDS),
-      filters: JSON.stringify([
-        ['starts_on', '>=', from],
-        ['starts_on', '<=', to + ' 23:59:59'],
-      ]),
-      limit: 500,
-      order_by: 'starts_on asc',
-    },
-  })
+  // Use the dedicated event API which expands repeat occurrences into virtual
+  // instances — unlike /api/resource/Event which only returns base documents
+  // filtered by starts_on and misses future repeat instances.
+  const { data } = await httpClient.get<{ message: ErpEvent[] }>(
+    '/api/method/frappe.desk.doctype.event.event.get_events',
+    { params: { start: from, end: to } },
+  )
+  return data.message ?? []
+}
+
+/**
+ * Fetch all events linked to a task.
+ * Two strategies merged + deduplicated:
+ *   1. Event Participants where reference_doctype=Task, reference_docname=taskId (new meetings)
+ *   2. Events whose subject exactly matches the task subject (legacy meetings created before linking existed)
+ */
+export async function getEventsByTask(taskId: string, taskSubject?: string): Promise<ErpEvent[]> {
+  const fields = JSON.stringify(['name', 'subject', 'starts_on', 'ends_on', 'google_meet_link', 'owner', 'event_type'])
+
+  const [byParticipant, bySubject] = await Promise.all([
+    httpClient.get<{ data: ErpEvent[] }>('/api/resource/Event', {
+      params: {
+        fields,
+        filters: JSON.stringify([
+          ['Event Participants', 'reference_doctype', '=', 'Task'],
+          ['Event Participants', 'reference_docname', '=', taskId],
+        ]),
+        limit: 50,
+        order_by: 'starts_on asc',
+      },
+    }).then(r => r.data.data).catch(() => []),
+
+    taskSubject
+      ? httpClient.get<{ data: ErpEvent[] }>('/api/resource/Event', {
+          params: {
+            fields,
+            filters: JSON.stringify([['subject', '=', taskSubject]]),
+            limit: 50,
+            order_by: 'starts_on asc',
+          },
+        }).then(r => r.data.data).catch(() => [])
+      : Promise.resolve<ErpEvent[]>([]),
+  ])
+
+  // Merge, deduplicate by name, sort ascending
+  const seen = new Set<string>()
+  const merged: ErpEvent[] = []
+  for (const e of [...byParticipant, ...bySubject]) {
+    if (!seen.has(e.name)) { seen.add(e.name); merged.push(e) }
+  }
+  return merged.sort((a, b) => a.starts_on.localeCompare(b.starts_on))
+}
+
+export async function getCalendarEventDetail(name: string): Promise<ErpEventDetail> {
+  const { data } = await httpClient.get<{ data: ErpEventDetail }>(
+    `/api/resource/Event/${encodeURIComponent(name)}`,
+  )
   return data.data
+}
+
+export async function updateErpEvent(
+  name: string,
+  payload: Omit<Parameters<typeof createErpEvent>[0], 'pulled_from_google_calendar'>,
+): Promise<ErpEvent> {
+  const { data } = await httpClient.put<{ data: ErpEvent }>(
+    `/api/resource/Event/${encodeURIComponent(name)}`,
+    payload,
+  )
+  return data.data
+}
+
+export async function deleteErpEvent(name: string): Promise<void> {
+  await httpClient.delete(`/api/resource/Event/${encodeURIComponent(name)}`)
 }
 
 export async function createGoogleCalendar(payload: {
@@ -107,6 +184,13 @@ export async function createErpEvent(payload: {
   event_type?: string
   color?: string
   repeat_this_event?: 0 | 1
+  repeat_on?: string         // "Daily" | "Weekly" | "Monthly" | "Yearly"
+  repeat_till?: string       // "YYYY-MM-DD" — required when repeat_this_event=1
+  monday?: 0 | 1
+  tuesday?: 0 | 1
+  wednesday?: 0 | 1
+  thursday?: 0 | 1
+  friday?: 0 | 1
   location?: string
   status?: string
   attending?: string

@@ -19,6 +19,7 @@ import { UserAvatar } from '../../../shared/components/UserAvatar'
 import { InlineDatePicker } from '../../../shared/components/Datepicker'
 import { formatUserDisplay } from '../../../shared/lib/formatUserDisplay'
 import { AddEventModal } from '../../calendar/components/AddEventModal'
+import { getEventsByTask, type ErpEvent } from '../../../api/calendarApi'
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -174,6 +175,8 @@ export function TaskDetailModal({
   const [commTab, setCommTab] = useState<'repeat' | 'comments' | 'activity' | 'attachments' | 'meet'>('activity')
   const [showAddEvent, setShowAddEvent] = useState(false)
   const [showTimeSoon, setShowTimeSoon] = useState(false)
+  const [taskMeetings, setTaskMeetings] = useState<ErpEvent[]>([])
+  const [meetingsLoading, setMeetingsLoading] = useState(false)
 
   // Editing state — initialised from store task, updated when fullTask arrives
   const [title, setTitle]                       = useState(task.subject)
@@ -364,6 +367,16 @@ export function TaskDetailModal({
       })
       .catch(() => setHolidayDates(new Set()))
   }, [savedRepeat?.id, savedRepeat?.frequency]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Load meetings linked to this task when Meet tab is opened ────────────
+  useEffect(() => {
+    if (commTab !== 'meet') return
+    setMeetingsLoading(true)
+    getEventsByTask(task.id, task.subject)
+      .then(setTaskMeetings)
+      .catch(() => setTaskMeetings([]))
+      .finally(() => setMeetingsLoading(false))
+  }, [commTab, task.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Track status changes from outside (status modal) ──────────────────────
   const prevStatusRef = useRef(task.status)
@@ -1296,7 +1309,9 @@ export function TaskDetailModal({
                 {
                   tab: 'meet' as const,
                   label: 'Meet',
-                  badge: null,
+                  badge: taskMeetings.length > 0
+                    ? <span className="absolute top-0.5 right-0.5 min-w-[14px] h-3.5 px-0.5 rounded-full bg-indigo-500 text-white text-[8px] font-bold flex items-center justify-center">{taskMeetings.length}</span>
+                    : null,
                   icon: <svg fill="none" viewBox="0 0 14 14" width="15" height="15"><rect x="1" y="3.5" width="8.5" height="7" rx="1.2" stroke="currentColor" strokeWidth="1.3"/><path d="M9.5 6.2l3-1.7v5l-3-1.7V6.2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>,
                 },
               ]).map(({ tab, label, icon, badge }) => (
@@ -1360,6 +1375,9 @@ export function TaskDetailModal({
                     )}
                     {tab === 'comments' && comments.length > 0 && (
                       <span className="ml-1 inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-indigo-100 text-indigo-600 text-[9px] font-bold align-middle -mt-0.5">{comments.length}</span>
+                    )}
+                    {tab === 'meet' && taskMeetings.length > 0 && (
+                      <span className="ml-1 inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-indigo-100 text-indigo-600 text-[9px] font-bold align-middle -mt-0.5">{taskMeetings.length}</span>
                     )}
                   </button>
                 ))}
@@ -1573,33 +1591,96 @@ export function TaskDetailModal({
                 })()}
 
                 {/* Meet tab */}
-                {commTab === 'meet' && (
-                  <div className="p-4 space-y-4">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: '#e8f0fe' }}>
-                        <svg fill="none" viewBox="0 0 20 20" width="16" height="16">
-                          <rect x="1" y="5" width="13" height="10" rx="2" stroke="#1a73e8" strokeWidth="1.5"/>
-                          <path d="M14 8.5l5-3v9l-5-3V8.5z" stroke="#1a73e8" strokeWidth="1.5" strokeLinejoin="round"/>
-                        </svg>
+                {commTab === 'meet' && (() => {
+                  const now = new Date()
+                  const upcoming = taskMeetings.filter(e => new Date(e.starts_on) >= now)
+                  const past     = [...taskMeetings.filter(e => new Date(e.starts_on) < now)].reverse()
+                  const fmtEvtDate = (s: string) => {
+                    const d = new Date(s)
+                    const date = d.toLocaleDateString('en', { month: 'short', day: 'numeric' })
+                    const time = d.toLocaleTimeString('en', { hour: 'numeric', minute: '2-digit' })
+                    return `${date} · ${time}`
+                  }
+                  const MeetCard = ({ evt, done }: { evt: ErpEvent; done: boolean }) => (
+                    <div className={`rounded-xl border p-3 space-y-1.5 ${done ? 'border-slate-100 bg-slate-50' : 'border-blue-100 bg-blue-50'}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <p className={`text-[12.5px] font-semibold leading-snug flex-1 ${done ? 'text-slate-500' : 'text-slate-800'}`}>{evt.subject}</p>
+                        {done && (
+                          <span className="flex-shrink-0 text-[9.5px] font-bold uppercase tracking-wide text-slate-400 bg-slate-100 rounded-full px-2 py-0.5">Done</span>
+                        )}
+                        {!done && (
+                          <span className="flex-shrink-0 text-[9.5px] font-bold uppercase tracking-wide text-blue-600 bg-blue-100 rounded-full px-2 py-0.5">Upcoming</span>
+                        )}
                       </div>
-                      <div>
-                        <p className="text-[13px] font-semibold text-slate-700">Google Meet</p>
-                        <p className="text-[11px] text-slate-400">Schedule a meeting for this task</p>
-                      </div>
+                      <p className={`text-[11px] ${done ? 'text-slate-400' : 'text-blue-500'}`}>{fmtEvtDate(evt.starts_on)}</p>
+                      {evt.google_meet_link && (
+                        <a
+                          href={evt.google_meet_link}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={e => e.stopPropagation()}
+                          className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold rounded-lg px-2.5 py-1 transition-opacity hover:opacity-80"
+                          style={{ background: '#00897B', color: 'white' }}
+                        >
+                          <svg viewBox="0 0 20 20" fill="none" width="11" height="11">
+                            <rect x="1" y="5" width="11" height="10" rx="1.5" fill="white"/>
+                            <path d="M12 9l7-4v10l-7-4V9z" fill="white"/>
+                          </svg>
+                          Join Meet
+                        </a>
+                      )}
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowAddEvent(true)}
-                      className="flex items-center justify-center gap-2 w-full h-9 rounded-lg text-[13px] font-medium transition-colors"
-                      style={{ background: '#f0f4ff', color: '#1a73e8', border: '1px solid #c5d8ff' }}
-                    >
-                      <svg fill="none" viewBox="0 0 16 16" width="13" height="13">
-                        <path d="M8 2v12M2 8h12" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6"/>
-                      </svg>
-                      Schedule Meeting
-                    </button>
-                  </div>
-                )}
+                  )
+                  return (
+                    <div className="p-3 space-y-3">
+                      <button
+                        type="button"
+                        onClick={() => setShowAddEvent(true)}
+                        className="flex items-center justify-center gap-2 w-full h-9 rounded-lg text-[12.5px] font-medium transition-colors"
+                        style={{ background: '#f0f4ff', color: '#1a73e8', border: '1px solid #c5d8ff' }}
+                      >
+                        <svg fill="none" viewBox="0 0 16 16" width="12" height="12">
+                          <path d="M8 2v12M2 8h12" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6"/>
+                        </svg>
+                        Schedule Meeting
+                      </button>
+                      {meetingsLoading ? (
+                        <div className="space-y-2">
+                          {[1, 2].map(i => <div key={i} className="h-16 rounded-xl bg-slate-100 animate-pulse" />)}
+                        </div>
+                      ) : taskMeetings.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-8 text-center">
+                          <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mb-2">
+                            <svg fill="none" viewBox="0 0 20 20" width="16" height="16" className="text-slate-400">
+                              <rect x="1" y="5" width="13" height="10" rx="2" stroke="currentColor" strokeWidth="1.4"/>
+                              <path d="M14 8.5l5-3v9l-5-3V8.5z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/>
+                            </svg>
+                          </div>
+                          <p className="text-[12px] text-slate-400">No meetings scheduled yet</p>
+                        </div>
+                      ) : (
+                        <>
+                          {upcoming.length > 0 && (
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Upcoming</p>
+                              <div className="space-y-2">
+                                {upcoming.map(e => <MeetCard key={e.name} evt={e} done={false} />)}
+                              </div>
+                            </div>
+                          )}
+                          {past.length > 0 && (
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Past</p>
+                              <div className="space-y-2">
+                                {past.map(e => <MeetCard key={e.name} evt={e} done={true} />)}
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )
+                })()}
 
                 {/* Links tab */}
                 {commTab === 'attachments' && (() => {
@@ -1939,8 +2020,13 @@ export function TaskDetailModal({
       <AddEventModal
         open={showAddEvent}
         onClose={() => setShowAddEvent(false)}
+        onCreated={() => {
+          getEventsByTask(task.id, task.subject).then(setTaskMeetings).catch(() => {})
+        }}
         defaultSubject={title}
+        defaultDescription={description || undefined}
         defaultAssignees={task.assignedTo}
+        linkedTaskId={task.id}
         zIndex={60}
       />
 

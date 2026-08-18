@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import DOMPurify from 'dompurify'
 import {
   prepareForFullSync,
   createGoogleCalendar,
   getCalendarEvents,
+  getCalendarEventDetail,
+  deleteErpEvent,
   getGoogleCalendars,
   getGoogleCalendarAuthUrl,
   syncGoogleCalendar,
   type ErpEvent,
+  type ErpEventDetail,
   type GoogleCalendarConfig,
 } from '../../../api/calendarApi'
 import { useAuthStore } from '../../../store/authStore'
@@ -28,6 +32,7 @@ interface Meeting {
   status: MeetingStatus
   color: string
   description?: string
+  meetUrl?: string
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -93,6 +98,24 @@ function parseDT(dt: string): { date: string; time: string } {
   return { date, time: time.slice(0, 5) }
 }
 
+function calcDuration(start: string, end: string): string {
+  if (!start || !end) return ''
+  const [sh, sm] = start.split(':').map(Number)
+  const [eh, em] = end.split(':').map(Number)
+  const mins = (eh * 60 + em) - (sh * 60 + sm)
+  if (mins <= 0) return ''
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  if (h === 0) return `${m}m`
+  return m === 0 ? `${h}h` : `${h}h ${m}m`
+}
+
+function participantInitials(email: string): string {
+  const local = email.split('@')[0]
+  const parts = local.split(/[._-]/)
+  return parts.slice(0, 2).map(p => p[0]?.toUpperCase() ?? '').join('')
+}
+
 function erpToMeeting(e: ErpEvent): Meeting {
   const { date, time: startTime } = parseDT(e.starts_on)
   const endTime = e.ends_on ? parseDT(e.ends_on).time : startTime
@@ -107,6 +130,7 @@ function erpToMeeting(e: ErpEvent): Meeting {
     status:         deriveStatus(e.starts_on, e.ends_on),
     color:          hashColor(e.google_calendar ?? e.name),
     description:    e.description ?? undefined,
+    meetUrl:        e.google_meet_link ?? undefined,
   }
 }
 
@@ -132,12 +156,320 @@ function buildCalendarGrid(year: number, month: number): (number | null)[][] {
 
 // ─── Meeting Card ─────────────────────────────────────────────────────────────
 
-function MeetingCard({ meeting, compact = false }: { meeting: Meeting; compact?: boolean }) {
+function MeetingDetailModal({
+  meeting, detail, detailLoading,
+  onClose, onEdit, onDelete,
+  confirmDelete, onConfirmDelete, onCancelDelete,
+  deleting, deleteError,
+}: {
+  meeting: Meeting
+  detail: ErpEventDetail | null
+  detailLoading: boolean
+  onClose: () => void
+  onEdit: () => void
+  onDelete: () => void
+  confirmDelete: boolean
+  onConfirmDelete: () => void
+  onCancelDelete: () => void
+  deleting: boolean
+  deleteError: string
+}) {
+
+  const sc       = statusCfg(meeting.status)
+  const duration = calcDuration(meeting.startTime, meeting.endTime)
+  const dateLabel = new Date(meeting.date + 'T12:00:00').toLocaleDateString(undefined, {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+  })
+  const participants = detail?.event_participants ?? []
+  const meetLink     = detail?.google_meet_link ?? null
+  const location     = detail?.location ?? null
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-6"
+      style={{ background: 'rgba(15,23,42,0.55)', backdropFilter: 'blur(2px)' }}
+      onClick={onClose}
+    >
+      <div
+        className="bg-white rounded-2xl w-full shadow-2xl overflow-hidden flex flex-col relative"
+        style={{ maxWidth: 1100, maxHeight: '90vh' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Accent bar */}
+        <div style={{ height: 4, background: meeting.color, flexShrink: 0 }} />
+
+        {/* ── Header ── */}
+        <div className="flex items-start gap-4 px-7 pt-5 pb-4 flex-shrink-0">
+          <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{ background: `${meeting.color}18` }}>
+            <svg fill="none" viewBox="0 0 20 20" width="17" height="17" style={{ color: meeting.color }}>
+              <rect x="2.5" y="3.5" width="15" height="14" rx="2.5" stroke="currentColor" strokeWidth="1.5"/>
+              <path d="M6.5 2v3M13.5 2v3M2.5 8h15" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              <rect x="6" y="11" width="2.5" height="2.5" rx="0.5" fill="currentColor" opacity=".5"/>
+              <rect x="10.75" y="11" width="2.5" height="2.5" rx="0.5" fill="currentColor"/>
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-[18px] font-bold text-slate-900 leading-snug">{meeting.title}</h2>
+            <p className="text-[12px] text-slate-400 mt-0.5">{dateLabel}</p>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0 mt-0.5 flex-wrap justify-end">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold"
+              style={{ background: sc.bg, color: sc.text }}>
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: sc.dot }} />
+              {sc.label}
+            </span>
+            <button onClick={onEdit}
+              className="h-7 px-2.5 flex items-center gap-1.5 rounded-lg text-[11.5px] font-semibold border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors flex-shrink-0">
+              <svg fill="none" viewBox="0 0 14 14" width="10" height="10">
+                <path d="M9.5 1.5l3 3-8 8H1.5v-3l8-8z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
+              </svg>
+              Edit
+            </button>
+            <button onClick={onDelete}
+              className="h-7 px-2.5 flex items-center gap-1.5 rounded-lg text-[11.5px] font-semibold border border-red-200 text-red-500 hover:bg-red-50 transition-colors flex-shrink-0">
+              <svg fill="none" viewBox="0 0 14 14" width="10" height="10">
+                <path d="M2 4h10M5 4V2.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 .5.5V4M5.5 6.5v4M8.5 6.5v4M3 4l.5 7.5a.5.5 0 0 0 .5.5h6a.5.5 0 0 0 .5-.5L11 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+              </svg>
+              Delete
+            </button>
+            <button
+              onClick={onClose}
+              className="w-8 h-8 flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+            >
+              <svg fill="none" viewBox="0 0 14 14" width="12" height="12">
+                <path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* ── Body ── */}
+        <div className="flex flex-1 min-h-0 border-t border-slate-100">
+
+          {/* Left sidebar */}
+          <div className="flex-shrink-0 flex flex-col gap-5 px-6 py-5 overflow-y-auto" style={{ width: 256, background: '#fafafa', borderRight: '1px solid #f1f5f9' }}>
+
+            {/* When */}
+            <div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2.5">When</p>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2.5">
+                  <svg fill="none" viewBox="0 0 16 16" width="13" height="13" className="text-slate-400 flex-shrink-0">
+                    <rect x="1.5" y="2.5" width="13" height="12" rx="2" stroke="currentColor" strokeWidth="1.3"/>
+                    <path d="M5 1v3M11 1v3M1.5 6h13" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                  </svg>
+                  <span className="text-[12.5px] text-slate-700 font-medium">
+                    {new Date(meeting.date + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+                  </span>
+                </div>
+                {meeting.startTime && (
+                  <div className="flex items-center gap-2.5">
+                    <svg fill="none" viewBox="0 0 16 16" width="13" height="13" className="text-slate-400 flex-shrink-0">
+                      <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.3"/>
+                      <path d="M8 5V8l2 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                    </svg>
+                    <span className="text-[12.5px] text-slate-700 font-medium">
+                      {fmtTime(meeting.startTime)}
+                      {meeting.endTime && meeting.endTime !== meeting.startTime && ` – ${fmtTime(meeting.endTime)}`}
+                    </span>
+                  </div>
+                )}
+                {duration && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10.5px] font-semibold ml-[21px]"
+                    style={{ background: `${meeting.color}15`, color: meeting.color }}>
+                    {duration}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Location */}
+            {location && (
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2.5">Location</p>
+                <div className="flex items-start gap-2.5">
+                  <svg fill="none" viewBox="0 0 16 16" width="13" height="13" className="text-slate-400 flex-shrink-0 mt-0.5">
+                    <path d="M8 1.5a4.5 4.5 0 0 1 4.5 4.5c0 3-4.5 8.5-4.5 8.5S3.5 9 3.5 6A4.5 4.5 0 0 1 8 1.5z" stroke="currentColor" strokeWidth="1.3"/>
+                    <circle cx="8" cy="6" r="1.5" stroke="currentColor" strokeWidth="1.3"/>
+                  </svg>
+                  <span className="text-[12px] text-slate-600 leading-snug">{location}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Organizer */}
+            <div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2.5">Organizer</p>
+              <div className="flex items-center gap-2.5">
+                <span className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-white flex-shrink-0 text-[10px]"
+                  style={{ background: hashColor(meeting.organizer) }}>
+                  {initials(meeting.organizer)}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[12.5px] font-semibold text-slate-800 leading-tight truncate">{meeting.organizer}</p>
+                  <p className="text-[11px] text-slate-400 truncate">{meeting.organizerEmail}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Repeat */}
+            {detail?.repeat_this_event ? (
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2.5">Repeat</p>
+                <div className="flex items-center gap-2">
+                  <svg fill="none" viewBox="0 0 14 14" width="13" height="13" className="text-slate-400 flex-shrink-0">
+                    <path d="M11 3.5l2 2-2 2M3 3.5H13M3 10.5l-2-2 2-2M11 10.5H1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  <div>
+                    <p className="text-[12.5px] font-semibold text-slate-800">{detail.repeat_on ?? 'Repeating'}</p>
+                    {detail.repeat_till && (
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        until {new Date(detail.repeat_till + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {/* Meet link */}
+            {detailLoading ? (
+              <div className="h-10 w-10 rounded-xl bg-slate-100 animate-pulse" />
+            ) : meetLink ? (
+              <div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2.5">Meeting Link</p>
+                <a
+                  href={meetLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="Join Google Meet"
+                  className="flex items-center gap-2.5 group w-fit"
+                  onClick={e => e.stopPropagation()}
+                >
+                  {/* Google Meet brand icon */}
+                  <span className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 shadow-sm group-hover:shadow-md transition-shadow overflow-hidden" style={{ background: '#00897B' }}>
+                    <svg viewBox="0 0 48 48" width="22" height="22" fill="none">
+                      <path d="M28 24l8.4-6.2a1 1 0 0 1 1.6.8v10.8a1 1 0 0 1-1.6.8L28 24z" fill="#fff"/>
+                      <rect x="10" y="14" width="20" height="20" rx="3" fill="#fff"/>
+                    </svg>
+                  </span>
+                  <span className="text-[12px] font-semibold text-slate-600 group-hover:text-[#00897B] transition-colors">Join Google Meet</span>
+                </a>
+              </div>
+            ) : null}
+          </div>
+
+          {/* Right content */}
+          <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+
+            {/* Participants */}
+            <div className="px-7 py-5 border-b border-slate-100">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                  Participants
+                  {!detailLoading && participants.length > 0 && (
+                    <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 normal-case tracking-normal text-[10px] font-semibold">
+                      {participants.length}
+                    </span>
+                  )}
+                </p>
+              </div>
+              {detailLoading ? (
+                <div className="flex gap-2">
+                  {[1,2,3].map(i => (
+                    <div key={i} className="h-8 rounded-lg bg-slate-100 animate-pulse" style={{ width: 110 }} />
+                  ))}
+                </div>
+              ) : participants.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {participants.map((p) => {
+                    const email = p.email || p.reference_docname || ''
+                    const color = hashColor(email || 'unknown')
+                    const label = p.reference_docname || email.split('@')[0] || 'Unknown'
+                    const displayName = label.split(/[._-]/).map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+                    return (
+                      <div
+                        key={p.name ?? email}
+                        className="flex items-center gap-2 pl-1 pr-3 py-1 rounded-full border border-slate-200 bg-white"
+                        title={email}
+                      >
+                        <span className="w-6 h-6 rounded-full flex items-center justify-center font-bold text-white flex-shrink-0 text-[9px]"
+                          style={{ background: color }}>
+                          {participantInitials(email || 'UN')}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-[11.5px] font-semibold text-slate-700 leading-none truncate" style={{ maxWidth: 140 }}>{displayName}</p>
+                          {email && <p className="text-[10px] text-slate-400 leading-none mt-0.5 truncate" style={{ maxWidth: 140 }}>{email}</p>}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <p className="text-[12px] text-slate-300 italic">No participants added</p>
+              )}
+            </div>
+
+            {/* Description */}
+            <div className="px-7 py-5">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Description</p>
+              {(() => {
+                const desc = detail?.description ?? meeting.description
+                return desc
+                  ? <div
+                      className="text-[13px] text-slate-600 leading-relaxed [&_p]:mb-1.5 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_strong]:font-semibold"
+                      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(desc) }}
+                    />
+                  : <p className="text-[12.5px] text-slate-300 italic">No description provided</p>
+              })()}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Delete confirmation overlay ── */}
+        {confirmDelete && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl"
+            style={{ background: 'rgba(15,23,42,0.65)', backdropFilter: 'blur(3px)' }}>
+            <div className="bg-white rounded-xl p-6 mx-4 max-w-sm w-full shadow-2xl">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: '#fff1f2' }}>
+                <svg fill="none" viewBox="0 0 20 20" width="16" height="16">
+                  <path d="M10 6v5M10 13v.5" stroke="#ef4444" strokeWidth="1.6" strokeLinecap="round"/>
+                  <path d="M8.27 2.75h3.46l6.27 10.5a1 1 0 0 1-.87 1.5H2.87a1 1 0 0 1-.87-1.5L8.27 2.75z" stroke="#ef4444" strokeWidth="1.4"/>
+                </svg>
+              </div>
+              <h3 className="text-[15px] font-bold text-slate-900 mb-1.5">Delete this event?</h3>
+              <p className="text-[12.5px] text-slate-500 mb-4 leading-relaxed">
+                <span className="font-semibold text-slate-700">"{meeting.title}"</span> will be permanently deleted from ERPNext and Google Calendar.
+              </p>
+              {deleteError && (
+                <p className="text-[11.5px] text-red-500 mb-3 px-3 py-2 rounded-lg bg-red-50">{deleteError}</p>
+              )}
+              <div className="flex gap-2">
+                <button onClick={onCancelDelete} disabled={deleting}
+                  className="flex-1 h-9 px-4 rounded-lg text-[13px] font-medium text-slate-600 border border-slate-200 hover:bg-slate-50 transition-colors disabled:opacity-50">
+                  Cancel
+                </button>
+                <button onClick={onConfirmDelete} disabled={deleting}
+                  className="flex-1 h-9 px-4 rounded-lg text-[13px] font-semibold text-white bg-red-500 hover:bg-red-600 transition-colors disabled:opacity-50">
+                  {deleting ? 'Deleting…' : 'Delete Event'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function MeetingCard({ meeting, compact = false, onClick }: { meeting: Meeting; compact?: boolean; onClick?: () => void }) {
   const sc = statusCfg(meeting.status)
   return (
     <div
       className="rounded-xl bg-white border border-slate-100 hover:shadow-sm transition-shadow cursor-pointer"
       style={{ borderLeft: `3px solid ${meeting.color}`, padding: compact ? '9px 12px' : '12px 14px' }}
+      onClick={onClick}
     >
       <div className="flex items-start justify-between gap-2 mb-1.5">
         <h4 className="font-semibold text-slate-800 leading-snug line-clamp-2"
@@ -152,24 +484,46 @@ function MeetingCard({ meeting, compact = false }: { meeting: Meeting; compact?:
           {sc.label}
         </span>
       </div>
-      <div className="flex items-center gap-3 flex-wrap" style={{ fontSize: '11px', color: '#64748b' }}>
-        {meeting.startTime && (
-          <span className="flex items-center gap-1">
-            <svg fill="none" viewBox="0 0 12 12" width="10" height="10">
-              <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.2"/>
-              <path d="M6 3.5V6l1.5 1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+      <div className="flex items-center justify-between gap-2 mt-1.5">
+        <div className="flex items-center gap-2 flex-wrap" style={{ fontSize: '11px', color: '#64748b' }}>
+          {meeting.startTime && (
+            <span className="flex items-center gap-1">
+              <svg fill="none" viewBox="0 0 12 12" width="10" height="10">
+                <circle cx="6" cy="6" r="4.5" stroke="currentColor" strokeWidth="1.2"/>
+                <path d="M6 3.5V6l1.5 1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+              </svg>
+              {fmtTime(meeting.startTime)}
+              {meeting.endTime && meeting.endTime !== meeting.startTime ? ` – ${fmtTime(meeting.endTime)}` : ''}
+            </span>
+          )}
+          {/* Organizer avatar + name */}
+          <span className="flex items-center gap-1.5">
+            <span
+              className="w-5 h-5 rounded-full flex items-center justify-center font-bold text-white flex-shrink-0"
+              style={{ background: hashColor(meeting.organizer), fontSize: '7px' }}
+            >
+              {initials(meeting.organizer)}
+            </span>
+            {meeting.organizer}
+          </span>
+        </div>
+        {/* Google Meet icon */}
+        {meeting.meetUrl && (
+          <a
+            href={meeting.meetUrl}
+            target="_blank"
+            rel="noreferrer"
+            title="Join Google Meet"
+            onClick={e => e.stopPropagation()}
+            className="flex-shrink-0 w-6 h-6 rounded-lg flex items-center justify-center hover:opacity-80 transition-opacity"
+            style={{ background: '#00897B' }}
+          >
+            <svg viewBox="0 0 20 20" fill="none" width="12" height="12">
+              <rect x="1" y="5" width="11" height="10" rx="1.5" fill="white"/>
+              <path d="M12 9l7-4v10l-7-4V9z" fill="white"/>
             </svg>
-            {fmtTime(meeting.startTime)}
-            {meeting.endTime && meeting.endTime !== meeting.startTime ? ` – ${fmtTime(meeting.endTime)}` : ''}
-          </span>
+          </a>
         )}
-        <span className="flex items-center gap-1.5">
-          <span className="w-4 h-4 rounded-full flex items-center justify-center font-bold text-white flex-shrink-0"
-            style={{ background: hashColor(meeting.organizer), fontSize: '7px' }}>
-            {initials(meeting.organizer)}
-          </span>
-          {meeting.organizer}
-        </span>
       </div>
     </div>
   )
@@ -213,8 +567,34 @@ export function CalendarPage() {
   const [addedCalName,  setAddedCalName]  = useState('')
   const [authorizing,   setAuthorizing]   = useState(false)
 
-  // Add Event modal
-  const [showEvent, setShowEvent] = useState(false)
+  // Add / Edit Event modal
+  const [showEvent,     setShowEvent]     = useState(false)
+  const [showEditEvent, setShowEditEvent] = useState(false)
+
+  // Meeting detail modal
+  const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null)
+
+  // Delete confirmation
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting,      setDeleting]      = useState(false)
+  const [deleteError,   setDeleteError]   = useState('')
+
+  // Mobile sidebar toggle
+  const [showMobileSidebar, setShowMobileSidebar] = useState(false)
+
+  // Fetch event detail when a meeting is selected
+  const [detail, setDetail]               = useState<ErpEventDetail | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+
+  useEffect(() => {
+    if (!selectedMeeting) { setDetail(null); return }
+    setDetailLoading(true)
+    getCalendarEventDetail(selectedMeeting.id)
+      .then(setDetail)
+      .catch(() => setDetail(null))
+      .finally(() => setDetailLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMeeting?.id])
 
   const year  = viewDate.getFullYear()
   const month = viewDate.getMonth()
@@ -344,6 +724,34 @@ export function CalendarPage() {
     setEvents(erp.map(erpToMeeting))
   }
 
+  async function handleDeleteEvent() {
+    if (!selectedMeeting) return
+    setDeleting(true); setDeleteError('')
+    try {
+      await deleteErpEvent(selectedMeeting.id)
+      await refreshCurrentMonth()
+      setSelectedMeeting(null); setConfirmDelete(false)
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
+      setDeleteError(msg ?? 'Failed to delete. Try again.')
+    } finally { setDeleting(false) }
+  }
+
+  // ESC closes modals in priority order
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return
+      if (showEditEvent) { setShowEditEvent(false); return }
+      if (confirmDelete) { setConfirmDelete(false); return }
+      if (selectedMeeting) { setSelectedMeeting(null); return }
+      if (showEvent) { setShowEvent(false); return }
+      if (showMobileSidebar) { setShowMobileSidebar(false); return }
+      if (showAdd) { setShowAdd(false) }
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [showEditEvent, confirmDelete, selectedMeeting, showEvent, showMobileSidebar, showAdd])
+
   const meetingsByDate = useMemo(() => {
     const m = new Map<string, Meeting[]>()
     events.forEach(mtg => {
@@ -427,6 +835,17 @@ export function CalendarPage() {
           </div>
 
           <div className="flex-1" />
+
+          {/* Mobile sidebar toggle */}
+          <button type="button" onClick={() => setShowMobileSidebar(v => !v)}
+            className="lg:hidden w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 transition-colors flex-shrink-0"
+            style={{ color: showMobileSidebar ? BRAND : '#64748b' }}>
+            <svg fill="none" viewBox="0 0 16 16" width="14" height="14">
+              <rect x="1.5" y="2.5" width="13" height="12" rx="2" stroke="currentColor" strokeWidth="1.3"/>
+              <path d="M9.5 2.5v12" stroke="currentColor" strokeWidth="1.3"/>
+              <path d="M4.5 6.5h3M4.5 9.5h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
+            </svg>
+          </button>
 
           {/* Search */}
           <div className="relative hidden md:block">
@@ -606,8 +1025,13 @@ export function CalendarPage() {
           </div>
         </div>
 
+        {/* Mobile sidebar backdrop */}
+        {showMobileSidebar && (
+          <div className="fixed inset-0 z-30 bg-black/20 lg:hidden" onClick={() => setShowMobileSidebar(false)} />
+        )}
+
         {/* ── Events Sidebar ── */}
-        <div className="hidden lg:flex w-[300px] xl:w-[320px] flex-shrink-0 flex-col bg-white overflow-hidden">
+        <div className={`${showMobileSidebar ? 'flex fixed inset-y-0 right-0 z-40 shadow-2xl border-l border-slate-200' : 'hidden'} lg:flex lg:static lg:shadow-none lg:border-l-0 w-[300px] xl:w-[320px] flex-shrink-0 flex-col bg-white overflow-hidden`}>
 
           {/* Selected day panel */}
           <div className="flex-shrink-0" style={{ borderBottom: '1px solid #f1f5f9' }}>
@@ -635,7 +1059,7 @@ export function CalendarPage() {
                   No events — click any date in the grid
                 </p>
               ) : (
-                dayMeetings.map(m => <MeetingCard key={m.id} meeting={m} compact />)
+                dayMeetings.map(m => <MeetingCard key={m.id} meeting={m} compact onClick={() => setSelectedMeeting(m)} />)
               )}
             </div>
           </div>
@@ -704,7 +1128,7 @@ export function CalendarPage() {
                           <span className="text-[10px]" style={{ color: '#cbd5e1' }}>{meetings.length}</span>
                         </div>
                         <div className="space-y-1.5">
-                          {meetings.map(m => <MeetingCard key={m.id} meeting={m} compact />)}
+                          {meetings.map(m => <MeetingCard key={m.id} meeting={m} compact onClick={() => setSelectedMeeting(m)} />)}
                         </div>
                       </div>
                     )
@@ -716,6 +1140,34 @@ export function CalendarPage() {
         </div>
       </div>
 
+
+      {/* ══ Meeting Detail Modal ══ */}
+      {selectedMeeting && (
+        <MeetingDetailModal
+          meeting={selectedMeeting}
+          detail={detail}
+          detailLoading={detailLoading}
+          onClose={() => setSelectedMeeting(null)}
+          onEdit={() => setShowEditEvent(true)}
+          onDelete={() => setConfirmDelete(true)}
+          confirmDelete={confirmDelete}
+          onConfirmDelete={handleDeleteEvent}
+          onCancelDelete={() => setConfirmDelete(false)}
+          deleting={deleting}
+          deleteError={deleteError}
+        />
+      )}
+
+      {/* ══ Edit Event Modal ══ */}
+      {detail && (
+        <AddEventModal
+          event={detail}
+          open={showEditEvent}
+          onClose={() => setShowEditEvent(false)}
+          onUpdated={async () => { await refreshCurrentMonth(); setShowEditEvent(false); setSelectedMeeting(null) }}
+          zIndex={60}
+        />
+      )}
 
       {/* ══ Add Event Modal ══ */}
       <AddEventModal

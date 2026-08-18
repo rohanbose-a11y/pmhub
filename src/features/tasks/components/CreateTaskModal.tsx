@@ -12,6 +12,7 @@ import { getUpcomingRepeatDates } from '../../../shared/lib/getUpcomingRepeatDat
 import { autoRepeatApi } from '../../../api/autoRepeatApi'
 import { AddEventModal } from '../../calendar/components/AddEventModal'
 import { ErrorBanner } from '../../../shared/components/ErrorBanner'
+import { InlineDatePicker } from '../../../shared/components/InlineDatePicker'
 import type { RepeatFrequency, Weekday } from '../../../api/autoRepeatApi'
 import { RepeatModal } from './RepeatModal'
 import { PRIORITY_CONFIG } from '../config/priorityConfig'
@@ -156,8 +157,6 @@ export function CreateTaskModal({
   const projectDropRef     = useRef<HTMLDivElement>(null)
   const parentTriggerRef   = useRef<HTMLDivElement>(null)
   const parentDropRef      = useRef<HTMLDivElement>(null)
-  const startDateRef       = useRef<HTMLInputElement>(null)
-  const dueDateRef         = useRef<HTMLInputElement>(null)
   const engDaysInputRef    = useRef<HTMLInputElement>(null)
   const titleInputRef      = useRef<HTMLInputElement>(null)
 
@@ -501,35 +500,27 @@ export function CreateTaskModal({
                         <rect x="1" y="2.5" width="12" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
                         <path d="M1 6h12M4.5 1v3M9.5 1v3" stroke="currentColor" strokeLinecap="round" strokeWidth="1.3"/>
                       </svg>
-                      <button
-                        type="button"
-                        className={startDate ? 'text-slate-700 hover:text-indigo-600 transition-colors' : 'text-slate-300 hover:text-slate-400 transition-colors'}
-                        onClick={() => startDateRef.current?.showPicker?.() ?? startDateRef.current?.click()}
-                      >
-                        {startDate ? fmtDate(startDate) : 'Start'}
-                      </button>
-                      <input ref={startDateRef} type="date" value={startDate} onChange={(e) => {
-                        const v = e.target.value
-                        setStartDate(v)
-                        const calc = calcEngagementDays(v, dueDate)
-                        if (calc !== undefined) setEngDays(String(calc))
-                      }} className="sr-only"/>
+                      <InlineDatePicker
+                        value={startDate}
+                        onChange={(v) => {
+                          setStartDate(v)
+                          const calc = calcEngagementDays(v, dueDate)
+                          if (calc !== undefined) setEngDays(String(calc))
+                        }}
+                        placeholder="Start"
+                      />
                       <svg fill="none" viewBox="0 0 14 6" width="12" height="6" className="text-slate-300 flex-shrink-0">
                         <path d="M0 3h12M9 1l3 2-3 2" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.2"/>
                       </svg>
-                      <button
-                        type="button"
-                        className={dueDate ? 'text-slate-700 hover:text-indigo-600 transition-colors' : 'text-slate-300 hover:text-slate-400 transition-colors'}
-                        onClick={() => dueDateRef.current?.showPicker?.() ?? dueDateRef.current?.click()}
-                      >
-                        {dueDate ? fmtDate(dueDate) : 'Due'}
-                      </button>
-                      <input ref={dueDateRef} type="date" value={dueDate} onChange={(e) => {
-                        const v = e.target.value
-                        setDueDate(v)
-                        const calc = calcEngagementDays(startDate, v)
-                        if (calc !== undefined) setEngDays(String(calc))
-                      }} className="sr-only"/>
+                      <InlineDatePicker
+                        value={dueDate}
+                        onChange={(v) => {
+                          setDueDate(v)
+                          const calc = calcEngagementDays(startDate, v)
+                          if (calc !== undefined) setEngDays(String(calc))
+                        }}
+                        placeholder="Due"
+                      />
                     </div>
                   </div>
 

@@ -6,7 +6,7 @@ import { useKraOptions } from '../../../hooks/useKraOptions'
 import { useAuthStore } from '../../../store/authStore'
 import { AssignTaskModal } from './AssignTaskModal'
 import type { Project } from '../../projects/types/project.types'
-import type { Task, TaskComment, CreateTaskInput } from '../types/task.types'
+import type { Task, TaskComment, CreateTaskInput, AddNewType } from '../types/task.types'
 import { calcEngagementDays } from '../../../shared/lib/calcEngagementDays'
 import { getUpcomingRepeatDates } from '../../../shared/lib/getUpcomingRepeatDates'
 import { autoRepeatApi } from '../../../api/autoRepeatApi'
@@ -53,11 +53,6 @@ function initials(s: string) {
   return s.replace(/[@.]/g, ' ').split(/\s+/).filter(Boolean).map((p) => p[0]).join('').toUpperCase().slice(0, 2)
 }
 
-function fmtDate(v: string) {
-  if (!v) return null
-  return new Date(v).toLocaleDateString('en', { month: 'short', day: 'numeric' })
-}
-
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface CreateTaskModalProps {
@@ -68,6 +63,7 @@ interface CreateTaskModalProps {
   initialProject?: string
   initialIsMilestone?: boolean
   initialIsGroup?: boolean
+  mode?: AddNewType
   onSubmit: (input: CreateTaskInput) => Promise<Task | null>
   onClose: () => void
   onSuccess: () => void
@@ -311,11 +307,9 @@ export function CreateTaskModal({
     if (projects.length > 0 && !project) { setProjectError(true); return }
     // Validate repeat: must have a start date if enabled
     if (repeatEnabled && !repeatStart) {
-      setRepeatError('A start date is required to enable repeat.')
       setShowRepeatModal(true)
       return
     }
-    setRepeatError(null)
     const engDaysNum = engDays !== '' ? Number(engDays) : undefined
     // Serialize pending links as <a> HTML appended to description
     const linksHtml = pendingLinks.map((l) =>
@@ -1487,6 +1481,7 @@ export function CreateTaskModal({
           priority,
           type: null,
           activityType: null,
+          customRaci: null,
           isMilestone,
           isGroup,
           autoRepeat: null,

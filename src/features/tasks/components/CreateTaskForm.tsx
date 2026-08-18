@@ -132,7 +132,6 @@ export function CreateTaskForm({
       setFieldErrors({})
       setEditorKey((k) => k + 1)
       setDepTaskIds([])
-      setDepPickerValue('')
       onSuccess?.()
     }
   }

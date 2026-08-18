@@ -32,10 +32,6 @@ const STATUS_CONFIG = [
   { key: 'Cancelled',      dot: 'bg-rose-400',    pill: 'bg-rose-50 text-rose-600'         },
 ]
 
-function fmtDate(v: string | null) {
-  if (!v) return null
-  return new Date(v).toLocaleDateString('en', { month: 'short', day: 'numeric' })
-}
 
 function fmtActivity(d: Date) {
   const diff = Date.now() - d.getTime()
@@ -174,7 +170,6 @@ export function TaskDetailModal({
   const [commExpanded, setCommExpanded] = useState(true)
   const [commTab, setCommTab] = useState<'repeat' | 'comments' | 'activity' | 'attachments' | 'meet'>('activity')
   const [showAddEvent, setShowAddEvent] = useState(false)
-  const [showTimeSoon, setShowTimeSoon] = useState(false)
   const [taskMeetings, setTaskMeetings] = useState<ErpEvent[]>([])
   const [meetingsLoading, setMeetingsLoading] = useState(false)
 
@@ -220,11 +215,6 @@ export function TaskDetailModal({
     if (!entry.name) return
     setActivityLog((prev) => prev.filter((e) => e !== entry))
     taskApi.deleteActivityComment(entry.name).catch(() => {/* non-fatal */})
-  }
-
-  const triggerTimeSoon = () => {
-    setShowTimeSoon(true)
-    setTimeout(() => setShowTimeSoon(false), 2800)
   }
 
   // Fixed-position dropdown anchoring (escape overflow:hidden on the modal)
@@ -626,14 +616,6 @@ export function TaskDetailModal({
         addActivity({ type: 'desc', text: val ? `Activity type set to ${val}` : 'Activity type cleared' })
       }
     }
-  }
-
-  const toggleMilestone = async () => {
-    await onUpdate(task.id, { subject: task.subject, status: liveStatus, priority: livePriority, isMilestone: !task.isMilestone })
-  }
-
-  const toggleIsGroup = async () => {
-    await onUpdate(task.id, { subject: task.subject, status: liveStatus, priority: livePriority, isGroup: !task.isGroup })
   }
 
   const selectParentTask = async (parentId: string | null) => {

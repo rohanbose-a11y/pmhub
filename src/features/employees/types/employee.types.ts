@@ -15,6 +15,7 @@ export interface Employee {
   hireType:         string | null
   designation:      string | null
   department:       string | null
+  branch:           string | null
   company:          string | null
   // Education / skills
   levelOfEducation: string | null

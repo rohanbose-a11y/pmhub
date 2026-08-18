@@ -1,10 +1,14 @@
 import { useEffect, useState } from 'react'
+import { RichTextEditor } from '../../../shared/components/RichTextEditor'
+import { employeeApi } from '../../../api/employeeApi'
+import { useAuthStore } from '../../../store/authStore'
 import {
   createErpEvent,
+  updateErpEvent,
   getGoogleCalendars,
   searchDoctype,
-  CRM_DOCTYPES,
   type DoctypeRecord,
+  type ErpEventDetail,
   type GoogleCalendarConfig,
 } from '../../../api/calendarApi'
 import { formatUserDisplay } from '../../../shared/lib/formatUserDisplay'
@@ -44,6 +48,9 @@ export interface AddEventModalProps {
   open:           boolean
   onClose:        () => void
   onCreated?:     () => void
+  onUpdated?:     () => void
+  /** When provided the modal runs in edit mode */
+  event?:          ErpEventDetail
   /** Pre-fill the subject field — useful when opening from a task */
   defaultSubject?: string
   /** Pre-fill the date field (YYYY-MM-DD) — defaults to today */
@@ -52,6 +59,10 @@ export interface AddEventModalProps {
   zIndex?:         number
   /** Task assignees to pre-populate as event participants */
   defaultAssignees?: string[]
+  /** Pre-fill the description field — useful when opening from a task */
+  defaultDescription?: string
+  /** When set, silently links the event to this Task so it appears in the task's Meet tab */
+  linkedTaskId?: string
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -60,11 +71,17 @@ export function AddEventModal({
   open,
   onClose,
   onCreated,
+  onUpdated,
+  event,
   defaultSubject = '',
   defaultDate,
   zIndex = 50,
   defaultAssignees,
+  defaultDescription,
+  linkedTaskId,
 }: AddEventModalProps) {
+  const isEditMode = Boolean(event)
+  const currentUser = useAuthStore(s => s.user)
   const [calendars, setCalendars] = useState<GoogleCalendarConfig[]>([])
 
   // ── Form state ──────────────────────────────────────────────────────────────
@@ -75,8 +92,10 @@ export function AddEventModal({
   const [evtAllDay,    setEvtAllDay]    = useState(false)
   const [evtCategory,  setEvtCategory]  = useState('Meeting')
   const [evtType,      setEvtType]      = useState('Private')
-  const [evtColor,     setEvtColor]     = useState('')
   const [evtRepeat,    setEvtRepeat]    = useState(false)
+  const [evtRepeatOn,   setEvtRepeatOn]   = useState('Daily')
+  const [evtRepeatTill, setEvtRepeatTill] = useState('')
+  const [evtRepeatDays, setEvtRepeatDays] = useState<string[]>([])
   const [evtLocation,  setEvtLocation]  = useState('')
   const [evtStatus,    setEvtStatus]    = useState('Open')
   const [evtAttending, setEvtAttending] = useState('Yes')
@@ -84,13 +103,14 @@ export function AddEventModal({
   const [evtVideoConf, setEvtVideoConf] = useState(false)
   const [evtGCalLink,  setEvtGCalLink]  = useState('')
   const [evtDesc,      setEvtDesc]      = useState('')
+  const [editorKey,    setEditorKey]    = useState(0)
   const [evtSaving,    setEvtSaving]    = useState(false)
   const [evtError,     setEvtError]     = useState('')
   const [evtTab,       setEvtTab]       = useState<'details' | 'participants'>('details')
 
   // ── Participants sub-form ───────────────────────────────────────────────────
   const [evtParticipants, setEvtParticipants] = useState<Participant[]>([])
-  const [pDoctype,        setPDoctype]        = useState(CRM_DOCTYPES[0])
+  const pDoctype = 'Contact'
   const [pQuery,          setPQuery]          = useState('')
   const [pResults,        setPResults]        = useState<DoctypeRecord[]>([])
   const [pSearching,      setPSearching]      = useState(false)
@@ -103,29 +123,71 @@ export function AddEventModal({
       .catch(() => setCalendars([]))
   }, [])
 
-  // ── Reset form when modal opens ────────────────────────────────────────────
+  // ── Populate form when modal opens ────────────────────────────────────────
   useEffect(() => {
     if (!open) return
-    setEvtSubject(defaultSubject)
-    setEvtDate(defaultDate ?? todayYMD())
-    setEvtStartTime('09:00'); setEvtEndTime('10:00')
-    setEvtAllDay(false); setEvtCategory('Meeting'); setEvtType('Private')
-    setEvtColor(''); setEvtRepeat(false); setEvtLocation('')
-    setEvtStatus('Open'); setEvtAttending('Yes')
-    setEvtDesc(''); setEvtError('')
-    setEvtTab('details')
-    setEvtParticipants((defaultAssignees ?? []).map(u => ({
-      reference_doctype: 'User',
-      reference_docname: u,
-      display: formatUserDisplay(u) || u,
-      email: u,
-    })))
-    setPDoctype(CRM_DOCTYPES[0]); setPQuery(''); setPResults([]); setPSelected(null)
-    // Auto-enable sync + video if a calendar is connected
-    if (calendars.length > 0) {
-      setEvtSyncGCal(true); setEvtVideoConf(true); setEvtGCalLink(calendars[0].name)
+    setEvtError(''); setEvtTab('details')
+    setPQuery(''); setPResults([]); setPSelected(null)
+    setEditorKey(k => k + 1)
+
+    if (event) {
+      // ── Edit mode: pre-fill from existing event ──
+      const parts = event.starts_on.includes(' ') ? event.starts_on.split(' ') : [event.starts_on, '00:00:00']
+      const date  = parts[0]
+      const startTime = parts[1].slice(0, 5)
+      const endTime   = event.ends_on?.includes(' ') ? event.ends_on.split(' ')[1].slice(0, 5) : startTime
+      setEvtSubject(event.subject)
+      setEvtDate(date)
+      setEvtStartTime(startTime); setEvtEndTime(endTime)
+      setEvtAllDay(false); setEvtCategory('Meeting')
+      setEvtType(event.event_type || 'Private')
+      setEvtRepeat(Boolean(event.repeat_this_event))
+      setEvtRepeatOn(event.repeat_on || 'Daily')
+      setEvtRepeatTill(event.repeat_till || '')
+      setEvtRepeatDays([])
+      setEvtLocation(event.location || '')
+      setEvtStatus('Open'); setEvtAttending('Yes')
+      setEvtDesc(event.description ?? '')
+      setEvtParticipants(
+        (event.event_participants ?? []).map(p => ({
+          reference_doctype: p.reference_doctype,
+          reference_docname: p.reference_docname,
+          display: p.reference_docname,
+          email: p.email ?? '',
+        }))
+      )
+      if (event.google_calendar) {
+        setEvtSyncGCal(true); setEvtGCalLink(event.google_calendar)
+        setEvtVideoConf(Boolean(event.google_meet_link))
+      } else if (calendars.length > 0) {
+        setEvtSyncGCal(true); setEvtVideoConf(true); setEvtGCalLink(calendars[0].name)
+      } else {
+        setEvtSyncGCal(false); setEvtVideoConf(false); setEvtGCalLink('')
+      }
     } else {
-      setEvtSyncGCal(false); setEvtVideoConf(false); setEvtGCalLink('')
+      // ── Create mode: reset to defaults ──
+      setEvtSubject(defaultSubject)
+      setEvtDate(defaultDate ?? todayYMD())
+      setEvtStartTime('09:00'); setEvtEndTime('10:00')
+      setEvtAllDay(false); setEvtCategory('Meeting'); setEvtType('Private')
+      setEvtRepeat(false); setEvtRepeatOn('Daily'); setEvtRepeatTill(''); setEvtRepeatDays([]); setEvtLocation('')
+      if (currentUser?.username) {
+        employeeApi.findByUser(currentUser.username)
+          .then(emp => { if (emp?.branch) setEvtLocation(emp.branch) })
+          .catch(() => {})
+      }
+      setEvtStatus('Open'); setEvtAttending('Yes'); setEvtDesc(defaultDescription ?? '')
+      setEvtParticipants((defaultAssignees ?? []).map(u => ({
+        reference_doctype: 'User',
+        reference_docname: u,
+        display: formatUserDisplay(u) || u,
+        email: u,
+      })))
+      if (calendars.length > 0) {
+        setEvtSyncGCal(true); setEvtVideoConf(true); setEvtGCalLink(calendars[0].name)
+      } else {
+        setEvtSyncGCal(false); setEvtVideoConf(false); setEvtGCalLink('')
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
@@ -141,38 +203,58 @@ export function AddEventModal({
   // ── Submit ─────────────────────────────────────────────────────────────────
   async function handleSave() {
     if (!evtSubject.trim()) { setEvtError('Subject is required.'); return }
+    if (evtRepeat && !evtRepeatTill) { setEvtError('Please set a "Repeat Till" date — required for repeat events.'); return }
     setEvtSaving(true); setEvtError('')
     try {
       const starts_on = evtAllDay ? `${evtDate} 00:00:00` : `${evtDate} ${evtStartTime}:00`
       const ends_on   = evtAllDay ? `${evtDate} 23:59:59` : `${evtDate} ${evtEndTime}:00`
-      await createErpEvent({
-        subject:                     evtSubject.trim(),
+      const payload = {
+        subject:                   evtSubject.trim(),
         starts_on, ends_on,
-        all_day:                     evtAllDay    ? 1 : 0,
-        event_category:              evtCategory,
-        event_type:                  evtType,
-        color:                       evtColor     || undefined,
-        repeat_this_event:           evtRepeat    ? 1 : 0,
-        location:                    evtLocation.trim() || undefined,
-        status:                      evtStatus,
-        attending:                   evtAttending,
-        sync_with_google_calendar:   evtSyncGCal  ? 1 : 0,
-        add_video_conferencing:      evtVideoConf ? 1 : 0,
-        google_calendar:             evtGCalLink  || undefined,
-        pulled_from_google_calendar: 0,
-        event_participants: evtParticipants.map(p => ({
-          doctype:           'Event Participants' as const,
-          reference_doctype: p.reference_doctype,
-          reference_docname: p.reference_docname,
-          ...(p.email ? { email: p.email } : {}),
-        })),
+        all_day:                   evtAllDay    ? 1 : 0 as 0 | 1,
+        event_category:            evtCategory,
+        event_type:                evtType,
+        repeat_this_event:         evtRepeat    ? 1 : 0 as 0 | 1,
+        ...(evtRepeat ? {
+          repeat_on:  evtRepeatOn,
+          repeat_till: evtRepeatTill || undefined,
+          ...(evtRepeatOn === 'Weekly' ? {
+            monday:    evtRepeatDays.includes('Monday')    ? 1 : 0,
+            tuesday:   evtRepeatDays.includes('Tuesday')   ? 1 : 0,
+            wednesday: evtRepeatDays.includes('Wednesday') ? 1 : 0,
+            thursday:  evtRepeatDays.includes('Thursday')  ? 1 : 0,
+            friday:    evtRepeatDays.includes('Friday')    ? 1 : 0,
+          } : {}),
+        } : {}),
+        location:                  evtLocation.trim() || undefined,
+        status:                    evtStatus,
+        attending:                 evtAttending,
+        sync_with_google_calendar: evtSyncGCal  ? 1 : 0 as 0 | 1,
+        add_video_conferencing:    evtVideoConf ? 1 : 0 as 0 | 1,
+        google_calendar:           evtGCalLink  || undefined,
+        event_participants: [
+          // Link back to the originating task so it appears in the task's Meet tab
+          ...(linkedTaskId ? [{ doctype: 'Event Participants' as const, reference_doctype: 'Task', reference_docname: linkedTaskId }] : []),
+          ...evtParticipants.map(p => ({
+            doctype:           'Event Participants' as const,
+            reference_doctype: p.reference_doctype,
+            reference_docname: p.reference_docname,
+            ...(p.email ? { email: p.email } : {}),
+          })),
+        ],
         description: evtDesc.trim() || undefined,
-      })
-      onCreated?.()
+      }
+      if (isEditMode && event) {
+        await updateErpEvent(event.name, payload)
+        onUpdated?.()
+      } else {
+        await createErpEvent({ ...payload, pulled_from_google_calendar: 0 })
+        onCreated?.()
+      }
       onClose()
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { message?: string } } })?.response?.data?.message
-      setEvtError(msg ?? 'Failed to create event.')
+      setEvtError(msg ?? (isEditMode ? 'Failed to update event.' : 'Failed to create event.'))
     } finally { setEvtSaving(false) }
   }
 
@@ -256,16 +338,40 @@ export function AddEventModal({
                   />
                 </div>
 
-                {/* Date + All Day */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
+                {/* Date · Start · End · All Day — single row */}
+                <div className="flex items-end gap-2 flex-wrap">
+                  <div className="flex-1 min-w-[120px]">
                     <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Date</label>
                     <input type="date" value={evtDate} onChange={e => setEvtDate(e.target.value)}
                       className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent"
                       style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
                     />
                   </div>
-                  <div className="flex items-end pb-2">
+                  {!evtAllDay && <>
+                    <div className="flex-1 min-w-[90px]">
+                      <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Start</label>
+                      <input type="time" value={evtStartTime} onChange={e => {
+                        const t = e.target.value
+                        setEvtStartTime(t)
+                        if (t) {
+                          const [h, m] = t.split(':').map(Number)
+                          const end = new Date(0, 0, 0, h, m + 60)
+                          setEvtEndTime(`${String(end.getHours()).padStart(2,'0')}:${String(end.getMinutes()).padStart(2,'0')}`)
+                        }
+                      }}
+                        className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent"
+                        style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
+                      />
+                    </div>
+                    <div className="flex-1 min-w-[90px]">
+                      <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">End</label>
+                      <input type="time" value={evtEndTime} onChange={e => setEvtEndTime(e.target.value)}
+                        className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent"
+                        style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
+                      />
+                    </div>
+                  </>}
+                  <div className="flex items-center h-9 flex-shrink-0">
                     <label className="flex items-center gap-2 cursor-pointer select-none">
                       <input type="checkbox" checked={evtAllDay} onChange={e => setEvtAllDay(e.target.checked)}
                         className="w-4 h-4 rounded accent-violet-600" />
@@ -274,34 +380,22 @@ export function AddEventModal({
                   </div>
                 </div>
 
-                {/* Start / End time */}
-                {!evtAllDay && (
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Start Time</label>
-                      <input type="time" value={evtStartTime} onChange={e => setEvtStartTime(e.target.value)}
-                        className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent"
-                        style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">End Time</label>
-                      <input type="time" value={evtEndTime} onChange={e => setEvtEndTime(e.target.value)}
-                        className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent"
-                        style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {/* Category + Type */}
-                <div className="grid grid-cols-2 gap-3">
+                {/* Category · Status · Type */}
+                <div className="grid grid-cols-3 gap-3">
                   <div>
                     <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Category</label>
                     <select value={evtCategory} onChange={e => setEvtCategory(e.target.value)}
                       className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent bg-white"
                       style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}>
                       {['Event','Meeting','Call','Email','Other'].map(o => <option key={o}>{o}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Status</label>
+                    <select value={evtStatus} onChange={e => setEvtStatus(e.target.value)}
+                      className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent bg-white"
+                      style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}>
+                      {['Open','Closed','Cancelled'].map(o => <option key={o}>{o}</option>)}
                     </select>
                   </div>
                   <div>
@@ -314,16 +408,8 @@ export function AddEventModal({
                   </div>
                 </div>
 
-                {/* Status + Attending */}
+                {/* Attending · Location */}
                 <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Status</label>
-                    <select value={evtStatus} onChange={e => setEvtStatus(e.target.value)}
-                      className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent bg-white"
-                      style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}>
-                      {['Open','Closed','Cancelled'].map(o => <option key={o}>{o}</option>)}
-                    </select>
-                  </div>
                   <div>
                     <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Attending</label>
                     <select value={evtAttending} onChange={e => setEvtAttending(e.target.value)}
@@ -331,18 +417,6 @@ export function AddEventModal({
                       style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}>
                       {['Yes','No','Maybe'].map(o => <option key={o}>{o}</option>)}
                     </select>
-                  </div>
-                </div>
-
-                {/* Color + Location */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Color</label>
-                    <div className="flex items-center gap-2">
-                      <input type="color" value={evtColor || '#7B3FF2'} onChange={e => setEvtColor(e.target.value)}
-                        className="w-9 h-9 rounded-lg border border-slate-200 cursor-pointer p-0.5 bg-white" />
-                      <span className="text-[12px] text-slate-500 truncate">{evtColor || 'Pick a color'}</span>
-                    </div>
                   </div>
                   <div>
                     <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Location</label>
@@ -354,48 +428,126 @@ export function AddEventModal({
                   </div>
                 </div>
 
-                {/* Checkboxes */}
-                <div className="space-y-2 pt-0.5">
-                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                    <input type="checkbox" checked={evtRepeat} onChange={e => setEvtRepeat(e.target.checked)}
-                      className="w-4 h-4 rounded accent-violet-600" />
-                    <span className="text-[12.5px] text-slate-700">Repeat this Event</span>
-                  </label>
-                  <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                    <input type="checkbox" checked={evtSyncGCal}
-                      onChange={e => { setEvtSyncGCal(e.target.checked); if (!e.target.checked) setEvtVideoConf(false) }}
-                      className="w-4 h-4 rounded accent-violet-600" />
-                    <span className="text-[12.5px] text-slate-700">Sync with Google Calendar</span>
+                {/* ── Row 1: Repeat (hidden — RRULE UNTIL not supported by this ERPNext version) ── */}
+                {false && <div className="flex items-stretch p-1 bg-slate-50 border border-slate-200 rounded-xl">
+                  {/* Repeat toggle */}
+                  <label className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer select-none transition-all flex-shrink-0 ${evtRepeat ? 'bg-white shadow-sm border border-slate-200' : 'hover:bg-slate-100'}`}>
+                    <span className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border-2 transition-all ${evtRepeat ? 'bg-violet-600 border-violet-600' : 'border-slate-300 bg-white'}`}>
+                      {evtRepeat && <svg fill="none" viewBox="0 0 10 10" width="8" height="8"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                    </span>
+                    <input type="checkbox" checked={evtRepeat} onChange={e => setEvtRepeat(e.target.checked)} className="sr-only" />
+                    <svg fill="none" viewBox="0 0 14 14" width="12" height="12" className="text-slate-400 flex-shrink-0">
+                      <path d="M11 3.5l2 2-2 2M3 3.5H13M3 10.5l-2-2 2-2M11 10.5H1" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                    <span className="text-[12px] font-medium text-slate-700 whitespace-nowrap">Repeat</span>
                   </label>
 
-                  {evtSyncGCal && (
-                    <div className="ml-6 pl-3 border-l-2 border-slate-100 space-y-3">
-                      <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                        <input type="checkbox" checked={evtVideoConf} onChange={e => setEvtVideoConf(e.target.checked)}
-                          className="w-4 h-4 rounded accent-violet-600" />
-                        <span className="text-[12.5px] text-slate-700">Add Video Conferencing</span>
-                        <span className="text-[11px] text-slate-400">via Google Meet</span>
-                      </label>
-                      <div>
-                        <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Google Calendar</label>
-                        <select value={evtGCalLink} onChange={e => setEvtGCalLink(e.target.value)}
-                          className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent bg-white"
-                          style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}>
-                          <option value="">— None —</option>
-                          {calendars.map(c => <option key={c.name} value={c.name}>{c.calendar_name}</option>)}
-                        </select>
-                      </div>
+                  {/* Repeat On + Repeat Till — inline when repeat is on */}
+                  {evtRepeat && <>
+                    <div className="w-px bg-slate-200 self-stretch my-1 mx-1 flex-shrink-0" />
+                    <div className="flex items-center gap-1.5 px-3 flex-shrink-0">
+                      <span className="text-[11px] text-slate-400 whitespace-nowrap">every</span>
+                      <select value={evtRepeatOn} onChange={e => setEvtRepeatOn(e.target.value)}
+                        className="h-7 pl-2 pr-6 text-[12px] font-medium text-slate-700 bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 appearance-none cursor-pointer"
+                        style={{ '--tw-ring-color': '#c4b5fd', backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath d='M2 3.5l3 3 3-3' stroke='%2394a3b8' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 4px center', paddingRight: '20px' } as React.CSSProperties}>
+                        <option value="Daily">Daily</option>
+                        <option value="Weekly">Weekly (Mon–Fri)</option>
+                        <option value="Monthly">Monthly</option>
+                        <option value="Yearly">Yearly</option>
+                      </select>
                     </div>
-                  )}
+                    {/* Day toggles — Weekly only */}
+                    {evtRepeatOn === 'Weekly' && <>
+                      <div className="w-px bg-slate-200 self-stretch my-1 mx-1 flex-shrink-0" />
+                      <div className="flex items-center gap-1 px-3 flex-shrink-0">
+                        {(['Mon','Tue','Wed','Thu','Fri'] as const).map((short, i) => {
+                          const full = ['Monday','Tuesday','Wednesday','Thursday','Friday'][i]
+                          const on   = evtRepeatDays.includes(full)
+                          return (
+                            <button key={full} type="button"
+                              onClick={() => setEvtRepeatDays(prev => on ? prev.filter(d => d !== full) : [...prev, full])}
+                              className={`w-7 h-7 rounded-lg text-[10.5px] font-bold transition-all flex-shrink-0 ${on ? 'text-white shadow-sm' : 'text-slate-400 bg-slate-200 hover:bg-slate-300'}`}
+                              style={on ? { background: '#2563eb' } : {}}>
+                              {short}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </>}
+                    <div className="w-px bg-slate-200 self-stretch my-1 mx-1 flex-shrink-0" />
+                    <div className="flex items-center gap-1.5 px-3 flex-shrink-0">
+                      <span className="text-[11px] text-slate-400 whitespace-nowrap">until</span>
+                      <input type="date" value={evtRepeatTill} onChange={e => setEvtRepeatTill(e.target.value)}
+                        className={`h-7 px-2 text-[12px] font-medium text-slate-700 bg-white border rounded-lg outline-none focus:ring-2 cursor-pointer ${!evtRepeatTill ? 'border-red-300 focus:ring-red-100' : 'border-slate-200'}`}
+                        style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
+                      />
+                    </div>
+                  </>}
+                </div>}
+
+                {/* ── Row 2: Google Calendar ── */}
+                <div className="flex items-stretch p-1 bg-slate-50 border border-slate-200 rounded-xl">
+                  {/* Sync */}
+                  <label className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer select-none transition-all flex-shrink-0 ${evtSyncGCal ? 'bg-white shadow-sm border border-slate-200' : 'hover:bg-slate-100'}`}>
+                    <span className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border-2 transition-all ${evtSyncGCal ? 'bg-violet-600 border-violet-600' : 'border-slate-300 bg-white'}`}>
+                      {evtSyncGCal && <svg fill="none" viewBox="0 0 10 10" width="8" height="8"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                    </span>
+                    <input type="checkbox" checked={evtSyncGCal}
+                      onChange={e => { setEvtSyncGCal(e.target.checked); if (!e.target.checked) setEvtVideoConf(false) }}
+                      className="sr-only" />
+                    <svg viewBox="0 0 14 14" width="12" height="12" fill="none" className="flex-shrink-0">
+                      <rect x="1" y="2" width="12" height="11" rx="2" stroke="#4285F4" strokeWidth="1.2"/>
+                      <path d="M1 5h12" stroke="#4285F4" strokeWidth="1.2"/>
+                      <path d="M4 1v2M10 1v2" stroke="#4285F4" strokeWidth="1.2" strokeLinecap="round"/>
+                      <rect x="4" y="7" width="2" height="2" rx="0.4" fill="#EA4335"/>
+                      <rect x="8" y="7" width="2" height="2" rx="0.4" fill="#34A853"/>
+                    </svg>
+                    <span className="text-[12px] font-medium text-slate-700 whitespace-nowrap">Sync with Google Calendar</span>
+                  </label>
+
+                  {evtSyncGCal && <>
+                    <div className="w-px bg-slate-200 self-stretch my-1 mx-1 flex-shrink-0" />
+                    {/* Video Conference */}
+                    <label className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer select-none transition-all flex-shrink-0 ${evtVideoConf ? 'bg-white shadow-sm border border-slate-200' : 'hover:bg-slate-100'}`}>
+                      <span className={`w-4 h-4 rounded flex items-center justify-center flex-shrink-0 border-2 transition-all ${evtVideoConf ? 'bg-violet-600 border-violet-600' : 'border-slate-300 bg-white'}`}>
+                        {evtVideoConf && <svg fill="none" viewBox="0 0 10 10" width="8" height="8"><path d="M1.5 5l2.5 2.5 4.5-5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                      </span>
+                      <input type="checkbox" checked={evtVideoConf} onChange={e => setEvtVideoConf(e.target.checked)} className="sr-only" />
+                      <span className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0" style={{ background: '#00897B' }}>
+                        <svg viewBox="0 0 12 12" width="9" height="9" fill="none">
+                          <rect x="1" y="3" width="7" height="6" rx="1" fill="white"/>
+                          <path d="M8 5.5l3-2v5l-3-2V5.5z" fill="white"/>
+                        </svg>
+                      </span>
+                      <span className="text-[12px] font-medium text-slate-700 whitespace-nowrap">Video Conference</span>
+                    </label>
+
+                    <div className="w-px bg-slate-200 self-stretch my-1 mx-1 flex-shrink-0" />
+
+                    {/* Calendar picker */}
+                    <div className="flex items-center gap-1.5 px-3 flex-shrink-0">
+                      <svg fill="none" viewBox="0 0 12 12" width="11" height="11" className="text-slate-400 flex-shrink-0">
+                        <rect x="0.5" y="1.5" width="11" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.1"/>
+                        <path d="M0.5 4.5h11M3.5 0.5v2M8.5 0.5v2" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/>
+                      </svg>
+                      <select value={evtGCalLink} onChange={e => setEvtGCalLink(e.target.value)}
+                        className="h-7 pl-1 pr-6 text-[11.5px] font-medium text-slate-700 bg-transparent border-none outline-none cursor-pointer appearance-none"
+                        style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath d='M2 3.5l3 3 3-3' stroke='%2394a3b8' stroke-width='1.2' stroke-linecap='round' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 2px center', paddingRight: '18px' }}>
+                        <option value="">— Calendar —</option>
+                        {calendars.map(c => <option key={c.name} value={c.name}>{c.calendar_name}</option>)}
+                      </select>
+                    </div>
+                  </>}
                 </div>
 
                 {/* Description */}
                 <div>
                   <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Description</label>
-                  <textarea value={evtDesc} onChange={e => setEvtDesc(e.target.value)}
-                    rows={3} placeholder="Optional notes…"
-                    className="w-full px-3 py-2 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent placeholder:text-slate-400 resize-none"
-                    style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
+                  <RichTextEditor
+                    key={editorKey}
+                    defaultValue={evtDesc}
+                    onChange={setEvtDesc}
+                    placeholder="Optional notes…"
                   />
                 </div>
 
@@ -414,14 +566,6 @@ export function AddEventModal({
             {evtTab === 'participants' && (
               <div className="space-y-4">
                 <div className="flex items-end gap-2">
-                  <div className="w-36 flex-shrink-0">
-                    <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Reference Type</label>
-                    <select value={pDoctype} onChange={e => { setPDoctype(e.target.value); setPQuery(''); setPResults([]); setPSelected(null) }}
-                      className="w-full h-9 px-2 text-[12.5px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent bg-white"
-                      style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}>
-                      {CRM_DOCTYPES.map(d => <option key={d} value={d}>{d}</option>)}
-                    </select>
-                  </div>
                   <div className="flex-1 relative">
                     <label className="block text-[12px] font-semibold text-slate-600 mb-1.5">Reference Name</label>
                     <input type="text"
@@ -504,7 +648,7 @@ export function AddEventModal({
               <button type="button" onClick={() => void handleSave()} disabled={evtSaving}
                 className="h-9 px-5 rounded-lg text-[13px] font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
                 style={{ background: 'linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%)' }}>
-                {evtSaving ? 'Saving…' : 'Save Event'}
+                {evtSaving ? 'Saving…' : isEditMode ? 'Update Event' : 'Save Event'}
               </button>
             </div>
           </div>
@@ -528,8 +672,8 @@ export function AddEventModal({
                 </svg>
               </div>
               <div>
-                <p className="text-[9px] font-bold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>Live Preview</p>
-                <p className="text-[13px] font-bold text-white leading-none mt-0.5">Event Details</p>
+                <p className="text-[9px] font-bold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>{isEditMode ? 'Editing' : 'Live Preview'}</p>
+                <p className="text-[13px] font-bold text-white leading-none mt-0.5">{isEditMode ? 'Update Event' : 'Event Details'}</p>
               </div>
             </div>
           </div>
@@ -539,7 +683,7 @@ export function AddEventModal({
 
             {/* Title card */}
             <div className="rounded-xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.12)' }}>
-              <div className="h-1 w-full transition-all" style={{ background: evtColor || 'rgba(255,255,255,0.35)' }} />
+              <div className="h-1 w-full" style={{ background: 'rgba(255,255,255,0.35)' }} />
               <div className="p-3">
                 {evtSubject ? (
                   <p className="text-[13.5px] font-bold text-white leading-snug">{evtSubject}</p>
@@ -555,10 +699,6 @@ export function AddEventModal({
                     style={{ background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.65)' }}>
                     {evtType}
                   </span>
-                  {evtColor && (
-                    <span className="w-3.5 h-3.5 rounded-full border flex-shrink-0"
-                      style={{ background: evtColor, borderColor: 'rgba(255,255,255,0.4)' }} />
-                  )}
                 </div>
               </div>
             </div>
@@ -629,17 +769,8 @@ export function AddEventModal({
             )}
 
             {/* Flags */}
-            {(evtRepeat || evtSyncGCal || evtVideoConf) && (
+            {(evtSyncGCal || evtVideoConf) && (
               <div className="rounded-lg px-2.5 py-2 space-y-2" style={{ background: 'rgba(255,255,255,0.08)' }}>
-                {evtRepeat && (
-                  <div className="flex items-center gap-2">
-                    <svg fill="none" viewBox="0 0 14 14" width="11" height="11" className="flex-shrink-0" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                      <path d="M11.5 7a4.5 4.5 0 1 1-1-2.8" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-                      <path d="M10 2.5l.5 2-2 .5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                    <span className="text-[11px]" style={{ color: 'rgba(255,255,255,0.65)' }}>Repeating event</span>
-                  </div>
-                )}
                 {evtSyncGCal && (
                   <div className="flex items-start gap-2">
                     <svg fill="none" viewBox="0 0 14 14" width="11" height="11" className="mt-0.5 flex-shrink-0" style={{ color: 'rgba(255,255,255,0.5)' }}>
@@ -670,7 +801,7 @@ export function AddEventModal({
             {evtDesc && (
               <div className="rounded-lg px-2.5 py-2.5" style={{ background: 'rgba(255,255,255,0.08)' }}>
                 <p className="text-[9px] font-bold uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Notes</p>
-                <p className="text-[11.5px] leading-relaxed line-clamp-5" style={{ color: 'rgba(255,255,255,0.65)' }}>{evtDesc}</p>
+                <p className="text-[11.5px] leading-relaxed line-clamp-5" style={{ color: 'rgba(255,255,255,0.65)' }}>{evtDesc.replace(/<[^>]*>/g, '')}</p>
               </div>
             )}
 

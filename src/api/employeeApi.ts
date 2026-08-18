@@ -19,6 +19,7 @@ interface FrappeEmployeeRecord {
   employment_type?:   string | null
   designation?:       string | null
   department?:        string | null
+  branch?:            string | null
   company?:           string | null
   date_of_joining?:   string | null
   // Address
@@ -56,6 +57,7 @@ function toEmployee(r: FrappeEmployeeRecord): Employee {
     hireType:         r.employment_type ?? null,
     designation:      r.designation    ?? null,
     department:       r.department     ?? null,
+    branch:           r.branch         ?? null,
     company:          r.company        ?? null,
     // Education / skills — not standard single fields; leave null for now
     levelOfEducation: null,

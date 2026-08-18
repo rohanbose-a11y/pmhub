@@ -52,8 +52,8 @@ export function AppRouter() {
           <Route element={<Suspense fallback={<PageLoader label="Loading…" />}><ProjectDashboardPage /></Suspense>} path="/dashboard/project" />
           <Route element={<Suspense fallback={<PageLoader label="Loading…" />}><NotificationsPage /></Suspense>} path="/notifications" />
           <Route element={<Suspense fallback={<PageLoader label="Loading…" />}><ProjectsPage /></Suspense>} path="/projects" />
-          <Route element={<Suspense fallback={<PageLoader label="Loading…" />}><TasksPage /></Suspense>} path="/tasks" />
-          <Route element={<Suspense fallback={<PageLoader label="Loading…" />}><TaskTreePage /></Suspense>} path="/tasks/tree" />
+          <Route element={<Suspense fallback={<PageLoader label="Loading…" />}><TaskTreePage /></Suspense>} path="/tasks" />
+          <Route element={<Suspense fallback={<PageLoader label="Loading…" />}><TasksPage /></Suspense>} path="/tasks/list" />
           <Route element={<Suspense fallback={<PageLoader label="Loading…" />}><TaskKanbanPage /></Suspense>} path="/tasks/kanban" />
           <Route element={<Suspense fallback={<PageLoader label="Loading…" />}><TaskGanttPage /></Suspense>} path="/tasks/gantt" />
           <Route element={<Suspense fallback={<PageLoader label="Loading…" />}><TimesheetsPage /></Suspense>} path="/timesheets" />

@@ -18,6 +18,7 @@ interface FrappeTaskRecord {
   priority?: string | null
   type?: string | null
   custom_kra?: string | null
+  custom_raci?: string | null
   is_milestone?: number | null
   is_group?: number | null
   parent_task?: string | null
@@ -63,6 +64,7 @@ const taskFieldsFull = [
   'closing_date',
   'progress',
   'custom_engagement_days',
+  'custom_raci',
   'department',
   'color',
   'description',
@@ -75,24 +77,14 @@ const taskFieldsFull = [
   'auto_repeat',
 ]
 
-/** Fallback without exotic fields — used when the server returns 400/417 on the full list. */
+/**
+ * Fallback field list — used when the server returns 400/417 on taskFieldsFull.
+ * Contains only standard ERPNext Task fields that exist across all supported
+ * Frappe versions. Custom and exotic fields are intentionally excluded.
+ * If a field here also triggers 400/417 on some instance, remove it from this
+ * list (the listTasks retry will then propagate the error to the caller).
+ */
 const taskFieldsCore = [
-  'name',
-  'subject',
-  'project',
-  'status',
-  'priority',
-  'exp_end_date',
-  'description',
-  'owner',
-  'modified',
-  '_assign',
-  'completed_by',
-  'completed_on',
-]
-
-/** Absolute minimum — used when even taskFieldsCore triggers a 400/417. */
-const taskFieldsMinimal = [
   'name',
   'subject',
   'project',
@@ -135,6 +127,7 @@ const toTask = (record: FrappeTaskRecord): Task => ({
   priority: record.priority?.trim() || 'Medium',
   type: record.type || null,
   activityType: record.custom_kra || null,
+  customRaci: record.custom_raci || null,
   isMilestone: !!record.is_milestone,
   isGroup: !!record.is_group,
   parentTask: record.parent_task || null,
@@ -172,6 +165,7 @@ const toPayload = (input: AnyTaskInput) => {
     exp_end_date: input.dueDate || undefined,
     description: input.description?.trim() || undefined,
     ...(input.activityType !== undefined && { custom_kra: input.activityType?.trim() || undefined }),
+    ...(input.customRaci !== undefined && { custom_raci: input.customRaci?.trim() || null }),
     ...(input.engagementDays !== undefined && { custom_engagement_days: input.engagementDays }),
     // depends_on_tasks is a read-only computed field in ERPNext; the writable
     // field is the depends_on child table (doctype: "Task Depends On").
@@ -203,6 +197,7 @@ const toPayloadCore = (input: AnyTaskInput) => {
     project: input.project?.trim() || undefined,
     priority: input.priority,
     ...(input.activityType?.trim() && { custom_kra: input.activityType.trim() }),
+    ...(input.customRaci?.trim() && { custom_raci: input.customRaci.trim() }),
     parent_task: input.parentTask?.trim() || undefined,
     ...('status'      in input && { status: input.status }),
     ...('completedBy' in input && input.completedBy && { completed_by: input.completedBy }),
@@ -262,7 +257,7 @@ const isFrappeFieldError = (err: unknown) =>
   (err.response?.status === 400 || err.response?.status === 417)
 
 /**
- * Fetches tasks, falling back through field lists on 400/417.
+ * Fetches tasks, falling back to taskFieldsCore on 400/417.
  * Frappe returns 417 (ValidationError) or 400 (DataError) when a requested
  * field doesn't exist on the doctype — the exact code varies by Frappe version.
  */
@@ -271,12 +266,7 @@ const listTasks = async (filters?: unknown[]): Promise<Task[]> => {
     return await fetchTasks(taskFieldsFull, filters)
   } catch (err) {
     if (!isFrappeFieldError(err)) throw err
-    try {
-      return await fetchTasks(taskFieldsCore, filters)
-    } catch (err2) {
-      if (!isFrappeFieldError(err2)) throw err2
-      return await fetchTasks(taskFieldsMinimal, filters)
-    }
+    return await fetchTasks(taskFieldsCore, filters)
   }
 }
 

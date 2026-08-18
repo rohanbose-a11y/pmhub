@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useSearchParams } from 'react-router-dom'
 
-import type { CreateTaskInput, Task } from '../types/task.types'
+import type { AddNewType, CreateTaskInput, Task } from '../types/task.types'
+import { getTaskTypeDefaults } from '../types/task.types'
 import { CreateTaskModal } from '../components/CreateTaskModal'
 import { StatusChangeModal } from '../components/StatusChangeModal'
 import { AssignTaskModal } from '../components/AssignTaskModal'
@@ -139,6 +140,7 @@ export function TasksPage() {
   // ── Modals ────────────────────────────────────────────────────────────────────
 
   const [isCreateOpen,       setIsCreateOpen]       = useState(false)
+  const [createType,         setCreateType]         = useState<AddNewType>('task')
   const [detailTaskId,       setDetailTaskId]        = useState<string | null>(null)
   const [assigningTask,      setAssigningTask]       = useState<Task | null>(null)
   const [statusChangeTarget, setStatusChangeTarget]  = useState<Task | null>(null)
@@ -163,7 +165,7 @@ export function TasksPage() {
     return createTask(input, username)
   }
 
-  const openCreateModal  = () => { resetTaskFeedback(); setIsCreateOpen(true) }
+  const openCreateModal  = (type: AddNewType = 'task') => { resetTaskFeedback(); setCreateType(type); setIsCreateOpen(true) }
   const closeCreateModal = () => { if (createTaskStatus === 'submitting') return; setIsCreateOpen(false) }
 
   const handleStatusChangeConfirm = async (newStatus: string, note: string) => {
@@ -248,7 +250,7 @@ export function TasksPage() {
         groupBy={groupBy}
         isLoading={isLoading}
         myTasksOnly={myTasksOnly}
-        onAddTask={openCreateModal}
+        onAddNew={openCreateModal}
         onGroupByChange={setGroupBy}
         onMyTasksOnlyChange={setMyTasksOnly}
         onProjectFilterChange={(v) => { setProjectFilter(v); setSearchParams(v === 'all' ? {} : { project: v }) }}
@@ -771,6 +773,8 @@ export function TasksPage() {
           tasks={tasks}
           serverError={createTaskError}
           initialProject={projectFilter !== 'all' ? projectFilter : undefined}
+          {...getTaskTypeDefaults(createType)}
+          mode={createType}
         />
       )}
 

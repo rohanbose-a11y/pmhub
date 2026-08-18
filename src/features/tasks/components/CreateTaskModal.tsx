@@ -11,8 +11,10 @@ import { calcEngagementDays } from '../../../shared/lib/calcEngagementDays'
 import { getUpcomingRepeatDates } from '../../../shared/lib/getUpcomingRepeatDates'
 import { autoRepeatApi } from '../../../api/autoRepeatApi'
 import { AddEventModal } from '../../calendar/components/AddEventModal'
+import { ErrorBanner } from '../../../shared/components/ErrorBanner'
 import type { RepeatFrequency, Weekday } from '../../../api/autoRepeatApi'
 import { RepeatModal } from './RepeatModal'
+import { PRIORITY_CONFIG } from '../config/priorityConfig'
 import { userApi } from '../../../api/userApi'
 import type { UserOption } from '../../../api/userApi'
 
@@ -49,15 +51,6 @@ function avColor(s: string) {
 function initials(s: string) {
   return s.replace(/[@.]/g, ' ').split(/\s+/).filter(Boolean).map((p) => p[0]).join('').toUpperCase().slice(0, 2)
 }
-
-// ─── Config ───────────────────────────────────────────────────────────────────
-
-const PRIORITY_CONFIG = [
-  { key: 'Urgent', dot: 'bg-red-500',    label: 'Urgent'  },
-  { key: 'High',   dot: 'bg-orange-500', label: 'High'    },
-  { key: 'Medium', dot: 'bg-blue-400',   label: 'Medium'  },
-  { key: 'Low',    dot: 'bg-slate-300',  label: 'Low'     },
-]
 
 function fmtDate(v: string) {
   if (!v) return null
@@ -773,14 +766,7 @@ export function CreateTaskModal({
               </div>
 
               {/* Error */}
-              {serverError && (
-                <div className="flex items-start gap-2.5 bg-rose-50 border border-rose-100 text-rose-700 p-3.5 rounded-lg mt-5">
-                  <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 16 16">
-                    <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm-.75 3.75a.75.75 0 0 1 1.5 0v3.5a.75.75 0 0 1-1.5 0v-3.5zm.75 7a.875.875 0 1 1 0-1.75.875.875 0 0 1 0 1.75z"/>
-                  </svg>
-                  <span className="text-sm">{serverError}</span>
-                </div>
-              )}
+              <ErrorBanner message={serverError} className="mt-5" />
 
             </div>
           </div>

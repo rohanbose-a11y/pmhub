@@ -6,6 +6,7 @@ import { autoRepeatApi } from '../../../api/autoRepeatApi'
 import type { AutoRepeat } from '../../../api/autoRepeatApi'
 import { getUpcomingRepeatDates } from '../../../shared/lib/getUpcomingRepeatDates'
 import { RepeatModal } from './RepeatModal'
+import { PRIORITY_CONFIG } from '../config/priorityConfig'
 import type { Project } from '../../projects/types/project.types'
 import { taskApi, type TaskActivity } from '../../../api/taskApi'
 import { httpClient } from '../../../api/httpClient'
@@ -28,14 +29,6 @@ const STATUS_CONFIG = [
   { key: 'Completed',      dot: 'bg-emerald-500', pill: 'bg-emerald-50 text-emerald-700'   },
   { key: 'Cancelled',      dot: 'bg-rose-400',    pill: 'bg-rose-50 text-rose-600'         },
 ]
-
-const PRIORITY_CONFIG = [
-  { key: 'Urgent', dot: 'bg-red-500',    label: 'Urgent'  },
-  { key: 'High',   dot: 'bg-orange-500', label: 'High'    },
-  { key: 'Medium', dot: 'bg-blue-400',   label: 'Medium'  },
-  { key: 'Low',    dot: 'bg-slate-300',  label: 'Low'     },
-]
-
 
 function fmtDate(v: string | null) {
   if (!v) return null

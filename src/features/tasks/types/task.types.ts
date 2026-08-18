@@ -13,6 +13,7 @@ export interface Task {
   priority: string
   type: string | null
   activityType: string | null
+  customRaci: string | null
   isMilestone: boolean
   isGroup: boolean
   parentTask: string | null
@@ -39,6 +40,7 @@ export interface UpdateTaskInput {
   subject: string
   project?: string
   activityType?: string
+  customRaci?: string
   status: string
   priority: string
   isMilestone?: boolean
@@ -63,6 +65,7 @@ export interface CreateTaskInput {
   subject: string
   project?: string
   activityType?: string
+  customRaci?: string
   priority: string
   isMilestone?: boolean
   isGroup?: boolean
@@ -90,3 +93,30 @@ export interface CreateTaskFormValues {
 }
 
 export type CreateTaskFieldErrors = Partial<Record<'subject' | 'project', string>>
+
+// ── RACI options ─────────────────────────────────────────────────────────────
+
+export const RACI_OPTIONS = ['CMYC Operations', 'Procurement Team', 'M&E', 'Internal Team', 'Communication Team'] as const
+
+// ── Task-type domain ──────────────────────────────────────────────────────────
+
+/** The three user-facing creation types surfaced by the "Add New" dropdown. */
+export type AddNewType = 'task' | 'milestone' | 'activity'
+
+/**
+ * Single source of truth for what each AddNewType means at the data level.
+ * Any change to milestone/activity/task defaults needs updating here only.
+ *
+ * | type      | isMilestone | isGroup |
+ * |-----------|-------------|---------|
+ * | milestone | true        | true    |
+ * | activity  | false       | true    |
+ * | task      | false       | false   |
+ */
+export function getTaskTypeDefaults(type: AddNewType): { initialIsMilestone: boolean; initialIsGroup: boolean } {
+  switch (type) {
+    case 'milestone': return { initialIsMilestone: true,  initialIsGroup: true  }
+    case 'activity':  return { initialIsMilestone: false, initialIsGroup: true  }
+    case 'task':      return { initialIsMilestone: false, initialIsGroup: false }
+  }
+}

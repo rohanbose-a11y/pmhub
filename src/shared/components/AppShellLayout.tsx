@@ -213,6 +213,9 @@ export function AppShellLayout() {
     else if (e.key === 'Enter' && palFlat[palIdx]) runPaletteItem(palFlat[palIdx])
   }
 
+  // ── Sidebar open/close ────────────────────────────────────────────────────
+  const [sidebarOpen, setSidebarOpen] = useState(true)
+
   // ── Sidebar sections ───────────────────────────────────────────────────────
   const [dashboardCollapsed, setDashboardCollapsed] = useState(false)
   const [spacesCollapsed,   setSpacesCollapsed]   = useState(false)
@@ -319,9 +322,10 @@ export function AppShellLayout() {
   const navItem = (active: boolean): React.CSSProperties => ({
     display: 'flex',
     alignItems: 'center',
-    gap: 8,
+    gap: sidebarOpen ? 8 : 0,
     height: 32,
-    padding: '0 10px',
+    padding: sidebarOpen ? '0 10px' : '0',
+    justifyContent: sidebarOpen ? undefined : 'center',
     borderRadius: 6,
     cursor: 'pointer',
     background: active ? '#F3F0FF' : 'transparent',
@@ -450,11 +454,12 @@ export function AppShellLayout() {
           top: 48,
           left: 0,
           bottom: 0,
-          width: 240,
+          width: sidebarOpen ? 240 : 52,
           background: 'white',
           borderRight: '1px solid #E5E7EB',
           zIndex: 20,
           overflow: 'hidden',
+          transition: 'width 220ms ease',
         }}
       >
         <nav
@@ -462,147 +467,147 @@ export function AppShellLayout() {
           style={{ flex: 1, overflowY: 'auto', padding: '6px 8px 16px' }}
         >
 
-          {/* ─── Top nav items ─── */}
-
-          {/* Dashboard — collapsible with Personal + Project sub-links */}
+          {/* ─── Dashboard — collapsible with Personal + Project sub-links ─── */}
           <div>
-            <button
-              type="button"
-              onClick={() => setDashboardCollapsed((v) => !v)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                width: '100%', height: 32, padding: '0 10px',
-                borderRadius: 6, background: 'transparent', border: 'none',
-                cursor: 'pointer', color: '#6B7280', marginBottom: 1,
-              }}
-            >
-              <svg fill="none" viewBox="0 0 24 24" width={16} height={16} style={{ flexShrink: 0 }}>
-                <rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.6"/>
-                <rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.6"/>
-                <rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.6"/>
-                <rect x="14" y="14" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.6"/>
-              </svg>
-              <span style={{ fontSize: 13, fontWeight: 500, flex: 1, textAlign: 'left' }}>Dashboard</span>
-              <svg
-                fill="none" viewBox="0 0 10 10" width={9} height={9}
-                style={{ flexShrink: 0, color: '#9CA3AF', transform: dashboardCollapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 150ms' }}
-              >
-                <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.3"/>
-              </svg>
-            </button>
+            {sidebarOpen ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setDashboardCollapsed((v) => !v)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8,
+                    width: '100%', height: 32, padding: '0 10px',
+                    borderRadius: 6, background: 'transparent', border: 'none',
+                    cursor: 'pointer', color: '#6B7280', marginBottom: 1,
+                  }}
+                >
+                  <svg fill="none" viewBox="0 0 24 24" width={16} height={16} style={{ flexShrink: 0 }}>
+                    <rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.6"/>
+                    <rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.6"/>
+                    <rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.6"/>
+                    <rect x="14" y="14" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.6"/>
+                  </svg>
+                  <span style={{ fontSize: 13, fontWeight: 500, flex: 1, textAlign: 'left' }}>Dashboard</span>
+                  <svg
+                    fill="none" viewBox="0 0 10 10" width={9} height={9}
+                    style={{ flexShrink: 0, color: '#9CA3AF', transform: dashboardCollapsed ? 'rotate(-90deg)' : 'none', transition: 'transform 150ms' }}
+                  >
+                    <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.3"/>
+                  </svg>
+                </button>
 
-            {!dashboardCollapsed && (
-              <div style={{ paddingLeft: 14 }}>
-                <NavLink to="/dashboard" end style={{ textDecoration: 'none' }}>
-                  {({ isActive }) => (
-                    <div style={{ ...navItem(isActive), height: 30, paddingLeft: 10 }}>
-                      <svg fill="none" viewBox="0 0 24 24" width={14} height={14} style={{ flexShrink: 0 }}>
-                        <path d="M4 10.5L12 4l8 6.5V20a1 1 0 0 1-1 1h-4.5v-5.5h-5V21H5a1 1 0 0 1-1-1v-9.5Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6"/>
-                      </svg>
-                      <span style={{ fontSize: 12.5, fontWeight: isActive ? 600 : 400 }}>Personal</span>
-                    </div>
-                  )}
-                </NavLink>
+                {!dashboardCollapsed && (
+                  <div style={{ paddingLeft: 14 }}>
+                    <NavLink to="/dashboard" end style={{ textDecoration: 'none' }}>
+                      {({ isActive }) => (
+                        <div style={{ ...navItem(isActive), height: 30, paddingLeft: 10 }}>
+                          <svg fill="none" viewBox="0 0 24 24" width={14} height={14} style={{ flexShrink: 0 }}>
+                            <path d="M4 10.5L12 4l8 6.5V20a1 1 0 0 1-1 1h-4.5v-5.5h-5V21H5a1 1 0 0 1-1-1v-9.5Z" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.6"/>
+                          </svg>
+                          <span style={{ fontSize: 12.5, fontWeight: isActive ? 600 : 400 }}>Personal</span>
+                        </div>
+                      )}
+                    </NavLink>
 
-                <NavLink to="/dashboard/project" style={{ textDecoration: 'none' }}>
-                  {({ isActive }) => (
-                    <div style={{ ...navItem(isActive), height: 30, paddingLeft: 10 }}>
-                      <svg fill="none" viewBox="0 0 24 24" width={14} height={14} style={{ flexShrink: 0 }}>
-                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-                      </svg>
-                      <span style={{ fontSize: 12.5, fontWeight: isActive ? 600 : 400 }}>Project</span>
-                    </div>
-                  )}
-                </NavLink>
-              </div>
+                    <NavLink to="/dashboard/project" style={{ textDecoration: 'none' }}>
+                      {({ isActive }) => (
+                        <div style={{ ...navItem(isActive), height: 30, paddingLeft: 10 }}>
+                          <svg fill="none" viewBox="0 0 24 24" width={14} height={14} style={{ flexShrink: 0 }}>
+                            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                          </svg>
+                          <span style={{ fontSize: 12.5, fontWeight: isActive ? 600 : 400 }}>Project</span>
+                        </div>
+                      )}
+                    </NavLink>
+                  </div>
+                )}
+              </>
+            ) : (
+              <NavLink to="/dashboard" end style={{ textDecoration: 'none' }}>
+                {({ isActive }) => (
+                  <div style={navItem(isActive)} title="Dashboard">
+                    <svg fill="none" viewBox="0 0 24 24" width={16} height={16} style={{ flexShrink: 0 }}>
+                      <rect x="3" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.6"/>
+                      <rect x="14" y="3" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.6"/>
+                      <rect x="3" y="14" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.6"/>
+                      <rect x="14" y="14" width="7" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.6"/>
+                    </svg>
+                  </div>
+                )}
+              </NavLink>
             )}
           </div>
 
           {/* ─── Divider ─── */}
           <div style={{ height: 1, background: '#F3F4F6', margin: '8px 0' }} />
-          
+
           <NavLink to="/projects" style={{ textDecoration: 'none' }}>
             {({ isActive }) => (
-              <div style={navItem(isActive)}>
+              <div style={navItem(isActive)} title={sidebarOpen ? undefined : 'Projects'}>
                 <svg fill="none" viewBox="0 0 24 24" width={16} height={16} style={{ flexShrink: 0 }}>
                   <rect x="3.5" y="4.5" width="7" height="7" rx="2" stroke="currentColor" strokeWidth="1.6"/>
                   <rect x="13.5" y="4.5" width="7" height="7" rx="2" stroke="currentColor" strokeWidth="1.6"/>
                   <rect x="3.5" y="14.5" width="7" height="7" rx="2" stroke="currentColor" strokeWidth="1.6"/>
                   <path d="M14 18h6.5M14 15.5h4.5M14 20.5h3" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6"/>
                 </svg>
-                <span style={{ fontSize: 13, fontWeight: isActive ? 600 : 400 }}>Projects</span>
+                {sidebarOpen && <span style={{ fontSize: 13, fontWeight: isActive ? 600 : 400 }}>Projects</span>}
               </div>
             )}
           </NavLink>
 
           <NavLink to="/timesheets" style={{ textDecoration: 'none' }}>
             {({ isActive }) => (
-              <div style={navItem(isActive)}>
+              <div style={navItem(isActive)} title={sidebarOpen ? undefined : 'Timesheets'}>
                 <svg fill="none" viewBox="0 0 24 24" width={16} height={16} style={{ flexShrink: 0 }}>
                   <rect x="4" y="5" width="16" height="15" rx="3" stroke="currentColor" strokeWidth="1.6"/>
                   <path d="M8 3.5v3M16 3.5v3M7.5 10.5h9M7.5 15h5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6"/>
                 </svg>
-                <span style={{ fontSize: 13, fontWeight: isActive ? 600 : 400 }}>Timesheets</span>
+                {sidebarOpen && <span style={{ fontSize: 13, fontWeight: isActive ? 600 : 400 }}>Timesheets</span>}
               </div>
             )}
           </NavLink>
 
           <NavLink to="/calendar" style={{ textDecoration: 'none' }}>
             {({ isActive }) => (
-              <div style={navItem(isActive)}>
+              <div style={navItem(isActive)} title={sidebarOpen ? undefined : 'Calendar'}>
                 <svg fill="none" viewBox="0 0 24 24" width={16} height={16} style={{ flexShrink: 0 }}>
                   <rect x="3" y="4" width="18" height="17" rx="3" stroke="currentColor" strokeWidth="1.6"/>
                   <path d="M8 2v4M16 2v4M3 9h18" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6"/>
                   <rect x="7" y="12" width="3" height="3" rx="0.75" fill="currentColor" opacity=".5"/>
                   <rect x="12" y="12" width="3" height="3" rx="0.75" fill="currentColor"/>
                 </svg>
-                <span style={{ fontSize: 13, fontWeight: isActive ? 600 : 400 }}>Calendar</span>
-              </div>
-            )}
-          </NavLink>
-
-          <NavLink to="/notifications" style={{ textDecoration: 'none' }}>
-            {({ isActive }) => (
-              <div style={navItem(isActive)}>
-                <svg fill="none" viewBox="0 0 24 24" width={16} height={16} style={{ flexShrink: 0 }}>
-                  <path d="M12 3C9.24 3 7 5.24 7 8v5l-2 2v1h14v-1l-2-2V8c0-2.76-2.24-5-5-5z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/>
-                  <path d="M10 19a2 2 0 0 0 4 0" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
-                </svg>
-                <span style={{ fontSize: 13, fontWeight: isActive ? 600 : 400, flex: 1 }}>Notifications</span>
-                {alertCount > 0 && (
-                  <span style={{ minWidth: 18, height: 18, background: '#EF4444', color: 'white', fontSize: 9.5, fontWeight: 700, borderRadius: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px', flexShrink: 0 }}>
-                    {alertCount > 9 ? '9+' : alertCount}
-                  </span>
-                )}
+                {sidebarOpen && <span style={{ fontSize: 13, fontWeight: isActive ? 600 : 400 }}>Calendar</span>}
               </div>
             )}
           </NavLink>
 
           {/* ─── WhatsApp Admin (Administrator only) ─── */}
           {user?.roles?.includes('Administrator') && (
-            <>
-              <NavLink to="/whatsapp" style={{ textDecoration: 'none' }}>
-                {({ isActive }) => (
-                  <div style={navItem(isActive)}>
-                    <svg fill="none" viewBox="0 0 24 24" width={16} height={16} style={{ flexShrink: 0 }}>
-                      <path d="M12 2C6.48 2 2 6.48 2 12c0 1.85.5 3.58 1.37 5.07L2 22l5.09-1.35A9.94 9.94 0 0 0 12 22c5.52 0 10-4.48 10-10S17.52 2 12 2z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/>
-                      <path d="M8.5 10.5c.5 1 1.5 2.5 3.5 3.5 1 .5 2 .5 2.5 0l.5-.5c.2-.2.2-.5 0-.7l-1.3-1.3c-.2-.2-.5-.2-.7 0l-.3.3c-.8-.4-1.3-.9-1.7-1.7l.3-.3c.2-.2.2-.5 0-.7L9.7 8.5c-.2-.2-.5-.2-.7 0l-.5.5c-.5.6-.5 1.5 0 2.5z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/>
-                    </svg>
-                    <span style={{ fontSize: 13, fontWeight: isActive ? 600 : 400, flex: 1 }}>WhatsApp</span>
-                    <span style={{ fontSize: 9.5, fontWeight: 600, background: '#FEF3C7', color: '#92400E', padding: '1px 5px', borderRadius: 4, flexShrink: 0 }}>Admin</span>
-                  </div>
-                )}
-              </NavLink>
-            </>
+            <NavLink to="/whatsapp" style={{ textDecoration: 'none' }}>
+              {({ isActive }) => (
+                <div style={navItem(isActive)} title={sidebarOpen ? undefined : 'WhatsApp'}>
+                  <svg fill="none" viewBox="0 0 24 24" width={16} height={16} style={{ flexShrink: 0 }}>
+                    <path d="M12 2C6.48 2 2 6.48 2 12c0 1.85.5 3.58 1.37 5.07L2 22l5.09-1.35A9.94 9.94 0 0 0 12 22c5.52 0 10-4.48 10-10S17.52 2 12 2z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/>
+                    <path d="M8.5 10.5c.5 1 1.5 2.5 3.5 3.5 1 .5 2 .5 2.5 0l.5-.5c.2-.2.2-.5 0-.7l-1.3-1.3c-.2-.2-.5-.2-.7 0l-.3.3c-.8-.4-1.3-.9-1.7-1.7l.3-.3c.2-.2.2-.5 0-.7L9.7 8.5c-.2-.2-.5-.2-.7 0l-.5.5c-.5.6-.5 1.5 0 2.5z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/>
+                  </svg>
+                  {sidebarOpen && (
+                    <>
+                      <span style={{ fontSize: 13, fontWeight: isActive ? 600 : 400, flex: 1 }}>WhatsApp</span>
+                      <span style={{ fontSize: 9.5, fontWeight: 600, background: '#FEF3C7', color: '#92400E', padding: '1px 5px', borderRadius: 4, flexShrink: 0 }}>Admin</span>
+                    </>
+                  )}
+                </div>
+              )}
+            </NavLink>
           )}
 
           {/* ─── Divider ─── */}
           <div style={{ height: 1, background: '#F3F4F6', margin: '8px 0' }} />
 
           {/* ─── SPACES ─── */}
-          <SectionHeader label="Spaces" collapsed={spacesCollapsed} onToggle={() => setSpacesCollapsed((v) => !v)} />
+          {sidebarOpen && <SectionHeader label="Spaces" collapsed={spacesCollapsed} onToggle={() => setSpacesCollapsed((v) => !v)} />}
 
-          {!spacesCollapsed && projects.map((proj) => {
+          {(!sidebarOpen || !spacesCollapsed) && projects.map((proj) => {
             const count    = taskCountByProject[proj.name] ?? 0
             const abbr     = projInitials(proj.displayName)
             const isActive = activeProjectFilter === proj.name
@@ -610,77 +615,110 @@ export function AppShellLayout() {
               <Link key={proj.name} to={`/tasks?project=${encodeURIComponent(proj.name)}`} style={{ textDecoration: 'none' }}>
                 <div
                   style={{
-                    display: 'flex', alignItems: 'center', gap: 8,
-                    height: 30, padding: '0 10px', borderRadius: 6,
+                    display: 'flex', alignItems: 'center',
+                    gap: sidebarOpen ? 8 : 0,
+                    height: 30,
+                    padding: sidebarOpen ? '0 10px' : '0',
+                    justifyContent: sidebarOpen ? undefined : 'center',
+                    borderRadius: 6,
                     cursor: 'pointer',
                     color: isActive ? '#7B3FF2' : '#374151',
                     background: isActive ? '#F3F0FF' : 'transparent',
                     transition: 'background 100ms',
                   }}
                   className={isActive ? '' : 'hover:bg-gray-50'}
+                  title={sidebarOpen ? undefined : proj.displayName}
                 >
                   <div style={{ width: 18, height: 18, borderRadius: 4, background: projColor(proj.name), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: 'white', flexShrink: 0 }}>
                     {abbr}
                   </div>
-                  <span style={{ fontSize: 12.5, fontWeight: isActive ? 600 : 400, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {proj.displayName}
-                  </span>
-                  {count > 0 && (
-                    <span style={{ fontSize: 10, fontWeight: 600, color: isActive ? '#7B3FF2' : '#9CA3AF', background: isActive ? '#EDE9FE' : '#F3F4F6', borderRadius: 999, padding: '1px 6px', flexShrink: 0 }}>
-                      {count}
-                    </span>
+                  {sidebarOpen && (
+                    <>
+                      <span style={{ fontSize: 12.5, fontWeight: isActive ? 600 : 400, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {proj.displayName}
+                      </span>
+                      {count > 0 && (
+                        <span style={{ fontSize: 10, fontWeight: 600, color: isActive ? '#7B3FF2' : '#9CA3AF', background: isActive ? '#EDE9FE' : '#F3F4F6', borderRadius: 999, padding: '1px 6px', flexShrink: 0 }}>
+                          {count}
+                        </span>
+                      )}
+                    </>
                   )}
                 </div>
               </Link>
             )
           })}
 
-          {!spacesCollapsed && projects.length === 0 && (
+          {sidebarOpen && !spacesCollapsed && projects.length === 0 && (
             <p style={{ fontSize: 11.5, color: '#9CA3AF', padding: '4px 10px' }}>No spaces yet</p>
           )}
 
-          {/* ─── Divider ─── */}
-          <div style={{ height: 1, background: '#F3F4F6', margin: '8px 0' }} />
+          {/* ─── Channels + DMs (hidden when collapsed) ─── */}
+          {sidebarOpen && (
+            <>
+              <div style={{ height: 1, background: '#F3F4F6', margin: '8px 0' }} />
 
-          {/* ─── CHANNELS ─── */}
-          <SectionHeader label="Channels" collapsed={channelsCollapsed} onToggle={() => setChannelsCollapsed((v) => !v)} />
+              <SectionHeader label="Channels" collapsed={channelsCollapsed} onToggle={() => setChannelsCollapsed((v) => !v)} />
 
-          {!channelsCollapsed && MOCK_CHANNELS.map((ch) => (
-            <Link key={ch.id} to="/channels" style={{ textDecoration: 'none' }}>
-              <div
-                style={{ display: 'flex', alignItems: 'center', gap: 6, height: 30, padding: '0 10px', borderRadius: 6, cursor: 'pointer', color: '#6B7280', transition: 'background 100ms' }}
-                className="hover:bg-gray-50"
-              >
-                <span style={{ fontSize: 13, color: '#9CA3AF', flexShrink: 0 }}>#</span>
-                <span style={{ fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ch.name}</span>
-              </div>
-            </Link>
-          ))}
-
-          {/* ─── Divider ─── */}
-          <div style={{ height: 1, background: '#F3F4F6', margin: '8px 0' }} />
-
-          {/* ─── DIRECT MESSAGES ─── */}
-          <SectionHeader label="Direct Messages" collapsed={dmsCollapsed} onToggle={() => setDmsCollapsed((v) => !v)} />
-
-          {!dmsCollapsed && MOCK_DMS.map((dm) => (
-            <Link key={dm.id} to="/dm" style={{ textDecoration: 'none' }}>
-              <div
-                style={{ display: 'flex', alignItems: 'center', gap: 8, height: 30, padding: '0 10px', borderRadius: 6, cursor: 'pointer', color: '#6B7280', transition: 'background 100ms' }}
-                className="hover:bg-gray-50"
-              >
-                <div style={{ position: 'relative', flexShrink: 0 }}>
-                  <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700, color: '#6B7280' }}>
-                    {dm.name.slice(0, 2).toUpperCase()}
+              {!channelsCollapsed && MOCK_CHANNELS.map((ch) => (
+                <Link key={ch.id} to="/channels" style={{ textDecoration: 'none' }}>
+                  <div
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, height: 30, padding: '0 10px', borderRadius: 6, cursor: 'pointer', color: '#6B7280', transition: 'background 100ms' }}
+                    className="hover:bg-gray-50"
+                  >
+                    <span style={{ fontSize: 13, color: '#9CA3AF', flexShrink: 0 }}>#</span>
+                    <span style={{ fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ch.name}</span>
                   </div>
-                  <span style={{ position: 'absolute', bottom: -1, right: -1, width: 6, height: 6, borderRadius: '50%', background: dm.online ? '#22C55E' : '#9CA3AF', border: '1.5px solid white' }} />
-                </div>
-                <span style={{ fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{dm.name}</span>
-              </div>
-            </Link>
-          ))}
+                </Link>
+              ))}
+
+              <div style={{ height: 1, background: '#F3F4F6', margin: '8px 0' }} />
+
+              <SectionHeader label="Direct Messages" collapsed={dmsCollapsed} onToggle={() => setDmsCollapsed((v) => !v)} />
+
+              {!dmsCollapsed && MOCK_DMS.map((dm) => (
+                <Link key={dm.id} to="/dm" style={{ textDecoration: 'none' }}>
+                  <div
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, height: 30, padding: '0 10px', borderRadius: 6, cursor: 'pointer', color: '#6B7280', transition: 'background 100ms' }}
+                    className="hover:bg-gray-50"
+                  >
+                    <div style={{ position: 'relative', flexShrink: 0 }}>
+                      <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700, color: '#6B7280' }}>
+                        {dm.name.slice(0, 2).toUpperCase()}
+                      </div>
+                      <span style={{ position: 'absolute', bottom: -1, right: -1, width: 6, height: 6, borderRadius: '50%', background: dm.online ? '#22C55E' : '#9CA3AF', border: '1.5px solid white' }} />
+                    </div>
+                    <span style={{ fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{dm.name}</span>
+                  </div>
+                </Link>
+              ))}
+            </>
+          )}
 
         </nav>
+
+        {/* ─── Hamburger toggle pinned at bottom ─── */}
+        <div style={{ flexShrink: 0, padding: '6px 8px', borderTop: '1px solid #F3F4F6' }}>
+          <button
+            type="button"
+            aria-label={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+            onClick={() => setSidebarOpen((v) => !v)}
+            style={{
+              display: 'flex', alignItems: 'center',
+              width: '100%', height: 32,
+              padding: sidebarOpen ? '0 10px' : '0',
+              justifyContent: sidebarOpen ? undefined : 'center',
+              borderRadius: 6, background: 'transparent', border: 'none',
+              cursor: 'pointer', color: '#9CA3AF',
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = '#6B7280'; e.currentTarget.style.background = '#F9FAFB' }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = '#9CA3AF'; e.currentTarget.style.background = 'transparent' }}
+          >
+            <svg fill="none" viewBox="0 0 16 16" width={16} height={16} style={{ flexShrink: 0 }}>
+              <path d="M2 4h12M2 8h12M2 12h12" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5"/>
+            </svg>
+          </button>
+        </div>
       </aside>
 
       {/* ═══════════════════════════════════════════════════════════════════
@@ -730,7 +768,7 @@ export function AppShellLayout() {
       {/* ═══════════════════════════════════════════════════════════════════
           CONTENT — offset for desktop sidebar + topbar
       ═══════════════════════════════════════════════════════════════════ */}
-      <div className="pb-28 md:pb-0 md:pt-12 md:ml-60">
+      <div className={`pb-28 md:pb-0 md:pt-12 transition-[margin] duration-[220ms] ease-[ease] ${sidebarOpen ? 'md:ml-60' : 'md:ml-[52px]'}`}>
         <Outlet />
       </div>
 

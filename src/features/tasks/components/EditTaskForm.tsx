@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, type ChangeEvent, type FormEvent } from 'react'
+import { useState, useMemo, useRef, useEffect, type ChangeEvent, type FormEvent } from 'react'
 
 import { FormField } from '../../../shared/components/FormField'
 import { formatUserDisplay } from '../../../shared/lib/formatUserDisplay'
@@ -10,6 +10,27 @@ import { useKraOptions } from '../../../hooks/useKraOptions'
 import { useAuthStore } from '../../../store/authStore'
 import type { Project } from '../../projects/types/project.types'
 import type { Task, UpdateTaskInput } from '../types/task.types'
+import { RACI_OPTIONS } from '../types/task.types'
+import { calcEngagementDays } from '../../../shared/lib/calcEngagementDays'
+import { autoRepeatApi, WEEKDAYS } from '../../../api/autoRepeatApi'
+import type { AutoRepeat, RepeatFrequency, Weekday } from '../../../api/autoRepeatApi'
+
+function fmtRepeatDate(d: string) {
+  return new Date(d).toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+function describeRepeatSchedule(freq: RepeatFrequency, days: Weekday[], onDay: string) {
+  if (freq === 'Daily') return 'Every day'
+  if (freq === 'Weekly') {
+    if (days.length === 0) return 'Every week'
+    return `Every ${days.map((d) => d.charAt(0).toUpperCase() + d.slice(1)).join(', ')}`
+  }
+  const daySuffix = onDay ? ` on day ${onDay}` : ''
+  if (freq === 'Monthly')     return `Every month${daySuffix}`
+  if (freq === 'Quarterly')   return `Every quarter${daySuffix}`
+  if (freq === 'Half-yearly') return `Every 6 months${daySuffix}`
+  return `Every year${daySuffix}`
+}
 
 const TASK_STATUSES = ['Open', 'Working', 'Pending Review', 'Completed', 'Cancelled']
 
@@ -113,15 +134,6 @@ const inputClass =
 
 const selectClass = `${inputClass} appearance-none pr-9 max-w-full`
 
-/** Returns inclusive calendar-day count between two ISO date strings, or undefined if invalid/reversed. */
-function calcEngagementDays(start: string, due: string): number | undefined {
-  if (!start || !due) return undefined
-  const s = new Date(start)
-  const d = new Date(due)
-  if (isNaN(s.getTime()) || isNaN(d.getTime()) || d < s) return undefined
-  return Math.round((d.getTime() - s.getTime()) / 86_400_000) + 1
-}
-
 
 
 // ── Main form ────────────────────────────────────────────────────────────────
@@ -144,6 +156,7 @@ export function EditTaskForm({
     subject: task.subject,
     project: task.project ?? '',
     activityType: task.activityType ?? '',
+    customRaci: task.customRaci ?? '',
     status: task.status,
     priority: task.priority,
     isMilestone: task.isMilestone,
@@ -170,12 +183,50 @@ export function EditTaskForm({
       : []
   )
   const [depPickerValue, setDepPickerValue] = useState('')
+  const [showRaciDrop, setShowRaciDrop] = useState(false)
+  const raciContainerRef = useRef<HTMLDivElement>(null)
+
+  // ── Repeat ────────────────────────────────────────────────────────────────
+  const [savedRepeat,      setSavedRepeat]      = useState<AutoRepeat | null>(null)
+  const [repeatEnabled,    setRepeatEnabled]    = useState(false)
+  const [repeatFreq,       setRepeatFreq]       = useState<RepeatFrequency>('Weekly')
+  const [repeatStart,      setRepeatStart]      = useState('')
+  const [repeatEnd,        setRepeatEnd]        = useState('')
+  const [repeatOnDay,      setRepeatOnDay]      = useState('')
+  const [repeatOnWeekdays, setRepeatOnWeekdays] = useState<Weekday[]>([])
+  const [repeatSaving,     setRepeatSaving]     = useState(false)
+  const [repeatError,      setRepeatError]      = useState<string | null>(null)
+  const [showRepeatModal,  setShowRepeatModal]  = useState(false)
+
+  // Close RACI dropdown on outside click
+  useEffect(() => {
+    const h = (e: MouseEvent) => {
+      if (raciContainerRef.current && !raciContainerRef.current.contains(e.target as Node)) setShowRaciDrop(false)
+    }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [])
+
+  // Load existing auto repeat
+  useEffect(() => {
+    if (!task.autoRepeat) return
+    autoRepeatApi.getById(task.autoRepeat).then((r) => {
+      setSavedRepeat(r)
+      setRepeatEnabled(true)
+      setRepeatFreq(r.frequency)
+      setRepeatStart(r.startDate)
+      setRepeatEnd(r.endDate ?? '')
+      setRepeatOnDay(String(r.repeatOnDay ?? ''))
+      setRepeatOnWeekdays(r.repeatOnWeekdays ?? [])
+    }).catch(() => {/* non-blocking */})
+  }, [task.autoRepeat]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Snapshot of original values for dirty-state detection
   const initialValuesRef = useRef<UpdateTaskInput>({
     subject: task.subject,
     project: task.project ?? '',
     activityType: task.activityType ?? '',
+    customRaci: task.customRaci ?? '',
     status: task.status,
     priority: task.priority,
     isMilestone: task.isMilestone,
@@ -338,7 +389,7 @@ export function EditTaskForm({
           </div>
 
           <div>
-            <FieldLabel htmlFor="edit-kra">KRA / Activity Type</FieldLabel>
+            <FieldLabel htmlFor="edit-kra">Activity Type</FieldLabel>
             <KraCombobox
               id="edit-kra"
               loading={kraLoading}
@@ -349,44 +400,6 @@ export function EditTaskForm({
           </div>
         </div>
 
-        {/* (Is Milestone / Is Group) */}
-        <div className="grid grid-cols-2 gap-3">
-          <label className="flex items-center gap-3 p-3.5 bg-slate-50 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-100 active:bg-slate-100 transition-colors select-none">
-            <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${values.isMilestone ? 'bg-violet-600 border-violet-600' : 'border-slate-300 bg-white'}`}>
-              {values.isMilestone && (
-                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 12 12">
-                  <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              )}
-            </div>
-            <input
-              checked={values.isMilestone ?? false}
-              className="sr-only"
-              name="isMilestone"
-              onChange={handleChange}
-              type="checkbox"
-            />
-            <p className="text-sm font-semibold text-slate-800">Is Milestone</p>
-          </label>
-
-          <label className="flex items-center gap-3 p-3.5 bg-slate-50 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-100 active:bg-slate-100 transition-colors select-none">
-            <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center flex-shrink-0 transition-all ${values.isGroup ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 bg-white'}`}>
-              {values.isGroup && (
-                <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 12 12">
-                  <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              )}
-            </div>
-            <input
-              checked={values.isGroup ?? false}
-              className="sr-only"
-              name="isGroup"
-              onChange={handleChange}
-              type="checkbox"
-            />
-            <p className="text-sm font-semibold text-slate-800">Is Group</p>
-          </label>
-        </div>
       </div>
 
       {/* ── Status & priority ── */}
@@ -493,6 +506,30 @@ export function EditTaskForm({
           }}
         />
         <div className="grid grid-cols-2 gap-3">
+          <FormField
+            label="Start date"
+            name="startDate"
+            type="date"
+            value={values.startDate ?? ''}
+            onChange={(e) => {
+              const v = e.target.value
+              set('startDate', v)
+              const calc = calcEngagementDays(v, values.dueDate ?? '')
+              if (calc !== undefined) set('engagementDays', calc)
+            }}
+          />
+          <FormField
+            label="Due date"
+            name="dueDate"
+            type="date"
+            value={values.dueDate ?? ''}
+            onChange={(e) => {
+              const v = e.target.value
+              set('dueDate', v)
+              const calc = calcEngagementDays(values.startDate ?? '', v)
+              if (calc !== undefined) set('engagementDays', calc)
+            }}
+          />
           <FormField label="Review date" name="reviewDate" onChange={handleChange} type="date" value={values.reviewDate ?? ''} />
           <FormField label="Closing date" name="closingDate" onChange={handleChange} type="date" value={values.closingDate ?? ''} />
         </div>
@@ -514,6 +551,23 @@ export function EditTaskForm({
               ? 'Auto-calculated from dates — edit to override'
               : 'Auto-calculated when both dates are set'}
           </p>
+        </div>
+
+        {/* Repeat */}
+        <div
+          className="flex items-center gap-2 px-1 py-2 hover:bg-slate-50 rounded-lg transition-colors group cursor-pointer"
+          onClick={() => setShowRepeatModal(true)}
+        >
+          <span className="text-xs font-semibold text-slate-500 flex-1">Repeat</span>
+          <div className="flex items-center gap-1.5">
+            {savedRepeat ? (
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 text-[11px] font-semibold border border-indigo-100">
+                {savedRepeat.frequency}
+              </span>
+            ) : (
+              <span className="text-[12px] text-slate-300 group-hover:text-slate-400 transition-colors">None</span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -554,6 +608,44 @@ export function EditTaskForm({
             </div>
           </div>
         )}
+
+        {/* RACI */}
+        <div>
+          <FieldLabel>RACI</FieldLabel>
+          <div ref={raciContainerRef} className="relative w-full">
+            <button
+              type="button"
+              onClick={() => setShowRaciDrop((v) => !v)}
+              className="w-full flex items-center justify-between px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm transition-all focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 hover:border-slate-300"
+            >
+              <span className={values.customRaci ? 'text-slate-900' : 'text-slate-400'}>
+                {values.customRaci || 'None'}
+              </span>
+              <svg className="w-4 h-4 text-slate-400 flex-shrink-0" fill="none" viewBox="0 0 16 16">
+                <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+            {showRaciDrop && (
+              <ul className="absolute z-50 mt-1.5 w-full bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden">
+                {(['', ...RACI_OPTIONS] as const).map((opt) => (
+                  <li key={opt}>
+                    <button
+                      type="button"
+                      onClick={() => { set('customRaci', opt); setShowRaciDrop(false) }}
+                      className={`w-full text-left px-3.5 py-2.5 text-sm transition-colors ${
+                        (values.customRaci ?? '') === opt
+                          ? 'bg-indigo-50 text-indigo-700 font-semibold'
+                          : 'text-slate-700 hover:bg-slate-50 active:bg-slate-100'
+                      }`}
+                    >
+                      {opt || 'None'}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* ── Dependent tasks ── */}
@@ -665,6 +757,169 @@ export function EditTaskForm({
       )}
 
       </fieldset>{/* end fieldset[disabled] */}
+
+      {/* ── Repeat popup modal ─────────────────────────────────────────────── */}
+      {showRepeatModal && (() => {
+        async function handleSave() {
+          if (!repeatStart) { setRepeatError('Start date is required'); return }
+          setRepeatSaving(true); setRepeatError(null)
+          try {
+            const input = {
+              frequency: repeatFreq,
+              startDate: repeatStart,
+              ...(repeatEnd && { endDate: repeatEnd }),
+              ...(repeatOnDay && { repeatOnDay: parseInt(repeatOnDay) }),
+              repeatOnWeekdays,
+            }
+            const result = savedRepeat
+              ? await autoRepeatApi.update(savedRepeat.id, input)
+              : await autoRepeatApi.create(task.id, input)
+            setSavedRepeat(result)
+            setShowRepeatModal(false)
+          } catch {
+            setRepeatError('Failed to save. Please try again.')
+          } finally {
+            setRepeatSaving(false)
+          }
+        }
+        async function handleRemove() {
+          if (!savedRepeat) return
+          setRepeatSaving(true); setRepeatError(null)
+          try {
+            await autoRepeatApi.remove(savedRepeat.id)
+            setSavedRepeat(null); setRepeatEnabled(false)
+            setRepeatFreq('Weekly'); setRepeatStart(''); setRepeatEnd(''); setRepeatOnDay(''); setRepeatOnWeekdays([])
+            setShowRepeatModal(false)
+          } catch {
+            setRepeatError('Failed to remove. Please try again.')
+          } finally {
+            setRepeatSaving(false)
+          }
+        }
+        return (
+          <div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4"
+            onClick={() => setShowRepeatModal(false)}>
+            <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl overflow-hidden flex flex-col" style={{ maxHeight: '90vh' }}
+              onClick={(e) => e.stopPropagation()}>
+              {/* Header */}
+              <div className="flex items-center justify-between px-4 py-3.5 border-b border-slate-100 flex-shrink-0">
+                <div className="flex items-center gap-2">
+                  <svg fill="none" viewBox="0 0 16 16" width="14" height="14" className="text-indigo-500">
+                    <path d="M1 5h10.5a3 3 0 0 1 0 6H9M1 5l2.5-2.5M1 5l2.5 2.5M15 11H4.5a3 3 0 0 1 0-6H7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                  <span className="text-[13.5px] font-semibold text-slate-700">Repeat Task</span>
+                </div>
+                <button type="button" onClick={() => setShowRepeatModal(false)}
+                  className="w-7 h-7 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">
+                  <svg fill="none" viewBox="0 0 12 12" width="10" height="10">
+                    <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5"/>
+                  </svg>
+                </button>
+              </div>
+              {/* Body */}
+              <div className="overflow-y-auto flex-1 p-4 space-y-3">
+                {repeatError && (
+                  <div className="flex items-start gap-2 bg-rose-50 border border-rose-100 text-rose-700 px-3 py-2.5 rounded-lg text-[12px]">
+                    <svg className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 16 16">
+                      <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm-.75 3.75a.75.75 0 0 1 1.5 0v3.5a.75.75 0 0 1-1.5 0v-3.5zm.75 7a.875.875 0 1 1 0-1.75.875.875 0 0 1 0 1.75z"/>
+                    </svg>
+                    <span>{repeatError}</span>
+                  </div>
+                )}
+                {!repeatEnabled ? (
+                  <div className="flex flex-col items-center justify-center py-8 gap-3 text-center">
+                    <div className="w-11 h-11 rounded-full bg-slate-100 flex items-center justify-center">
+                      <svg fill="none" viewBox="0 0 20 20" width="18" height="18" className="text-slate-400">
+                        <path d="M3 10a7 7 0 0 1 13-3.5M17 10a7 7 0 0 1-13 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                        <path d="M16 6.5l1-2 2 1.5M4 13.5l-1 2-2-1.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-[13px] font-semibold text-slate-600">No repeat configured</p>
+                      <p className="text-[11.5px] text-slate-400 mt-0.5">Set up a recurring schedule for this task</p>
+                    </div>
+                    <button type="button"
+                      onClick={() => { setRepeatEnabled(true); if (!repeatStart) setRepeatStart(values.startDate || '') }}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[12.5px] font-medium rounded-lg transition-colors">
+                      <svg fill="none" viewBox="0 0 12 12" width="11" height="11">
+                        <path d="M6 1v10M1 6h10" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8"/>
+                      </svg>
+                      Set up repeat
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="rounded-xl border border-slate-200 divide-y divide-slate-100 overflow-hidden">
+                      <div className="flex items-center gap-3 px-3.5 py-2.5">
+                        <span className="text-xs font-semibold text-slate-500 w-24 flex-shrink-0">Frequency</span>
+                        <select value={repeatFreq} onChange={(e) => setRepeatFreq(e.target.value as RepeatFrequency)}
+                          className="flex-1 text-[12.5px] text-slate-700 bg-transparent outline-none border border-slate-200 rounded-lg px-2.5 py-1.5 appearance-none">
+                          {(['Daily','Weekly','Monthly','Quarterly','Half-yearly','Yearly'] as RepeatFrequency[]).map((f) => (
+                            <option key={f} value={f}>{f}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex items-center gap-3 px-3.5 py-2.5">
+                        <span className="text-xs font-semibold text-slate-500 w-24 flex-shrink-0">Start date</span>
+                        <input type="date" value={repeatStart} onChange={(e) => setRepeatStart(e.target.value)}
+                          className="flex-1 text-[12.5px] text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-indigo-300"/>
+                      </div>
+                      <div className="flex items-center gap-3 px-3.5 py-2.5">
+                        <span className="text-xs font-semibold text-slate-500 w-24 flex-shrink-0">End date</span>
+                        <input type="date" value={repeatEnd} onChange={(e) => setRepeatEnd(e.target.value)}
+                          className="flex-1 text-[12.5px] text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-indigo-300"/>
+                      </div>
+                      {repeatFreq === 'Weekly' && (
+                        <div className="px-3.5 py-2.5">
+                          <span className="text-xs font-semibold text-slate-500 block mb-2">Repeat on days</span>
+                          <div className="flex gap-1.5 flex-wrap">
+                            {WEEKDAYS.map((day) => {
+                              const active = repeatOnWeekdays.includes(day)
+                              return (
+                                <button key={day} type="button"
+                                  onClick={() => setRepeatOnWeekdays((prev) => active ? prev.filter((d) => d !== day) : [...prev, day])}
+                                  className={['w-8 h-8 rounded-full text-[11px] font-bold border transition-all',
+                                    active ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-slate-200 text-slate-500 hover:border-indigo-300 hover:text-indigo-500'].join(' ')}>
+                                  {day.slice(0, 2).toUpperCase()}
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </div>
+                      )}
+                      {['Monthly','Quarterly','Half-yearly','Yearly'].includes(repeatFreq) && (
+                        <div className="flex items-center gap-3 px-3.5 py-2.5">
+                          <span className="text-xs font-semibold text-slate-500 w-24 flex-shrink-0">Day of month</span>
+                          <input type="number" min={1} max={28} value={repeatOnDay} onChange={(e) => setRepeatOnDay(e.target.value)} placeholder="1–28"
+                            className="w-20 text-[12.5px] text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-indigo-300 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"/>
+                        </div>
+                      )}
+                      <div className="px-3.5 py-2.5 bg-slate-50">
+                        <p className="text-[11.5px] text-slate-500">
+                          <span className="font-semibold text-slate-600">Preview: </span>
+                          {describeRepeatSchedule(repeatFreq, repeatOnWeekdays, repeatOnDay)}
+                          {repeatStart && ` · from ${fmtRepeatDate(repeatStart)}`}
+                          {repeatEnd && ` · until ${fmtRepeatDate(repeatEnd)}`}
+                        </p>
+                      </div>
+                    </div>
+                    <button type="button" onClick={() => void handleSave()} disabled={repeatSaving}
+                      className="w-full py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-[12.5px] font-medium transition-colors">
+                      {repeatSaving ? 'Saving…' : savedRepeat ? 'Update repeat' : 'Save repeat'}
+                    </button>
+                    {savedRepeat && (
+                      <button type="button" onClick={() => void handleRemove()} disabled={repeatSaving}
+                        className="w-full py-2 rounded-lg border border-rose-200 text-rose-500 text-[12px] font-medium hover:bg-rose-50 disabled:opacity-60 transition-colors">
+                        Remove repeat
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── Sticky footer ── */}
       {!isReadOnly && isDirty && (

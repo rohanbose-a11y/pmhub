@@ -7,6 +7,8 @@ import { useAuthStore } from '../../../store/authStore'
 import { AssignTaskModal } from './AssignTaskModal'
 import type { Project } from '../../projects/types/project.types'
 import type { Task, TaskComment, CreateTaskInput } from '../types/task.types'
+import { calcEngagementDays } from '../../../shared/lib/calcEngagementDays'
+import { getUpcomingRepeatDates } from '../../../shared/lib/getUpcomingRepeatDates'
 import { autoRepeatApi, WEEKDAYS } from '../../../api/autoRepeatApi'
 import { AddEventModal } from '../../calendar/components/AddEventModal'
 import type { RepeatFrequency, Weekday } from '../../../api/autoRepeatApi'
@@ -47,17 +49,6 @@ function initials(s: string) {
   return s.replace(/[@.]/g, ' ').split(/\s+/).filter(Boolean).map((p) => p[0]).join('').toUpperCase().slice(0, 2)
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-/** Inclusive calendar-day count between two ISO date strings (start → due + 1). */
-function calcEngagementDays(start: string, due: string): number | undefined {
-  if (!start || !due) return undefined
-  const s = new Date(start)
-  const d = new Date(due)
-  if (isNaN(s.getTime()) || isNaN(d.getTime()) || d < s) return undefined
-  return Math.round((d.getTime() - s.getTime()) / 86_400_000) + 1
-}
-
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const PRIORITY_CONFIG = [
@@ -72,6 +63,25 @@ function fmtDate(v: string) {
   return new Date(v).toLocaleDateString('en', { month: 'short', day: 'numeric' })
 }
 
+function fmtRepeatDate(d: string) {
+  return new Date(d).toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+function describeRepeatSchedule(freq: RepeatFrequency, days: Weekday[], onDay: string) {
+  if (freq === 'Daily') return 'Every day'
+  if (freq === 'Weekly') {
+    if (days.length === 0) return 'Every week'
+    const names = days.map((d) => d.charAt(0).toUpperCase() + d.slice(1))
+    return `Every ${names.join(', ')}`
+  }
+  const daySuffix = onDay ? ` on day ${onDay}` : ''
+  if (freq === 'Monthly')     return `Every month${daySuffix}`
+  if (freq === 'Quarterly')   return `Every quarter${daySuffix}`
+  if (freq === 'Half-yearly') return `Every 6 months${daySuffix}`
+  if (freq === 'Yearly')      return `Every year${daySuffix}`
+  return freq
+}
+
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 interface CreateTaskModalProps {
@@ -80,6 +90,8 @@ interface CreateTaskModalProps {
   isSubmitting: boolean
   serverError: string | null
   initialProject?: string
+  initialIsMilestone?: boolean
+  initialIsGroup?: boolean
   onSubmit: (input: CreateTaskInput) => Promise<Task | null>
   onClose: () => void
   onSuccess: () => void
@@ -93,6 +105,8 @@ export function CreateTaskModal({
   isSubmitting,
   serverError,
   initialProject,
+  initialIsMilestone = false,
+  initialIsGroup = false,
   onSubmit,
   onClose,
   onSuccess,
@@ -106,8 +120,8 @@ export function CreateTaskModal({
   const [dueDate,     setDueDate]     = useState('')
   const [engDays,     setEngDays]     = useState('')
   const [parentTask,  setParentTask]  = useState('')
-  const [isMilestone, setIsMilestone] = useState(false)
-  const [isGroup,     setIsGroup]     = useState(false)
+  const [isMilestone, setIsMilestone] = useState(initialIsMilestone)
+  const [isGroup,     setIsGroup]     = useState(initialIsGroup)
   const [description, setDescription] = useState('')
   const [depTaskIds,    setDepTaskIds]    = useState<string[]>([])
   const [showDepPicker, setShowDepPicker] = useState(false)
@@ -126,6 +140,7 @@ export function CreateTaskModal({
   const [repeatOnDay,       setRepeatOnDay]       = useState('')
   const [repeatOnWeekdays,  setRepeatOnWeekdays]  = useState<Weekday[]>([])
   const [repeatError,       setRepeatError]       = useState<string | null>(null)
+  const [showRepeatModal,   setShowRepeatModal]   = useState(false)
 
   // ── Comments + @mention ───────────────────────────────────────────────────
   const [pendingComments, setPendingComments] = useState<TaskComment[]>([])
@@ -324,7 +339,7 @@ export function CreateTaskModal({
     // Validate repeat: must have a start date if enabled
     if (repeatEnabled && !repeatStart) {
       setRepeatError('A start date is required to enable repeat.')
-      setCommExpanded(true); setCommTab('repeat')
+      setShowRepeatModal(true)
       return
     }
     setRepeatError(null)
@@ -363,14 +378,13 @@ export function CreateTaskModal({
         } catch {
           // Task was created — only the repeat schedule failed. Show inline error.
           setRepeatError('Task created, but the repeat schedule could not be saved. You can set it from the task detail view.')
-          setCommExpanded(true); setCommTab('repeat')
           console.warn('[CreateTaskModal] Auto Repeat creation failed')
         }
       }
       if (andAnother) {
         // Reset form for another entry
         setSubject(''); setActType(''); setStartDate(''); setDueDate('')
-        setEngDays(''); setParentTask(''); setIsMilestone(false); setIsGroup(false)
+        setEngDays(''); setParentTask(''); setIsMilestone(initialIsMilestone); setIsGroup(initialIsGroup)
         setDescription(''); setDepTaskIds([]); setShowDepPicker(false); setDepPickerValue(''); setPendingAssignees([]); setEditorKey((k) => k + 1); setProjectError(false)
         setRepeatEnabled(false); setRepeatStart(''); setRepeatEnd(''); setRepeatOnDay(''); setRepeatOnWeekdays([]); setRepeatError(null)
         setPendingComments([]); setCommentText(''); setPendingLinks([]); setLinkName(''); setLinkUrl('')
@@ -432,13 +446,30 @@ export function CreateTaskModal({
 
               {/* Chip */}
               <div className="flex items-center gap-2 mb-4">
-                <span className="flex items-center gap-1 px-2 py-1 rounded-md bg-indigo-50 text-indigo-600 text-[11.5px] font-semibold">
-                  <svg fill="none" viewBox="0 0 12 12" width="10" height="10">
-                    <rect x="1" y="1" width="10" height="10" rx="2" stroke="currentColor" strokeWidth="1.3"/>
-                    <path d="M4 6h4M4 4h4M4 8h2" stroke="currentColor" strokeLinecap="round" strokeWidth="1.1"/>
-                  </svg>
-                  New Task
-                </span>
+                {initialIsMilestone ? (
+                  <span className="flex items-center gap-1 px-2 py-1 rounded-md bg-amber-50 text-amber-700 text-[11.5px] font-semibold">
+                    <svg fill="none" viewBox="0 0 12 12" width="10" height="10">
+                      <path d="M6 1l1.5 3.5L11 5l-2.5 2.5.5 3.5L6 9.5 3 11l.5-3.5L1 5l3.5-.5L6 1z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
+                    </svg>
+                    New Milestone
+                  </span>
+                ) : initialIsGroup ? (
+                  <span className="flex items-center gap-1 px-2 py-1 rounded-md bg-indigo-50 text-indigo-600 text-[11.5px] font-semibold">
+                    <svg fill="none" viewBox="0 0 12 12" width="10" height="10">
+                      <rect x="1" y="1" width="10" height="10" rx="2" stroke="currentColor" strokeWidth="1.3"/>
+                      <path d="M3 4h6M3 6h6M3 8h4" stroke="currentColor" strokeLinecap="round" strokeWidth="1.1"/>
+                    </svg>
+                    New Activity
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1 px-2 py-1 rounded-md bg-indigo-50 text-indigo-600 text-[11.5px] font-semibold">
+                    <svg fill="none" viewBox="0 0 12 12" width="10" height="10">
+                      <rect x="1" y="1" width="10" height="10" rx="2" stroke="currentColor" strokeWidth="1.3"/>
+                      <path d="M4 6h4M4 4h4M4 8h2" stroke="currentColor" strokeLinecap="round" strokeWidth="1.1"/>
+                    </svg>
+                    New Task
+                  </span>
+                )}
               </div>
 
               {/* Title */}
@@ -450,7 +481,7 @@ export function CreateTaskModal({
                     titleError ? 'placeholder:text-rose-300' : 'placeholder:text-slate-200',
                   ].join(' ')}
                   onChange={(e) => { setSubject(e.target.value); if (e.target.value.trim()) setTitleError(false) }}
-                  placeholder="Task name *"
+                  placeholder={initialIsMilestone ? 'Milestone name *' : initialIsGroup ? 'Activity name *' : 'Task name *'}
                   value={subject}
                 />
                 {titleError && (
@@ -547,6 +578,23 @@ export function CreateTaskModal({
                     />
                   </div>
 
+                  {/* Repeat */}
+                  <div
+                    className="flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 transition-colors group cursor-pointer"
+                    onClick={() => setShowRepeatModal(true)}
+                  >
+                    <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0">Repeat</span>
+                    <div className="flex items-center gap-1.5">
+                      {repeatEnabled ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 text-[11px] font-semibold border border-indigo-100">
+                          {repeatFreq}
+                        </span>
+                      ) : (
+                        <span className="text-[12.5px] text-slate-300 group-hover:text-slate-400 transition-colors">None</span>
+                      )}
+                    </div>
+                  </div>
+
                   {/* Parent Task */}
                   <div
                     ref={parentTriggerRef}
@@ -612,39 +660,6 @@ export function CreateTaskModal({
                     </div>
                   </div>
 
-                  {/* Is Milestone */}
-                  <div
-                    className="flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 transition-colors group cursor-pointer"
-                    onClick={() => setIsMilestone((v) => !v)}
-                  >
-                    <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0">Is Milestone</span>
-                    <div className="flex items-center gap-2">
-                      <div className={[
-                        'relative inline-flex h-4 w-7 rounded-full border-2 border-transparent transition-colors',
-                        isMilestone ? 'bg-amber-400' : 'bg-slate-200',
-                      ].join(' ')}>
-                        <span className={['inline-block h-3 w-3 rounded-full bg-white shadow transition-transform', isMilestone ? 'translate-x-3' : 'translate-x-0'].join(' ')}/>
-                      </div>
-                      <span className="text-[12.5px] text-slate-600">{isMilestone ? 'Yes' : 'No'}</span>
-                    </div>
-                  </div>
-
-                  {/* Is Group */}
-                  <div
-                    className="flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 transition-colors group cursor-pointer"
-                    onClick={() => setIsGroup((v) => !v)}
-                  >
-                    <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0">Is Group</span>
-                    <div className="flex items-center gap-2">
-                      <div className={[
-                        'relative inline-flex h-4 w-7 rounded-full border-2 border-transparent transition-colors',
-                        isGroup ? 'bg-indigo-500' : 'bg-slate-200',
-                      ].join(' ')}>
-                        <span className={['inline-block h-3 w-3 rounded-full bg-white shadow transition-transform', isGroup ? 'translate-x-3' : 'translate-x-0'].join(' ')}/>
-                      </div>
-                      <span className="text-[12.5px] text-slate-600">{isGroup ? 'Yes' : 'No'}</span>
-                    </div>
-                  </div>
 
                   {/* Assignees */}
                   <div
@@ -823,7 +838,7 @@ export function CreateTaskModal({
                     </svg>
                     Creating…
                   </>
-                ) : 'Create Task'}
+                ) : initialIsMilestone ? 'Create Milestone' : initialIsGroup ? 'Create Activity' : 'Create Task'}
               </button>
             </div>
           </div>
@@ -958,121 +973,62 @@ export function CreateTaskModal({
               {/* Content */}
               <div className="flex-1 overflow-y-auto scrollbar-none">
 
-                {/* ── Repeat tab ── */}
-                {commTab === 'repeat' && (
-                  <div className="p-4 space-y-3">
-                    {/* Repeat error */}
-                    {repeatError && (
-                      <div className="flex items-start gap-2 bg-rose-50 border border-rose-100 text-rose-700 px-3 py-2.5 rounded-lg text-[12px]">
-                        <svg className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 16 16">
-                          <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm-.75 3.75a.75.75 0 0 1 1.5 0v3.5a.75.75 0 0 1-1.5 0v-3.5zm.75 7a.875.875 0 1 1 0-1.75.875.875 0 0 1 0 1.75z"/>
+                {/* ── Repeat tab — upcoming dates only; full form opens via the Repeat row ── */}
+                {commTab === 'repeat' && (() => {
+                  if (!repeatEnabled || !repeatStart) return (
+                    <div className="flex flex-col items-center justify-center py-10 gap-3 text-center px-4">
+                      <div className="w-11 h-11 rounded-full bg-slate-100 flex items-center justify-center">
+                        <svg fill="none" viewBox="0 0 20 20" width="18" height="18" className="text-slate-400">
+                          <path d="M3 10a7 7 0 0 1 13-3.5M17 10a7 7 0 0 1-13 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                          <path d="M16 6.5l1-2 2 1.5M4 13.5l-1 2-2-1.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
                         </svg>
-                        <span>{repeatError}</span>
                       </div>
-                    )}
-                    {/* Enable toggle */}
-                    <div
-                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
-                      onClick={() => {
-                        const next = !repeatEnabled
-                        setRepeatEnabled(next)
-                        if (next && !repeatStart) setRepeatStart(startDate || '')
-                      }}
-                    >
-                      <div className={[
-                        'relative inline-flex h-4 w-7 rounded-full border-2 border-transparent transition-colors flex-shrink-0',
-                        repeatEnabled ? 'bg-indigo-500' : 'bg-slate-200',
-                      ].join(' ')}>
-                        <span className={['inline-block h-3 w-3 rounded-full bg-white shadow transition-transform', repeatEnabled ? 'translate-x-3' : 'translate-x-0'].join(' ')}/>
+                      <div>
+                        <p className="text-[13px] font-semibold text-slate-600">No repeat configured</p>
+                        <p className="text-[11.5px] text-slate-400 mt-0.5">Click Repeat in the properties panel to set up a schedule</p>
                       </div>
-                      <span className="text-[13px] font-semibold text-slate-700">Enable repeat</span>
-                      {repeatEnabled && <span className="ml-auto text-xs text-indigo-600 font-medium">{repeatFreq}</span>}
                     </div>
-                    {repeatEnabled && (
-                      <div className="rounded-lg border border-slate-200 divide-y divide-slate-100 overflow-hidden">
-                        {/* Frequency */}
-                        <div className="flex items-center gap-3 px-3.5 py-2.5">
-                          <span className="text-xs font-semibold text-slate-500 w-24 flex-shrink-0">Frequency</span>
-                          <div className="relative flex-1 min-w-0">
-                            <select
-                              value={repeatFreq}
-                              onChange={(e) => setRepeatFreq(e.target.value as RepeatFrequency)}
-                              className="w-full text-[12.5px] text-slate-700 bg-transparent outline-none border border-slate-200 rounded-lg px-2.5 py-1.5 appearance-none"
-                            >
-                              {(['Daily','Weekly','Monthly','Quarterly','Half-yearly','Yearly'] as RepeatFrequency[]).map((f) => (
-                                <option key={f} value={f}>{f}</option>
-                              ))}
-                            </select>
+                  )
+                  const mockRepeat = { frequency: repeatFreq, startDate: repeatStart, endDate: repeatEnd || null, repeatOnDay: repeatOnDay ? parseInt(repeatOnDay) : null, repeatOnWeekdays }
+                  const upcoming = getUpcomingRepeatDates(mockRepeat, 5)
+                  const t = new Date()
+                  const todayStr = `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`
+                  return (
+                    <div className="p-4">
+                      {upcoming.length === 0 ? (
+                        <p className="text-[12px] text-slate-400 text-center py-6">No upcoming dates</p>
+                      ) : (
+                        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+                          <div className="px-3.5 py-2 border-b border-slate-100 flex items-center gap-1.5">
+                            <svg fill="none" viewBox="0 0 14 14" width="12" height="12" className="text-slate-400">
+                              <rect x="1" y="2" width="12" height="11" rx="2" stroke="currentColor" strokeWidth="1.3"/>
+                              <path d="M4 1v2M10 1v2M1 6h12" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
+                            </svg>
+                            <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">Upcoming</span>
                           </div>
-                        </div>
-                        {/* Start date */}
-                        <div className="flex items-center gap-3 px-3.5 py-2.5">
-                          <span className="text-xs font-semibold text-slate-500 w-24 flex-shrink-0">Start date</span>
-                          <input
-                            type="date"
-                            value={repeatStart}
-                            onChange={(e) => setRepeatStart(e.target.value)}
-                            className="flex-1 text-[12.5px] text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-indigo-300"
-                          />
-                        </div>
-                        {/* End date */}
-                        <div className="flex items-center gap-3 px-3.5 py-2.5">
-                          <span className="text-xs font-semibold text-slate-500 w-24 flex-shrink-0">End date</span>
-                          <input
-                            type="date"
-                            value={repeatEnd}
-                            onChange={(e) => setRepeatEnd(e.target.value)}
-                            className="flex-1 text-[12.5px] text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-indigo-300"
-                          />
-                        </div>
-                        {/* Repeat on days — weekly only */}
-                        {repeatFreq === 'Weekly' && (
-                          <div className="px-3.5 py-2.5">
-                            <span className="text-xs font-semibold text-slate-500 block mb-2">Repeat on days</span>
-                            <div className="flex gap-1.5 flex-wrap">
-                              {WEEKDAYS.map((day) => {
-                                const label = day.slice(0, 2).toUpperCase()
-                                const active = repeatOnWeekdays.includes(day)
+                          <div className="relative px-3.5 py-2">
+                            <div className="absolute left-[22px] top-4 bottom-4 w-px bg-slate-100"/>
+                            <div className="space-y-0">
+                              {upcoming.map((dateStr, i) => {
+                                const isToday = dateStr === todayStr
+                                const [yr, mo, dy] = dateStr.split('-').map(Number)
+                                const d = new Date(yr, mo - 1, dy)
+                                const label = d.toLocaleDateString('en', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })
                                 return (
-                                  <button
-                                    key={day}
-                                    type="button"
-                                    onClick={() => setRepeatOnWeekdays((prev) =>
-                                      active ? prev.filter((d) => d !== day) : [...prev, day]
-                                    )}
-                                    className={[
-                                      'w-8 h-8 rounded-full text-[11px] font-bold border transition-all',
-                                      active
-                                        ? 'bg-indigo-600 border-indigo-600 text-white'
-                                        : 'bg-white border-slate-200 text-slate-500 hover:border-indigo-300 hover:text-indigo-500',
-                                    ].join(' ')}
-                                  >
-                                    {label}
-                                  </button>
+                                  <div key={dateStr} className="flex items-center gap-2.5 py-1.5 relative">
+                                    <div className={['relative z-10 w-2.5 h-2.5 rounded-full border-2 flex-shrink-0 ml-0.5', i === 0 ? 'border-indigo-500 bg-indigo-500' : 'border-slate-300 bg-white'].join(' ')}/>
+                                    <span className={['text-[12px]', i === 0 ? 'font-semibold text-indigo-700' : 'text-slate-600'].join(' ')}>{label}</span>
+                                    {isToday && <span className="ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-600">Today</span>}
+                                  </div>
                                 )
                               })}
                             </div>
                           </div>
-                        )}
-                        {/* Day of month — monthly+ only */}
-                        {['Monthly','Quarterly','Half-yearly','Yearly'].includes(repeatFreq) && (
-                          <div className="flex items-center gap-3 px-3.5 py-2.5">
-                            <span className="text-xs font-semibold text-slate-500 w-24 flex-shrink-0">Day of month</span>
-                            <input
-                              type="number"
-                              min={1}
-                              max={28}
-                              value={repeatOnDay}
-                              onChange={(e) => setRepeatOnDay(e.target.value)}
-                              placeholder="1–28"
-                              className="w-20 text-[12.5px] text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-indigo-300 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                            />
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
 
                 {/* ── Activity tabs ── */}
                 {commTab === 'comments' && (
@@ -1531,6 +1487,130 @@ export function CreateTaskModal({
 
       </div>
     </div>
+
+    {/* ── Repeat popup modal ─────────────────────────────────────────────── */}
+    {showRepeatModal && (
+      <div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-4"
+        onClick={() => setShowRepeatModal(false)}>
+        <div className="bg-white rounded-2xl w-full max-w-sm shadow-xl overflow-hidden flex flex-col" style={{ maxHeight: '90vh' }}
+          onClick={(e) => e.stopPropagation()}>
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3.5 border-b border-slate-100 flex-shrink-0">
+            <div className="flex items-center gap-2">
+              <svg fill="none" viewBox="0 0 16 16" width="14" height="14" className="text-indigo-500">
+                <path d="M1 5h10.5a3 3 0 0 1 0 6H9M1 5l2.5-2.5M1 5l2.5 2.5M15 11H4.5a3 3 0 0 1 0-6H7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+              <span className="text-[13.5px] font-semibold text-slate-700">Repeat Task</span>
+            </div>
+            <button type="button" onClick={() => setShowRepeatModal(false)}
+              className="w-7 h-7 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">
+              <svg fill="none" viewBox="0 0 12 12" width="10" height="10">
+                <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5"/>
+              </svg>
+            </button>
+          </div>
+          {/* Body */}
+          <div className="overflow-y-auto flex-1 p-4 space-y-3">
+            {!repeatEnabled ? (
+              <div className="flex flex-col items-center justify-center py-8 gap-3 text-center">
+                <div className="w-11 h-11 rounded-full bg-slate-100 flex items-center justify-center">
+                  <svg fill="none" viewBox="0 0 20 20" width="18" height="18" className="text-slate-400">
+                    <path d="M3 10a7 7 0 0 1 13-3.5M17 10a7 7 0 0 1-13 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                    <path d="M16 6.5l1-2 2 1.5M4 13.5l-1 2-2-1.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-[13px] font-semibold text-slate-600">No repeat configured</p>
+                  <p className="text-[11.5px] text-slate-400 mt-0.5">Set up a recurring schedule for this task</p>
+                </div>
+                <button type="button"
+                  onClick={() => { setRepeatEnabled(true); if (!repeatStart) setRepeatStart(startDate || '') }}
+                  className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[12.5px] font-medium rounded-lg transition-colors">
+                  <svg fill="none" viewBox="0 0 12 12" width="11" height="11">
+                    <path d="M6 1v10M1 6h10" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8"/>
+                  </svg>
+                  Set up repeat
+                </button>
+              </div>
+            ) : (
+              <>
+                {repeatError && (
+                  <div className="flex items-start gap-2 bg-rose-50 border border-rose-100 text-rose-700 px-3 py-2.5 rounded-lg text-[12px]">
+                    <svg className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 16 16">
+                      <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm-.75 3.75a.75.75 0 0 1 1.5 0v3.5a.75.75 0 0 1-1.5 0v-3.5zm.75 7a.875.875 0 1 1 0-1.75.875.875 0 0 1 0 1.75z"/>
+                    </svg>
+                    <span>{repeatError}</span>
+                  </div>
+                )}
+                <div className="rounded-xl border border-slate-200 divide-y divide-slate-100 overflow-hidden">
+                  <div className="flex items-center gap-3 px-3.5 py-2.5">
+                    <span className="text-xs font-semibold text-slate-500 w-24 flex-shrink-0">Frequency</span>
+                    <select value={repeatFreq} onChange={(e) => setRepeatFreq(e.target.value as RepeatFrequency)}
+                      className="flex-1 text-[12.5px] text-slate-700 bg-transparent outline-none border border-slate-200 rounded-lg px-2.5 py-1.5 appearance-none">
+                      {(['Daily','Weekly','Monthly','Quarterly','Half-yearly','Yearly'] as RepeatFrequency[]).map((f) => (
+                        <option key={f} value={f}>{f}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-3 px-3.5 py-2.5">
+                    <span className="text-xs font-semibold text-slate-500 w-24 flex-shrink-0">Start date</span>
+                    <input type="date" value={repeatStart} onChange={(e) => setRepeatStart(e.target.value)}
+                      className="flex-1 text-[12.5px] text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-indigo-300"/>
+                  </div>
+                  <div className="flex items-center gap-3 px-3.5 py-2.5">
+                    <span className="text-xs font-semibold text-slate-500 w-24 flex-shrink-0">End date</span>
+                    <input type="date" value={repeatEnd} onChange={(e) => setRepeatEnd(e.target.value)}
+                      className="flex-1 text-[12.5px] text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-indigo-300"/>
+                  </div>
+                  {repeatFreq === 'Weekly' && (
+                    <div className="px-3.5 py-2.5">
+                      <span className="text-xs font-semibold text-slate-500 block mb-2">Repeat on days</span>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {WEEKDAYS.map((day) => {
+                          const active = repeatOnWeekdays.includes(day)
+                          return (
+                            <button key={day} type="button"
+                              onClick={() => setRepeatOnWeekdays((prev) => active ? prev.filter((d) => d !== day) : [...prev, day])}
+                              className={['w-8 h-8 rounded-full text-[11px] font-bold border transition-all',
+                                active ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-slate-200 text-slate-500 hover:border-indigo-300 hover:text-indigo-500'].join(' ')}>
+                              {day.slice(0, 2).toUpperCase()}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  {['Monthly','Quarterly','Half-yearly','Yearly'].includes(repeatFreq) && (
+                    <div className="flex items-center gap-3 px-3.5 py-2.5">
+                      <span className="text-xs font-semibold text-slate-500 w-24 flex-shrink-0">Day of month</span>
+                      <input type="number" min={1} max={28} value={repeatOnDay} onChange={(e) => setRepeatOnDay(e.target.value)} placeholder="1–28"
+                        className="w-20 text-[12.5px] text-slate-700 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none focus:border-indigo-300 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"/>
+                    </div>
+                  )}
+                  <div className="px-3.5 py-2.5 bg-slate-50">
+                    <p className="text-[11.5px] text-slate-500">
+                      <span className="font-semibold text-slate-600">Preview: </span>
+                      {describeRepeatSchedule(repeatFreq, repeatOnWeekdays, repeatOnDay)}
+                      {repeatStart && ` · from ${fmtRepeatDate(repeatStart)}`}
+                      {repeatEnd && ` · until ${fmtRepeatDate(repeatEnd)}`}
+                    </p>
+                  </div>
+                </div>
+                <button type="button" onClick={() => setShowRepeatModal(false)}
+                  className="w-full py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-[12.5px] font-medium transition-colors">
+                  Done
+                </button>
+                <button type="button"
+                  onClick={() => { setRepeatEnabled(false); setRepeatStart(''); setRepeatEnd(''); setRepeatOnDay(''); setRepeatOnWeekdays([]); setRepeatError(null); setShowRepeatModal(false) }}
+                  className="w-full py-2 rounded-lg border border-rose-200 text-rose-500 text-[12px] font-medium hover:bg-rose-50 transition-colors">
+                  Remove repeat
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
 
     <AddEventModal
       open={showAddEvent}

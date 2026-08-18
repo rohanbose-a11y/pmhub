@@ -9,7 +9,8 @@ import { AssignTaskModal } from '../components/AssignTaskModal'
 import { StatusChangeModal } from '../components/StatusChangeModal'
 import { TasksHeader } from '../components/TasksHeader'
 import { CreateTaskModal } from '../components/CreateTaskModal'
-import type { Task, UpdateTaskInput, CreateTaskInput } from '../types/task.types'
+import type { AddNewType, Task, UpdateTaskInput, CreateTaskInput } from '../types/task.types'
+import { getTaskTypeDefaults } from '../types/task.types'
 import type { Project } from '../../projects/types/project.types'
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -418,6 +419,7 @@ export function TaskTreePage() {
   const [projectFilter, setProjectFilter] = useState(() => searchParams.get('project') ?? 'all')
   const [showClosed,    setShowClosed]    = useState(false)
   const [isCreateOpen,  setIsCreateOpen]  = useState(false)
+  const [createType,    setCreateType]    = useState<AddNewType>('task')
 
   useEffect(() => {
     setProjectFilter(searchParams.get('project') ?? 'all')
@@ -563,7 +565,7 @@ export function TaskTreePage() {
 
   // ── Modals ───────────────────────────────────────────────────────────────
 
-  const openCreateModal  = () => { resetTaskFeedback(); setIsCreateOpen(true) }
+  const openCreateModal  = (type: AddNewType = 'task') => { resetTaskFeedback(); setCreateType(type); setIsCreateOpen(true) }
   const closeCreateModal = () => { if (createTaskStatus === 'submitting') return; setIsCreateOpen(false) }
   const handleCreateTask = (input: CreateTaskInput) => {
     if (!username) return Promise.resolve(null)
@@ -617,7 +619,7 @@ export function TaskTreePage() {
       <TasksHeader
         isLoading={isLoading}
         myTasksOnly={myTasksOnly}
-        onAddTask={openCreateModal}
+        onAddNew={openCreateModal}
         onMyTasksOnlyChange={setMyTasksOnly}
         onProjectFilterChange={setProjectFilter}
         onRefresh={handleRefresh}
@@ -790,6 +792,8 @@ export function TaskTreePage() {
           tasks={tasks}
           serverError={createTaskError}
           initialProject={projectFilter !== 'all' ? projectFilter : undefined}
+          {...getTaskTypeDefaults(createType)}
+          mode={createType}
         />
       )}
     </main>

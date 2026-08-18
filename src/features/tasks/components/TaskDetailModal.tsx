@@ -182,6 +182,10 @@ export function TaskDetailModal({
   const [descEditKey, setDescEditKey]           = useState(0)
   const [engDays, setEngDays]                   = useState(String(task.engagementDays ?? ''))
   const [isEditingEngDays, setIsEditingEngDays] = useState(false)
+  const [localStartDate, setLocalStartDate]     = useState(task.startDate ?? '')
+  const [localDueDate,   setLocalDueDate]       = useState(task.dueDate ?? '')
+  const startDateRef = useRef<HTMLInputElement>(null)
+  const dueDateRef   = useRef<HTMLInputElement>(null)
   const [actType, setActType]                   = useState(task.activityType ?? '')
   const [showActTypeMenu, setShowActTypeMenu]   = useState(false)
   const [localProject,    setLocalProject]      = useState<string>(task.project ?? '')
@@ -276,6 +280,8 @@ export function TaskDetailModal({
           setTitle(t.subject)
           setDescription(t.description ?? '')
           setEngDays(String(t.engagementDays ?? ''))
+          setLocalStartDate(t.startDate ?? '')
+          setLocalDueDate(t.dueDate ?? '')
           setActType(t.activityType ?? '')
           setLocalProject(t.project ?? '')
           setLocalParentTask(t.parentTask ?? null)
@@ -505,7 +511,7 @@ export function TaskDetailModal({
   const sg       = STATUS_CONFIG.find((s) => s.key === task.status) ?? STATUS_CONFIG[0]
   const pg       = PRIORITY_CONFIG.find((p) => p.key === task.priority)
   const shortId  = task.id
-  const duePast  = dt.dueDate && new Date(dt.dueDate) < new Date()
+  const duePast  = localDueDate && new Date(localDueDate) < new Date()
   const updLabel = task.updatedAt
     ? `Updated ${new Date(task.updatedAt).toLocaleDateString('en', { month: 'short', day: 'numeric' })}`
     : 'Created recently'
@@ -572,6 +578,28 @@ export function TaskDetailModal({
       }
     } else if (isNaN(n)) {
       setEngDays(String(dt.engagementDays ?? ''))
+    }
+  }
+
+  const saveStartDate = async (v: string) => {
+    setLocalStartDate(v)
+    if (v !== (dt.startDate ?? '')) {
+      const ok = await onUpdate(task.id, { subject: task.subject, status: liveStatus, priority: livePriority, startDate: v || undefined })
+      if (ok) {
+        setFullTask((prev) => prev ? { ...prev, startDate: v || null } : null)
+        addActivity({ type: 'desc', text: v ? `Start date set to ${v}` : 'Start date cleared' })
+      }
+    }
+  }
+
+  const saveDueDate = async (v: string) => {
+    setLocalDueDate(v)
+    if (v !== (dt.dueDate ?? '')) {
+      const ok = await onUpdate(task.id, { subject: task.subject, status: liveStatus, priority: livePriority, dueDate: v || undefined })
+      if (ok) {
+        setFullTask((prev) => prev ? { ...prev, dueDate: v || null } : null)
+        addActivity({ type: 'desc', text: v ? `Due date set to ${v}` : 'Due date cleared' })
+      }
     }
   }
 
@@ -891,15 +919,45 @@ export function TaskDetailModal({
                           <rect x="1" y="2.5" width="12" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
                           <path d="M1 6h12M4.5 1v3M9.5 1v3" stroke="currentColor" strokeLinecap="round" strokeWidth="1.3"/>
                         </svg>
-                        {dt.startDate
-                          ? <span className="text-slate-700">{fmtDate(dt.startDate)}</span>
-                          : <span className="text-slate-300">Start</span>}
+                        {/* Start date — click to edit */}
+                        <button
+                          type="button"
+                          className="relative"
+                          onClick={() => startDateRef.current?.showPicker?.() ?? startDateRef.current?.click()}
+                          title="Edit start date"
+                        >
+                          {localStartDate
+                            ? <span className="text-slate-700 hover:text-indigo-600 transition-colors">{fmtDate(localStartDate)}</span>
+                            : <span className="text-slate-300 hover:text-indigo-400 transition-colors">+ Start</span>}
+                          <input
+                            ref={startDateRef}
+                            className="sr-only"
+                            type="date"
+                            value={localStartDate}
+                            onChange={(e) => void saveStartDate(e.target.value)}
+                          />
+                        </button>
                         <svg fill="none" viewBox="0 0 14 6" width="12" height="6" className="text-slate-300 flex-shrink-0">
                           <path d="M0 3h12M9 1l3 2-3 2" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.2"/>
                         </svg>
-                        {dt.dueDate
-                          ? <span className={duePast ? 'text-red-500 font-medium' : 'text-slate-700'}>{fmtDate(dt.dueDate)}</span>
-                          : <span className="text-slate-300">Due</span>}
+                        {/* Due date — click to edit */}
+                        <button
+                          type="button"
+                          className="relative"
+                          onClick={() => dueDateRef.current?.showPicker?.() ?? dueDateRef.current?.click()}
+                          title="Edit due date"
+                        >
+                          {localDueDate
+                            ? <span className={duePast ? 'text-red-500 font-medium hover:text-red-600 transition-colors' : 'text-slate-700 hover:text-indigo-600 transition-colors'}>{fmtDate(localDueDate)}</span>
+                            : <span className="text-slate-300 hover:text-indigo-400 transition-colors">+ Due</span>}
+                          <input
+                            ref={dueDateRef}
+                            className="sr-only"
+                            type="date"
+                            value={localDueDate}
+                            onChange={(e) => void saveDueDate(e.target.value)}
+                          />
+                        </button>
                       </div>
                     </div>
 

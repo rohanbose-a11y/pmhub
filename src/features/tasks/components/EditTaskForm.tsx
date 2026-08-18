@@ -1,6 +1,6 @@
 import { useState, useMemo, useRef, useEffect, type ChangeEvent, type FormEvent } from 'react'
 
-import { FormField } from '../../../shared/components/FormField'
+import { InlineDatePicker } from '../../../shared/components/Datepicker'
 import { formatUserDisplay } from '../../../shared/lib/formatUserDisplay'
 import { KraCombobox } from '../../../shared/components/KraCombobox'
 import { RichTextEditor } from '../../../shared/components/RichTextEditor'
@@ -458,32 +458,14 @@ export function EditTaskForm({
           }}
         />
         <div className="grid grid-cols-2 gap-3">
-          <FormField
-            label="Start date"
-            name="startDate"
-            type="date"
-            value={values.startDate ?? ''}
-            onChange={(e) => {
-              const v = e.target.value
-              set('startDate', v)
-              const calc = calcEngagementDays(v, values.dueDate ?? '')
-              if (calc !== undefined) set('engagementDays', calc)
-            }}
-          />
-          <FormField
-            label="Due date"
-            name="dueDate"
-            type="date"
-            value={values.dueDate ?? ''}
-            onChange={(e) => {
-              const v = e.target.value
-              set('dueDate', v)
-              const calc = calcEngagementDays(values.startDate ?? '', v)
-              if (calc !== undefined) set('engagementDays', calc)
-            }}
-          />
-          <FormField label="Review date" name="reviewDate" onChange={handleChange} type="date" value={values.reviewDate ?? ''} />
-          <FormField label="Closing date" name="closingDate" onChange={handleChange} type="date" value={values.closingDate ?? ''} />
+          <div>
+            <FieldLabel>Review date</FieldLabel>
+            <InlineDatePicker value={values.reviewDate ?? ''} onChange={(v) => set('reviewDate', v)} placeholder="Set date" />
+          </div>
+          <div>
+            <FieldLabel>Closing date</FieldLabel>
+            <InlineDatePicker value={values.closingDate ?? ''} onChange={(v) => set('closingDate', v)} placeholder="Set date" />
+          </div>
         </div>
 
         {/* Engagement Days */}

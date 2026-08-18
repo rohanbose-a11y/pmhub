@@ -1,4 +1,4 @@
-import { InlineDatePicker } from '../../../shared/components/InlineDatePicker'
+import { InlineDatePicker } from '../../../shared/components/Datepicker'
 
 interface TimelineProps {
   startDate: string

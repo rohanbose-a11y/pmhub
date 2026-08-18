@@ -16,7 +16,7 @@ import { useKraOptions } from '../../../hooks/useKraOptions'
 import { useAuthStore } from '../../../store/authStore'
 import { RichTextEditor } from '../../../shared/components/RichTextEditor'
 import { UserAvatar } from '../../../shared/components/UserAvatar'
-import { InlineDatePicker } from '../../../shared/components/InlineDatePicker'
+import { InlineDatePicker } from '../../../shared/components/Datepicker'
 import { formatUserDisplay } from '../../../shared/lib/formatUserDisplay'
 import { AddEventModal } from '../../calendar/components/AddEventModal'
 

@@ -4,8 +4,11 @@ import { FormField } from '../../../shared/components/FormField'
 import { formatUserDisplay } from '../../../shared/lib/formatUserDisplay'
 import { KraCombobox } from '../../../shared/components/KraCombobox'
 import { RichTextEditor } from '../../../shared/components/RichTextEditor'
+import { ErrorBanner } from '../../../shared/components/ErrorBanner'
+import { PrioritySelector } from '../../../shared/components/PrioritySelector'
 import { Timeline } from './Timeline'
 import { StatusChangeModal } from './StatusChangeModal'
+import { DependentTasksPicker } from './DependentTasksPicker'
 import { useKraOptions } from '../../../hooks/useKraOptions'
 import { useAuthStore } from '../../../store/authStore'
 import type { Project } from '../../projects/types/project.types'
@@ -166,7 +169,6 @@ export function EditTaskForm({
       ? task.dependsOnTasks.split(',').map((s) => s.trim()).filter(Boolean)
       : []
   )
-  const [depPickerValue, setDepPickerValue] = useState('')
   const [showRaciDrop, setShowRaciDrop] = useState(false)
   const raciContainerRef = useRef<HTMLDivElement>(null)
 
@@ -406,25 +408,7 @@ export function EditTaskForm({
         {/* Priority */}
         <div>
           <FieldLabel>Priority</FieldLabel>
-          <div className="grid grid-cols-4 gap-2">
-            {(['Low', 'Medium', 'High', 'Urgent'] as const).map((p) => (
-              <button
-                key={p}
-                type="button"
-                onClick={() => set('priority', p)}
-                className={`py-2.5 rounded-lg text-xs font-semibold border transition-all ${
-                  values.priority === p
-                    ? p === 'Urgent' ? 'bg-rose-600 border-rose-600 text-white shadow-sm'
-                    : p === 'High' ? 'bg-orange-500 border-orange-500 text-white shadow-sm'
-                    : p === 'Medium' ? 'bg-amber-500 border-amber-500 text-white shadow-sm'
-                    : 'bg-slate-500 border-slate-500 text-white shadow-sm'
-                    : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
-                }`}
-              >
-                {p}
-              </button>
-            ))}
-          </div>
+          <PrioritySelector value={values.priority} onChange={(p) => set('priority', p)} disabled={isReadOnly} />
         </div>
 
         {/* Progress — driven by status, not manually editable */}
@@ -618,75 +602,12 @@ export function EditTaskForm({
 
       {/* ── Dependent tasks ── */}
       <SectionDivider>Dependent tasks</SectionDivider>
-      <div className="space-y-2">
-        {depTaskIds.length === 0 ? (
-          <div className="flex items-center gap-2.5 bg-slate-50 border border-slate-100 rounded-lg p-3.5">
-            <svg className="w-4 h-4 text-slate-300 flex-shrink-0" fill="none" viewBox="0 0 16 16">
-              <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.4"/>
-              <path d="M8 5v3M8 11v.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-            </svg>
-            <p className="text-xs text-slate-400">No dependent tasks</p>
-          </div>
-        ) : (
-          <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 space-y-2">
-            {depTaskIds.map((depId) => {
-              const depTask = tasks.find((t) => t.id === depId)
-              return (
-                <div key={depId} className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-1.5 h-1.5 rounded-full bg-slate-400 flex-shrink-0" />
-                  <span className="text-sm text-slate-700 font-medium flex-1 min-w-0 truncate">
-                    {depTask?.subject ?? depId}
-                  </span>
-                  <button
-                    aria-label="Remove dependent task"
-                    className="flex-shrink-0 w-5 h-5 flex items-center justify-center rounded-full hover:bg-rose-100 text-slate-400 hover:text-rose-500 transition-colors"
-                    onClick={() => setDepTaskIds((prev) => prev.filter((x) => x !== depId))}
-                    type="button"
-                  >
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 12 12">
-                      <path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                    </svg>
-                  </button>
-                </div>
-              )
-            })}
-          </div>
-        )}
-
-        {/* Add picker */}
-        <div className="flex gap-2">
-          <div className="relative flex-1 min-w-0">
-            <select
-              className={selectClass}
-              onChange={(e) => setDepPickerValue(e.target.value)}
-              value={depPickerValue}
-            >
-              <option value="">Add a dependent task…</option>
-              {tasks
-                .filter((t) => t.id !== task.id && !depTaskIds.includes(t.id))
-                .map((t) => (
-                  <option key={t.id} value={t.id}>{t.subject}</option>
-                ))}
-            </select>
-            <svg className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 flex-shrink-0" fill="none" viewBox="0 0 16 16">
-              <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </div>
-          <button
-            className="px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-all disabled:opacity-40 disabled:pointer-events-none flex-shrink-0"
-            disabled={!depPickerValue}
-            onClick={() => {
-              if (depPickerValue) {
-                setDepTaskIds((prev) => [...prev, depPickerValue])
-                setDepPickerValue('')
-              }
-            }}
-            type="button"
-          >
-            Add
-          </button>
-        </div>
-      </div>
+      <DependentTasksPicker
+        tasks={tasks}
+        value={depTaskIds}
+        onChange={setDepTaskIds}
+        excludeId={task.id}
+      />
 
       {/* ── Description ── */}
       <SectionDivider>Description</SectionDivider>
@@ -695,14 +616,7 @@ export function EditTaskForm({
         onChange={(html) => set('description', html)}
       />
 
-      {serverError && (
-        <div aria-live="polite" className="flex items-start gap-2.5 bg-rose-50 border border-rose-100 text-rose-700 p-3.5 rounded-lg mt-4" role="alert">
-          <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 16 16">
-            <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm-.75 3.75a.75.75 0 0 1 1.5 0v3.5a.75.75 0 0 1-1.5 0v-3.5zm.75 7a.875.875 0 1 1 0-1.75.875.875 0 0 1 0 1.75z" />
-          </svg>
-          <span className="text-sm">{serverError}</span>
-        </div>
-      )}
+      <ErrorBanner message={serverError} className="mt-4" />
 
       {isStatusModalOpen && (
         <StatusChangeModal

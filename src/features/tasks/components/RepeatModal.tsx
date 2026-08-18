@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { WEEKDAYS } from '../../../api/autoRepeatApi'
 import type { AutoRepeat, AutoRepeatInput, RepeatFrequency, Weekday } from '../../../api/autoRepeatApi'
+import { ErrorBanner } from '../../../shared/components/ErrorBanner'
 
 function fmtRepeatDate(d: string) {
   return new Date(d).toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -126,14 +127,7 @@ export function RepeatModal({ open, onClose, savedRepeat, defaultStartDate, onSa
 
         {/* Body */}
         <div className="overflow-y-auto flex-1 p-4 space-y-3">
-          {error && (
-            <div className="flex items-start gap-2 bg-rose-50 border border-rose-100 text-rose-700 px-3 py-2.5 rounded-lg text-[12px]">
-              <svg className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 16 16">
-                <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm-.75 3.75a.75.75 0 0 1 1.5 0v3.5a.75.75 0 0 1-1.5 0v-3.5zm.75 7a.875.875 0 1 1 0-1.75.875.875 0 0 1 0 1.75z"/>
-              </svg>
-              <span>{error}</span>
-            </div>
-          )}
+          <ErrorBanner message={error} compact />
 
           {!repeatEnabled ? (
             /* Empty state */

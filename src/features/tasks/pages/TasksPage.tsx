@@ -331,7 +331,7 @@ export function TasksPage() {
               <p style={{ fontSize: 12.5, color: '#9CA3AF', marginBottom: 16 }}>Create your first task to get started</p>
               <button
                 type="button"
-                onClick={openCreateModal}
+                onClick={() => openCreateModal()}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, height: 32, padding: '0 16px', background: '#7B3FF2', color: 'white', fontSize: 12.5, fontWeight: 600, borderRadius: 8, border: 'none', cursor: 'pointer' }}
               >
                 <svg fill="none" viewBox="0 0 12 12" width={11} height={11}><path d="M6 1v10M1 6h10" stroke="white" strokeLinecap="round" strokeWidth="1.8"/></svg>
@@ -515,7 +515,7 @@ export function TasksPage() {
                   {flatTasks.map(({ task, group }) => renderRow(task, group))}
                   <button
                     type="button"
-                    onClick={openCreateModal}
+                    onClick={() => openCreateModal()}
                     style={{
                       display: 'flex',
                       alignItems: 'center',

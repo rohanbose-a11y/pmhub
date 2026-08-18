@@ -16,6 +16,7 @@ import { useKraOptions } from '../../../hooks/useKraOptions'
 import { useAuthStore } from '../../../store/authStore'
 import { RichTextEditor } from '../../../shared/components/RichTextEditor'
 import { UserAvatar } from '../../../shared/components/UserAvatar'
+import { InlineDatePicker } from '../../../shared/components/InlineDatePicker'
 import { formatUserDisplay } from '../../../shared/lib/formatUserDisplay'
 import { AddEventModal } from '../../calendar/components/AddEventModal'
 
@@ -184,8 +185,6 @@ export function TaskDetailModal({
   const [isEditingEngDays, setIsEditingEngDays] = useState(false)
   const [localStartDate, setLocalStartDate]     = useState(task.startDate ?? '')
   const [localDueDate,   setLocalDueDate]       = useState(task.dueDate ?? '')
-  const startDateRef = useRef<HTMLInputElement>(null)
-  const dueDateRef   = useRef<HTMLInputElement>(null)
   const [actType, setActType]                   = useState(task.activityType ?? '')
   const [showActTypeMenu, setShowActTypeMenu]   = useState(false)
   const [localProject,    setLocalProject]      = useState<string>(task.project ?? '')
@@ -919,45 +918,20 @@ export function TaskDetailModal({
                           <rect x="1" y="2.5" width="12" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
                           <path d="M1 6h12M4.5 1v3M9.5 1v3" stroke="currentColor" strokeLinecap="round" strokeWidth="1.3"/>
                         </svg>
-                        {/* Start date — click to edit */}
-                        <button
-                          type="button"
-                          className="relative"
-                          onClick={() => startDateRef.current?.showPicker?.() ?? startDateRef.current?.click()}
-                          title="Edit start date"
-                        >
-                          {localStartDate
-                            ? <span className="text-slate-700 hover:text-indigo-600 transition-colors">{fmtDate(localStartDate)}</span>
-                            : <span className="text-slate-300 hover:text-indigo-400 transition-colors">+ Start</span>}
-                          <input
-                            ref={startDateRef}
-                            className="sr-only"
-                            type="date"
-                            value={localStartDate}
-                            onChange={(e) => void saveStartDate(e.target.value)}
-                          />
-                        </button>
+                        <InlineDatePicker
+                          value={localStartDate}
+                          onChange={(v) => void saveStartDate(v)}
+                          placeholder="+ Start"
+                        />
                         <svg fill="none" viewBox="0 0 14 6" width="12" height="6" className="text-slate-300 flex-shrink-0">
                           <path d="M0 3h12M9 1l3 2-3 2" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.2"/>
                         </svg>
-                        {/* Due date — click to edit */}
-                        <button
-                          type="button"
-                          className="relative"
-                          onClick={() => dueDateRef.current?.showPicker?.() ?? dueDateRef.current?.click()}
-                          title="Edit due date"
-                        >
-                          {localDueDate
-                            ? <span className={duePast ? 'text-red-500 font-medium hover:text-red-600 transition-colors' : 'text-slate-700 hover:text-indigo-600 transition-colors'}>{fmtDate(localDueDate)}</span>
-                            : <span className="text-slate-300 hover:text-indigo-400 transition-colors">+ Due</span>}
-                          <input
-                            ref={dueDateRef}
-                            className="sr-only"
-                            type="date"
-                            value={localDueDate}
-                            onChange={(e) => void saveDueDate(e.target.value)}
-                          />
-                        </button>
+                        <InlineDatePicker
+                          value={localDueDate}
+                          onChange={(v) => void saveDueDate(v)}
+                          placeholder="+ Due"
+                          overdue={!!duePast}
+                        />
                       </div>
                     </div>
 

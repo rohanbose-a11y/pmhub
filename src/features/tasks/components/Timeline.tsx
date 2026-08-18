@@ -1,12 +1,4 @@
-import { useRef } from 'react'
-
-function formatDateShort(iso: string) {
-  try {
-    return new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' }).format(new Date(iso))
-  } catch {
-    return iso
-  }
-}
+import { InlineDatePicker } from '../../../shared/components/InlineDatePicker'
 
 interface TimelineProps {
   startDate: string
@@ -16,9 +8,6 @@ interface TimelineProps {
 }
 
 export function Timeline({ startDate, dueDate, onStartDateChange, onDueDateChange }: TimelineProps) {
-  const startRef = useRef<HTMLInputElement>(null)
-  const dueRef = useRef<HTMLInputElement>(null)
-
   const now = new Date()
   const start = startDate ? new Date(startDate) : null
   const due = dueDate ? new Date(dueDate) : null
@@ -55,24 +44,10 @@ export function Timeline({ startDate, dueDate, onStartDateChange, onDueDateChang
       <div className="flex items-center justify-between gap-2">
 
         {/* Start date — tap to edit */}
-        <button
-          className="text-left group min-w-0"
-          onClick={() => startRef.current?.showPicker?.() ?? startRef.current?.click()}
-          title="Tap to edit start date"
-          type="button"
-        >
+        <div className="text-left min-w-0">
           <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold">Start</p>
-          <p className={`text-sm font-bold mt-0.5 transition-colors ${startDate ? 'text-slate-800 group-hover:text-indigo-600' : 'text-slate-400 group-hover:text-indigo-400'}`}>
-            {startDate ? formatDateShort(startDate) : '+ Set'}
-          </p>
-          <input
-            ref={startRef}
-            className="sr-only"
-            onChange={(e) => onStartDateChange(e.target.value)}
-            type="date"
-            value={startDate}
-          />
-        </button>
+          <InlineDatePicker value={startDate} onChange={onStartDateChange} placeholder="+ Set" className="text-sm font-bold mt-0.5" />
+        </div>
 
         {/* Status badge */}
         {daysLeft !== null ? (
@@ -88,24 +63,10 @@ export function Timeline({ startDate, dueDate, onStartDateChange, onDueDateChang
         )}
 
         {/* Due date — tap to edit */}
-        <button
-          className="text-right group min-w-0"
-          onClick={() => dueRef.current?.showPicker?.() ?? dueRef.current?.click()}
-          title="Tap to edit due date"
-          type="button"
-        >
+        <div className="text-right min-w-0">
           <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold">Due</p>
-          <p className={`text-sm font-bold mt-0.5 transition-colors ${dueDate ? 'text-slate-800 group-hover:text-indigo-600' : 'text-slate-400 group-hover:text-indigo-400'}`}>
-            {dueDate ? formatDateShort(dueDate) : '+ Set'}
-          </p>
-          <input
-            ref={dueRef}
-            className="sr-only"
-            onChange={(e) => onDueDateChange(e.target.value)}
-            type="date"
-            value={dueDate}
-          />
-        </button>
+          <InlineDatePicker value={dueDate} onChange={onDueDateChange} placeholder="+ Set" overdue={isOverdue} className="text-sm font-bold mt-0.5" />
+        </div>
       </div>
 
       {/* Progress bar */}

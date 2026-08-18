@@ -5,7 +5,7 @@ import { RichTextEditor } from '../../../shared/components/RichTextEditor'
 import { ErrorBanner } from '../../../shared/components/ErrorBanner'
 import { PrioritySelector } from '../../../shared/components/PrioritySelector'
 import { DependentTasksPicker } from './DependentTasksPicker'
-import { Timeline } from './Timeline'
+import { InlineDatePicker } from '../../../shared/components/Datepicker'
 import { useKraOptions } from '../../../hooks/useKraOptions'
 import type { Project } from '../../projects/types/project.types'
 import type { Task, CreateTaskFieldErrors, CreateTaskFormValues, CreateTaskInput } from '../types/task.types'
@@ -234,18 +234,30 @@ export function CreateTaskForm({
       </div>
       <SectionDivider>Timeline</SectionDivider>
       <div className="space-y-3">
-        <Timeline
-          startDate={values.startDate}
-          dueDate={values.dueDate}
-          onStartDateChange={(v) => setValues((prev) => {
-            const calc = calcEngagementDays(v, prev.dueDate)
-            return { ...prev, startDate: v, ...(calc !== undefined ? { engagementDays: String(calc) } : {}) }
-          })}
-          onDueDateChange={(v) => setValues((prev) => {
-            const calc = calcEngagementDays(prev.startDate, v)
-            return { ...prev, dueDate: v, ...(calc !== undefined ? { engagementDays: String(calc) } : {}) }
-          })}
-        />
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <FieldLabel>Start date</FieldLabel>
+            <InlineDatePicker
+              value={values.startDate}
+              onChange={(v) => setValues((prev) => {
+                const calc = calcEngagementDays(v, prev.dueDate)
+                return { ...prev, startDate: v, ...(calc !== undefined ? { engagementDays: String(calc) } : {}) }
+              })}
+              placeholder="Set date"
+            />
+          </div>
+          <div>
+            <FieldLabel>Due date</FieldLabel>
+            <InlineDatePicker
+              value={values.dueDate}
+              onChange={(v) => setValues((prev) => {
+                const calc = calcEngagementDays(prev.startDate, v)
+                return { ...prev, dueDate: v, ...(calc !== undefined ? { engagementDays: String(calc) } : {}) }
+              })}
+              placeholder="Set date"
+            />
+          </div>
+        </div>
 
         {/* Engagement Days */}
         <div>

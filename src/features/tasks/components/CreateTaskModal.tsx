@@ -12,7 +12,7 @@ import { getUpcomingRepeatDates } from '../../../shared/lib/getUpcomingRepeatDat
 import { autoRepeatApi } from '../../../api/autoRepeatApi'
 import { AddEventModal } from '../../calendar/components/AddEventModal'
 import { ErrorBanner } from '../../../shared/components/ErrorBanner'
-import { InlineDatePicker } from '../../../shared/components/InlineDatePicker'
+import { InlineDatePicker } from '../../../shared/components/Datepicker'
 import type { RepeatFrequency, Weekday } from '../../../api/autoRepeatApi'
 import { RepeatModal } from './RepeatModal'
 import { PRIORITY_CONFIG } from '../config/priorityConfig'

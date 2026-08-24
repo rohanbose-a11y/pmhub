@@ -119,7 +119,7 @@ export function TasksPage() {
   // ── View filters ──────────────────────────────────────────────────────────────
 
   const [searchParams, setSearchParams] = useSearchParams()
-  const [showClosed,    setShowClosed]    = useState(false)
+  const [showClosed,    setShowClosed]    = useState(true)
   const [myTasksOnly,   setMyTasksOnly]   = useState(false)
   const [projectFilter, setProjectFilter] = useState(() => searchParams.get('project') ?? 'all')
   const [collapsed,     setCollapsed]     = useState<Set<string>>(new Set())
@@ -394,8 +394,7 @@ export function TasksPage() {
                     <span
                       style={{
                         fontSize: 12.5,
-                        color: isDone ? '#9CA3AF' : '#111827',
-                        textDecoration: isDone ? 'line-through' : 'none',
+                        color: isDone ? '#6B7280' : '#111827',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',

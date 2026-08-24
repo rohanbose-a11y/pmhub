@@ -260,8 +260,14 @@ export function EditTaskForm({
       setErrors({ subject: 'Subject is required.' })
       return
     }
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const statusToSave =
+      values.status === 'Overdue' && values.dueDate && new Date(values.dueDate) >= today
+        ? 'Open'
+        : values.status
     const ok = await onSubmit(task.id, {
       ...values,
+      status: statusToSave,
       subject: values.subject.trim(),
       project: (values.project as string)?.trim() || undefined,
       activityType: (values.activityType as string)?.trim() || undefined,
@@ -505,43 +511,48 @@ export function EditTaskForm({
         </div>
       </div>
 
-      {/* ── Parent task ── */}
-      <SectionDivider>Parent task</SectionDivider>
-      <div className="space-y-3">
-        <div>
-          <FieldLabel htmlFor="edit-parent">Link to parent</FieldLabel>
-          <div className="relative w-full">
-            <select
-              className={selectClass}
-              id="edit-parent"
-              name="parentTask"
-              onChange={handleChange}
-              value={values.parentTask ?? ''}
-            >
-              <option value="">None — top-level task</option>
-              {tasks.filter((t) => t.id !== task.id).map((t) => (
-                <option key={t.id} value={t.id}>{t.subject}</option>
-              ))}
-            </select>
-            <svg className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 flex-shrink-0" fill="none" viewBox="0 0 16 16">
-              <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </div>
-        </div>
-
-        {parentTaskSubject && values.parentTask && (
-          <div className="flex items-start gap-3 bg-indigo-50 border border-indigo-100 rounded-lg p-3.5">
-            <svg className="w-4 h-4 text-indigo-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 16 16">
-              <path d="M8 2v4l3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-              <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.4"/>
-            </svg>
-            <div className="min-w-0">
-              <p className="text-xs font-bold text-indigo-600 uppercase tracking-wide">Parent task</p>
-              <p className="text-sm font-semibold text-indigo-800 mt-0.5 break-words">{parentTaskSubject}</p>
-              <p className="text-[11px] text-indigo-400 font-mono mt-0.5 break-all">{values.parentTask}</p>
+      {/* ── Parent task (hidden for milestones) ── */}
+      {!values.isMilestone && (
+        <>
+          <SectionDivider>Parent task</SectionDivider>
+          <div className="space-y-3">
+            <div>
+              <FieldLabel htmlFor="edit-parent">Link to parent</FieldLabel>
+              <div className="relative w-full">
+                <select
+                  className={selectClass}
+                  id="edit-parent"
+                  name="parentTask"
+                  onChange={handleChange}
+                  value={values.parentTask ?? ''}
+                >
+                  <option value="">None — top-level task</option>
+                  {tasks.filter((t) => t.id !== task.id).map((t) => (
+                    <option key={t.id} value={t.id}>{t.subject}</option>
+                  ))}
+                </select>
+                <svg className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 flex-shrink-0" fill="none" viewBox="0 0 16 16">
+                  <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </div>
             </div>
+
+            {parentTaskSubject && values.parentTask && (
+              <div className="flex items-start gap-3 bg-indigo-50 border border-indigo-100 rounded-lg p-3.5">
+                <svg className="w-4 h-4 text-indigo-400 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 16 16">
+                  <path d="M8 2v4l3 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                  <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.4"/>
+                </svg>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-indigo-600 uppercase tracking-wide">Parent task</p>
+                  <p className="text-sm font-semibold text-indigo-800 mt-0.5 break-words">{parentTaskSubject}</p>
+                  <p className="text-[11px] text-indigo-400 font-mono mt-0.5 break-all">{values.parentTask}</p>
+                </div>
+              </div>
+            )}
           </div>
-        )}
+        </>
+      )}
 
         {/* RACI */}
         <div>

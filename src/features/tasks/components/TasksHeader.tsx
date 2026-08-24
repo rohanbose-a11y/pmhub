@@ -128,7 +128,7 @@ export function TasksHeader({
         borderBottom: '1px solid #F0F0F5',
       }}>
 
-        {/* Workspace chip */}
+        {/* Projects root */}
         <button
           type="button"
           onClick={() => onProjectFilterChange('all')}
@@ -140,7 +140,6 @@ export function TasksHeader({
           onMouseEnter={(e) => (e.currentTarget.style.background = '#F5F3FF')}
           onMouseLeave={(e) => (e.currentTarget.style.background = 'none')}
         >
-          {/* Space icon */}
           <span style={{
             width: 18, height: 18, borderRadius: 5, flexShrink: 0,
             background: 'linear-gradient(135deg,#7B3FF2,#A78BFA)',
@@ -153,41 +152,26 @@ export function TasksHeader({
               <rect x="5.5" y="5.5" width="3.5" height="3.5" rx="1" fill="white" fillOpacity=".9"/>
             </svg>
           </span>
-          <span style={{ fontSize: 13, fontWeight: 500, color: '#6B7280' }}>Team Space</span>
+          <span style={{ fontSize: 13, fontWeight: 500, color: '#6B7280' }}>Projects</span>
         </button>
 
-        {/* Chevron separator */}
+        {/* Chevron */}
         <svg fill="none" viewBox="0 0 6 10" width={5} height={8} style={{ color: '#D1D5DB', flexShrink: 0 }}>
           <path d="M1 1l4 4-4 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
 
         {selectedProject ? (
-          <>
-            <button
-              type="button"
-              onClick={() => onProjectFilterChange('all')}
-              style={{ fontSize: 13, fontWeight: 500, color: '#9CA3AF', background: 'none', border: 'none', cursor: 'pointer', padding: '4px 6px', borderRadius: 6 }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = '#6B7280')}
-              onMouseLeave={(e) => (e.currentTarget.style.color = '#9CA3AF')}
-            >
-              All Tasks
-            </button>
-
-            <svg fill="none" viewBox="0 0 6 10" width={5} height={8} style={{ color: '#D1D5DB', flexShrink: 0 }}>
-              <path d="M1 1l4 4-4 4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-
-            {/* Current project — purple pill */}
-            <span style={{
-              display: 'inline-flex', alignItems: 'center', gap: 5,
-              padding: '3px 10px', borderRadius: 999,
-              background: '#F3F0FF', border: '1px solid #DDD6FE',
-              fontSize: 12.5, fontWeight: 700, color: '#7B3FF2',
-            }}>
-              {selectedProject.displayName}
-            </span>
-          </>
+          /* Projects > {Project} */
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            padding: '3px 10px', borderRadius: 999,
+            background: '#F3F0FF', border: '1px solid #DDD6FE',
+            fontSize: 12.5, fontWeight: 700, color: '#7B3FF2',
+          }}>
+            {selectedProject.displayName}
+          </span>
         ) : (
+          /* Projects > All Tasks */
           <span style={{ fontSize: 13, fontWeight: 700, color: '#111827', padding: '4px 6px' }}>
             All Tasks
           </span>

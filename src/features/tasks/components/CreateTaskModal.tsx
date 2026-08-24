@@ -552,7 +552,8 @@ export function CreateTaskModal({
                     </div>
                   </div>
 
-                  {/* Parent Task */}
+                  {/* Parent Task — hidden for milestones */}
+                  {!isMilestone && (
                   <div
                     ref={parentTriggerRef}
                     className="flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 transition-colors cursor-pointer group"
@@ -570,6 +571,7 @@ export function CreateTaskModal({
                       </svg>
                     </div>
                   </div>
+                  )}
 
                 </div>
 

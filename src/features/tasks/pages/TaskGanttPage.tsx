@@ -257,7 +257,7 @@ export function TaskGanttPage() {
   const [searchParams]  = useSearchParams()
   const [myTasksOnly,   setMyTasksOnly]   = useState(false)
   const [projectFilter, setProjectFilter] = useState(() => searchParams.get('project') ?? 'all')
-  const [showClosed,    setShowClosed]    = useState(false)
+  const [showClosed,    setShowClosed]    = useState(true)
   const [isCreateOpen,  setIsCreateOpen]  = useState(false)
   const [createType,    setCreateType]    = useState<AddNewType>('task')
 

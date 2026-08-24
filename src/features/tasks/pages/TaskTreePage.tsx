@@ -59,11 +59,8 @@ function fmtDue(v: string | null): { text: string; overdue: boolean } {
   const d = new Date(v); d.setHours(0, 0, 0, 0)
   const now = new Date(); now.setHours(0, 0, 0, 0)
   const diff = Math.round((d.getTime() - now.getTime()) / 86_400_000)
-  if (diff < 0)   return { text: d.toLocaleDateString('en', { month: 'short', day: 'numeric' }), overdue: true }
-  if (diff === 0) return { text: 'Today',    overdue: false }
-  if (diff === 1) return { text: 'Tomorrow', overdue: false }
-  if (diff <= 6)  return { text: d.toLocaleDateString('en', { weekday: 'short' }), overdue: false }
-  return { text: d.toLocaleDateString('en', { month: 'short', day: 'numeric' }), overdue: false }
+  const full = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' })
+  return { text: full, overdue: diff < 0 }
 }
 
 function statusDot(status: string): string {
@@ -169,7 +166,7 @@ function TaskRow({
   return (
     <>
       <div
-        className={`flex items-center hover:bg-slate-50/80 cursor-pointer transition-colors select-none group border-b border-slate-50 ${isDone ? 'opacity-55' : ''}`}
+        className="flex items-center hover:bg-slate-50/80 cursor-pointer transition-colors select-none group border-b border-slate-50"
         style={{ paddingLeft: leftPad, paddingRight: 12, minHeight: 38 }}
         onClick={() => onEdit(task)}
         role="button"
@@ -212,7 +209,7 @@ function TaskRow({
         <span
           className={`flex-1 min-w-0 truncate group-hover:text-indigo-600 transition-colors ${
             isDone
-              ? 'text-slate-400 line-through text-[12px]'
+              ? 'text-slate-500 text-[12px]'
               : depth === 0
                 ? 'font-semibold text-slate-800 text-[13px]'
                 : 'text-slate-700 text-[12.5px]'
@@ -417,7 +414,7 @@ export function TaskTreePage() {
   const [searchParams]  = useSearchParams()
   const [myTasksOnly,   setMyTasksOnly]   = useState(false)
   const [projectFilter, setProjectFilter] = useState(() => searchParams.get('project') ?? 'all')
-  const [showClosed,    setShowClosed]    = useState(false)
+  const [showClosed,    setShowClosed]    = useState(true)
   const [isCreateOpen,  setIsCreateOpen]  = useState(false)
   const [createType,    setCreateType]    = useState<AddNewType>('task')
 

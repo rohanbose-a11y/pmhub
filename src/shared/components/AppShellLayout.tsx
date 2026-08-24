@@ -604,8 +604,8 @@ export function AppShellLayout() {
           {/* ─── Divider ─── */}
           <div style={{ height: 1, background: '#F3F4F6', margin: '8px 0' }} />
 
-          {/* ─── SPACES ─── */}
-          {sidebarOpen && <SectionHeader label="Spaces" collapsed={spacesCollapsed} onToggle={() => setSpacesCollapsed((v) => !v)} />}
+          {/* ─── PROJECTS ─── */}
+          {sidebarOpen && <SectionHeader label="Projects" collapsed={spacesCollapsed} onToggle={() => setSpacesCollapsed((v) => !v)} />}
 
           {(!sidebarOpen || !spacesCollapsed) && projects.map((proj) => {
             const count    = taskCountByProject[proj.name] ?? 0

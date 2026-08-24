@@ -17,6 +17,7 @@ import { useAuthStore } from '../../../store/authStore'
 import { RichTextEditor } from '../../../shared/components/RichTextEditor'
 import { UserAvatar } from '../../../shared/components/UserAvatar'
 import { InlineDatePicker } from '../../../shared/components/Datepicker'
+import { calcEngagementDays } from '../../../shared/lib/calcEngagementDays'
 import { formatUserDisplay } from '../../../shared/lib/formatUserDisplay'
 import { AddEventModal } from '../../calendar/components/AddEventModal'
 import { getEventsByTask, type ErpEvent } from '../../../api/calendarApi'
@@ -198,6 +199,7 @@ export function TaskDetailModal({
   const [depPickerValue,  setDepPickerValue]   = useState('')
   const [showDepPicker,   setShowDepPicker]    = useState(false)
   const [activityLog, setActivityLog]           = useState<ActivityEntry[]>([])
+  const [isSaving, setIsSaving]                 = useState(false)
 
   const addActivity = (entry: Omit<ActivityEntry, 'time'>) => {
     const time = new Date()
@@ -447,13 +449,11 @@ export function TaskDetailModal({
     setProjectQuery('')
   }
 
-  const handleProjectChange = async (projectName: string) => {
+  const handleProjectChange = (projectName: string) => {
     setShowProjectMenu(false)
     setProjectQuery('')
     if (projectName === localProject) return
     setLocalProject(projectName)
-    const ok = await onUpdate(task.id, { subject: task.subject, status: task.status, priority: task.priority, project: projectName || undefined })
-    if (ok) addActivity({ type: 'desc', text: `Project changed to ${projectName || 'none'}` })
   }
 
   // ── Dropdowns + keyboard ───────────────────────────────────────────────────
@@ -524,16 +524,9 @@ export function TaskDetailModal({
   const liveStatus   = task.status
   const livePriority = task.priority
 
-  const saveTitle = async () => {
+  const saveTitle = () => {
     setIsEditingTitle(false)
-    const v = title.trim()
-    if (v && v !== task.subject) {
-      const ok = await onUpdate(task.id, { subject: v, status: liveStatus, priority: livePriority })
-      if (!ok) setTitle(task.subject)
-      else addActivity({ type: 'title', text: 'Title renamed' })
-    } else {
-      setTitle(task.subject)
-    }
+    if (!title.trim()) setTitle(dt.subject ?? '')
   }
 
   const saveDesc = async () => {
@@ -569,77 +562,43 @@ export function TaskDetailModal({
     setShowAddLink(false)
   }
 
-  const saveEngDays = async () => {
+  const saveEngDays = () => {
     setIsEditingEngDays(false)
-    const n = parseFloat(engDays)
-    if (!isNaN(n) && n !== (dt.engagementDays ?? null)) {
-      const ok = await onUpdate(task.id, { subject: task.subject, status: liveStatus, priority: livePriority, engagementDays: n })
-      if (ok) {
-        setFullTask((prev) => prev ? { ...prev, engagementDays: n } : null)
-        addActivity({ type: 'desc', text: `Engagement days set to ${n}` })
-      }
-    } else if (isNaN(n)) {
-      setEngDays(String(dt.engagementDays ?? ''))
-    }
+    if (isNaN(parseFloat(engDays))) setEngDays(String(dt.engagementDays ?? ''))
   }
 
-  const saveStartDate = async (v: string) => {
+  const saveStartDate = (v: string) => {
     setLocalStartDate(v)
-    if (v !== (dt.startDate ?? '')) {
-      const ok = await onUpdate(task.id, { subject: task.subject, status: liveStatus, priority: livePriority, startDate: v || undefined })
-      if (ok) {
-        setFullTask((prev) => prev ? { ...prev, startDate: v || null } : null)
-        addActivity({ type: 'desc', text: v ? `Start date set to ${v}` : 'Start date cleared' })
-      }
-    }
+    const calc = calcEngagementDays(v, localDueDate)
+    if (calc !== undefined) setEngDays(String(calc))
   }
 
-  const saveDueDate = async (v: string) => {
+  const saveDueDate = (v: string) => {
     setLocalDueDate(v)
-    if (v !== (dt.dueDate ?? '')) {
-      const ok = await onUpdate(task.id, { subject: task.subject, status: liveStatus, priority: livePriority, dueDate: v || undefined })
-      if (ok) {
-        setFullTask((prev) => prev ? { ...prev, dueDate: v || null } : null)
-        addActivity({ type: 'desc', text: v ? `Due date set to ${v}` : 'Due date cleared' })
-      }
-    }
+    const calc = calcEngagementDays(localStartDate, v)
+    if (calc !== undefined) setEngDays(String(calc))
   }
 
-  const selectActType = async (val: string) => {
+  const selectActType = (val: string) => {
     setShowActTypeMenu(false)
     setKraQuery('')
     setActType(val)
-    if (val !== (dt.activityType ?? '')) {
-      const ok = await onUpdate(task.id, { subject: task.subject, status: liveStatus, priority: livePriority, activityType: val || undefined })
-      if (ok) {
-        setFullTask((prev) => prev ? { ...prev, activityType: val || null } : null)
-        addActivity({ type: 'desc', text: val ? `Activity type set to ${val}` : 'Activity type cleared' })
-      }
-    }
   }
 
-  const selectParentTask = async (parentId: string | null) => {
+  const selectParentTask = (parentId: string | null) => {
     setShowParentTaskMenu(false)
     setParentTaskQuery('')
     setLocalParentTask(parentId)
-    const ok = await onUpdate(task.id, { subject: task.subject, status: liveStatus, priority: livePriority, parentTask: parentId || undefined })
-    if (ok) addActivity({ type: 'desc', text: parentId ? `Parent task set to ${parentId}` : 'Parent task removed' })
   }
 
-  const addDep = async (depId: string) => {
+  const addDep = (depId: string) => {
     if (!depId || depTaskIds.includes(depId)) return
-    const newIds = [...depTaskIds, depId]
-    setDepTaskIds(newIds)
+    setDepTaskIds((prev) => [...prev, depId])
     setDepPickerValue('')
-    const ok = await onUpdate(task.id, { subject: task.subject, status: liveStatus, priority: livePriority, dependsOnTasks: newIds.join(',') })
-    if (ok) addActivity({ type: 'desc', text: `Dependency added: ${depId}` })
   }
 
-  const removeDep = async (depId: string) => {
-    const newIds = depTaskIds.filter((id) => id !== depId)
-    setDepTaskIds(newIds)
-    const ok = await onUpdate(task.id, { subject: task.subject, status: liveStatus, priority: livePriority, dependsOnTasks: newIds.join(',') || undefined })
-    if (ok) addActivity({ type: 'desc', text: `Dependency removed: ${depId}` })
+  const removeDep = (depId: string) => {
+    setDepTaskIds((prev) => prev.filter((id) => id !== depId))
   }
 
   const handleCommentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -712,6 +671,80 @@ export function TaskDetailModal({
       await onUpdate(task.id, { subject: task.subject, status: liveStatus, priority: key })
       addActivity({ type: 'priority', text: `Priority changed to ${key}` })
     }
+  }
+
+// ── Batch save (title, dates, engagement, actType, project, parentTask, deps) ─
+
+  const isDirty =
+    title.trim() !== (dt.subject ?? '') ||
+    localStartDate !== (dt.startDate ?? '') ||
+    localDueDate   !== (dt.dueDate   ?? '') ||
+    engDays        !== String(dt.engagementDays ?? '') ||
+    actType        !== (dt.activityType ?? '') ||
+    localProject   !== (dt.project      ?? '') ||
+    localParentTask !== (dt.parentTask  ?? null) ||
+    depTaskIds.join(',') !== (dt.dependsOnTasks ?? '')
+
+  const saveAll = async () => {
+    setIsSaving(true)
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const subj = title.trim() || dt.subject
+
+    const calc = calcEngagementDays(localStartDate, localDueDate)
+    const engN = parseFloat(engDays)
+    const engagementDays = calc !== undefined ? calc : (!isNaN(engN) ? engN : undefined)
+
+    const resolvedStatus =
+      liveStatus === 'Overdue' && localDueDate && new Date(localDueDate) >= today
+        ? ('Open' as const)
+        : liveStatus
+
+    const ok = await onUpdate(task.id, {
+      subject:        subj,
+      status:         resolvedStatus,
+      priority:       livePriority,
+      startDate:      localStartDate || undefined,
+      dueDate:        localDueDate   || undefined,
+      engagementDays: engagementDays,
+      activityType:   actType        || undefined,
+      project:        localProject   || undefined,
+      parentTask:     localParentTask ?? undefined,
+      dependsOnTasks: depTaskIds.join(',') || undefined,
+    })
+
+    if (ok) {
+      setFullTask((prev) => prev ? {
+        ...prev,
+        subject:        subj,
+        status:         resolvedStatus,
+        startDate:      localStartDate || null,
+        dueDate:        localDueDate   || null,
+        engagementDays: engagementDays ?? prev.engagementDays,
+        activityType:   actType        || null,
+        project:        localProject   || null,
+        parentTask:     localParentTask,
+        dependsOnTasks: depTaskIds.join(',') || null,
+      } : null)
+      addActivity({ type: 'desc', text: 'Task updated' })
+    }
+    setIsSaving(false)
+  }
+
+  const discardAll = () => {
+    setTitle(dt.subject ?? '')
+    setIsEditingTitle(false)
+    setLocalStartDate(dt.startDate ?? '')
+    setLocalDueDate(dt.dueDate   ?? '')
+    setEngDays(String(dt.engagementDays ?? ''))
+    setIsEditingEngDays(false)
+    setActType(dt.activityType ?? '')
+    setLocalProject(dt.project  ?? '')
+    setLocalParentTask(dt.parentTask ?? null)
+    setDepTaskIds(
+      dt.dependsOnTasks
+        ? dt.dependsOnTasks.split(',').map((s) => s.trim()).filter(Boolean)
+        : []
+    )
   }
 
 // ── Render ─────────────────────────────────────────────────────────────────
@@ -915,7 +948,7 @@ export function TaskDetailModal({
                         </svg>
                         <InlineDatePicker
                           value={localStartDate}
-                          onChange={(v) => void saveStartDate(v)}
+                          onChange={(v) => saveStartDate(v)}
                           placeholder="+ Start"
                         />
                         <svg fill="none" viewBox="0 0 14 6" width="12" height="6" className="text-slate-300 flex-shrink-0">
@@ -923,7 +956,7 @@ export function TaskDetailModal({
                         </svg>
                         <InlineDatePicker
                           value={localDueDate}
-                          onChange={(v) => void saveDueDate(v)}
+                          onChange={(v) => saveDueDate(v)}
                           placeholder="+ Due"
                           overdue={!!duePast}
                         />
@@ -953,8 +986,8 @@ export function TaskDetailModal({
                           step="any"
                           value={engDays}
                         />
-                      ) : dt.engagementDays != null ? (
-                        <span className="text-[12.5px] text-slate-700">{dt.engagementDays} {dt.engagementDays === 1 ? 'day' : 'days'}</span>
+                      ) : engDays !== '' ? (
+                        <span className="text-[12.5px] text-slate-700">{engDays} {Number(engDays) === 1 ? 'day' : 'days'}</span>
                       ) : (
                         <span className="text-[12.5px] text-slate-300 group-hover:text-slate-400 transition-colors">Empty</span>
                       )}
@@ -977,7 +1010,8 @@ export function TaskDetailModal({
                       </div>
                     </div>
 
-                    {/* Parent Task */}
+                    {/* Parent Task — hidden for milestones */}
+                    {!task.isMilestone && (
                     <div
                       ref={parentTaskTriggerRef}
                       className="flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 transition-colors cursor-pointer group"
@@ -997,6 +1031,7 @@ export function TaskDetailModal({
                         </svg>
                       </div>
                     </div>
+                    )}
 
                   </div>
 
@@ -1171,7 +1206,7 @@ export function TaskDetailModal({
                           <button
                             type="button"
                             aria-label="Remove"
-                            onClick={() => void removeDep(depId)}
+                            onClick={() => removeDep(depId)}
                             className="flex-shrink-0 w-5 h-5 flex items-center justify-center rounded-full hover:bg-rose-100 text-slate-300 hover:text-rose-500 transition-colors"
                           >
                             <svg className="w-3 h-3" fill="none" viewBox="0 0 12 12">
@@ -1207,7 +1242,7 @@ export function TaskDetailModal({
                     <button
                       type="button"
                       disabled={!depPickerValue}
-                      onClick={() => { void addDep(depPickerValue); setShowDepPicker(false) }}
+                      onClick={() => { addDep(depPickerValue); setShowDepPicker(false) }}
                       className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-all disabled:opacity-40 disabled:pointer-events-none flex-shrink-0"
                     >
                       Add
@@ -1234,6 +1269,46 @@ export function TaskDetailModal({
 
             </div>
           </div>
+
+          {/* ── Unsaved changes bar ── */}
+          {isDirty && (
+            <div
+              className="flex-shrink-0 flex items-center justify-between gap-3 px-5 py-3"
+              style={{
+                borderTop: '1px solid #E5E7EB',
+                background: '#FAFAFA',
+              }}
+            >
+              <span style={{ fontSize: 12, color: '#6B7280' }}>You have unsaved changes</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={discardAll}
+                  style={{
+                    fontSize: 12.5, fontWeight: 500, color: '#6B7280',
+                    background: 'none', border: '1px solid #E5E7EB',
+                    borderRadius: 8, padding: '5px 14px', cursor: 'pointer',
+                  }}
+                >
+                  Discard
+                </button>
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={() => void saveAll()}
+                  style={{
+                    fontSize: 12.5, fontWeight: 600, color: 'white',
+                    background: isSaving ? '#A78BFA' : '#7B3FF2',
+                    border: 'none', borderRadius: 8, padding: '5px 16px',
+                    cursor: isSaving ? 'not-allowed' : 'pointer',
+                    transition: 'background 150ms',
+                  }}
+                >
+                  {isSaving ? 'Saving…' : 'Save changes'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ══ Right communication panel (collapsible) ══ */}
@@ -1882,7 +1957,7 @@ export function TaskDetailModal({
             {localProject && (
               <button
                 type="button"
-                onClick={() => void handleProjectChange('')}
+                onClick={() => handleProjectChange('')}
                 className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition-colors"
               >
                 <svg fill="none" viewBox="0 0 12 12" width="10" height="10">
@@ -1897,7 +1972,7 @@ export function TaskDetailModal({
                 <button
                   key={p.id}
                   type="button"
-                  onClick={() => void handleProjectChange(p.name)}
+                  onClick={() => handleProjectChange(p.name)}
                   className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-[12.5px] text-slate-700 hover:bg-slate-50 transition-colors"
                 >
                   <span className="truncate">{p.displayName}</span>
@@ -1966,7 +2041,7 @@ export function TaskDetailModal({
             {actType && (
               <button
                 type="button"
-                onClick={() => void selectActType('')}
+                onClick={() => selectActType('')}
                 className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition-colors"
               >
                 <svg fill="none" viewBox="0 0 12 12" width="10" height="10">
@@ -1981,7 +2056,7 @@ export function TaskDetailModal({
                 <button
                   key={opt}
                   type="button"
-                  onClick={() => void selectActType(opt)}
+                  onClick={() => selectActType(opt)}
                   className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-[12.5px] text-slate-700 hover:bg-slate-50 transition-colors"
                 >
                   <span className="truncate">{opt}</span>
@@ -2038,7 +2113,7 @@ export function TaskDetailModal({
             {localParentTask && (
               <button
                 type="button"
-                onClick={() => void selectParentTask(null)}
+                onClick={() => selectParentTask(null)}
                 className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition-colors"
               >
                 <svg fill="none" viewBox="0 0 12 12" width="10" height="10">
@@ -2057,7 +2132,7 @@ export function TaskDetailModal({
                 <button
                   key={t.id}
                   type="button"
-                  onClick={() => void selectParentTask(t.id)}
+                  onClick={() => selectParentTask(t.id)}
                   className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-[12.5px] text-slate-700 hover:bg-slate-50 transition-colors"
                 >
                   <span className="truncate">{t.subject}</span>

@@ -641,9 +641,13 @@ export function CalendarPage() {
     setSyncError('')
     setNeedsReAuth(false)
     try {
-      await Promise.allSettled(cals.map(c => prepareForFullSync(c.name)))
-      const syncResults = await Promise.all(cals.map(c => syncGoogleCalendar(c.name)))
-      console.log('[Sync] messages from ERPNext:', syncResults.flat())
+      const syncMessages: string[] = []
+      for (const c of cals) {
+        await prepareForFullSync(c.name).catch(() => {})
+        const msgs = await syncGoogleCalendar(c.name)
+        syncMessages.push(...msgs)
+      }
+      console.log('[Sync] messages from ERPNext:', syncMessages)
       const now = new Date()
       const from = `${now.getFullYear() - 1}-${String(now.getMonth() + 1).padStart(2,'0')}-01`
       const farYear = now.getFullYear() + 1

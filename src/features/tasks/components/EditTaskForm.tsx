@@ -591,7 +591,6 @@ export function EditTaskForm({
             )}
           </div>
         </div>
-      </div>
 
       {/* ── Dependent tasks ── */}
       <SectionDivider>Dependent tasks</SectionDivider>

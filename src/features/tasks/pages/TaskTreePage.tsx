@@ -712,14 +712,14 @@ export function TaskTreePage() {
               </svg>
             </div>
             <p className="text-sm font-semibold text-slate-600 mb-1">No tasks yet</p>
-            <p className="text-xs text-slate-400 mb-4">Add your first task to get started</p>
+            <p className="text-xs text-slate-400 mb-4">Add your first milestone to get started</p>
             <button
               type="button"
-              onClick={() => openCreateModal()}
+              onClick={() => openCreateModal('milestone')}
               className="flex items-center gap-1.5 h-8 px-4 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 transition-colors"
             >
               <svg fill="none" viewBox="0 0 12 12" width={10} height={10}><path d="M6 1v10M1 6h10" stroke="white" strokeLinecap="round" strokeWidth="1.9"/></svg>
-              Add Task
+              Add Milestone
             </button>
           </div>
         ) : (

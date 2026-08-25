@@ -1,8 +1,8 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../../store/authStore'
 import { useWorkStore } from '../../../store/workStore'
 import { useNotifStore } from '../../../store/notifStore'
+import { TaskDetailModal } from '../../tasks/components/TaskDetailModal'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -268,10 +268,10 @@ function EmptyState({ filter }: { filter: Filter }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export function NotificationsPage() {
-  const navigate      = useNavigate()
   const tasks         = useWorkStore((state) => state.tasks)
   const wsStatus      = useWorkStore((state) => state.status)
   const loadWorkspace = useWorkStore((state) => state.loadWorkspace)
+  const updateTask    = useWorkStore((state) => state.updateTask)
   const username      = useAuthStore((state) => state.user?.username)
   const readIds       = useNotifStore((s) => s.readIds)
   const markRead      = useNotifStore((s) => s.markRead)
@@ -279,6 +279,7 @@ export function NotificationsPage() {
 
   const [filter, setFilter]       = useState<Filter>('all')
   const [currentPage, setPage]    = useState(1)
+  const [detailTaskId, setDetailTaskId] = useState<string | null>(null)
   const PAGE_SIZE                 = 20
   const isLoading = wsStatus === 'loading'
 
@@ -288,7 +289,7 @@ export function NotificationsPage() {
 
   const handleOpen = (n: Notif) => {
     if (username) markRead(n.id, username)
-    navigate('/tasks', { state: { taskId: n.id } })
+    setDetailTaskId(n.id)
   }
 
   const handleDismiss = (n: Notif) => {
@@ -386,6 +387,7 @@ export function NotificationsPage() {
   ]
 
   return (
+    <>
     <div className="min-h-screen" style={{ background: '#F8FAFC' }}>
       <div className="max-w-6xl mx-auto px-4 md:px-8 pt-6 pb-16">
 
@@ -608,5 +610,20 @@ export function NotificationsPage() {
 
       </div>
     </div>
+
+    {(() => {
+      const task = detailTaskId ? tasks.find((t) => t.id === detailTaskId) ?? null : null
+      return task ? (
+        <TaskDetailModal
+          task={task}
+          allTasks={tasks}
+          onClose={() => setDetailTaskId(null)}
+          onUpdate={(taskId, input) => updateTask(taskId, input)}
+          onStatusChange={() => {}}
+          onAssign={() => {}}
+        />
+      ) : null
+    })()}
+    </>
   )
 }

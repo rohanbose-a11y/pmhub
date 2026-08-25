@@ -100,6 +100,7 @@ const COL = {
   status:   148,
   repeat:    96,
   members:   72,
+  add:       36,
 } as const
 
 // ─── Column header strip ────────────────────────────────────────────────────
@@ -128,7 +129,48 @@ function ColHeader() {
             <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{label}</span>
           </div>
         ))}
+        <div className="flex items-center justify-center" style={{ width: COL.add, flexShrink: 0 }}>
+          <span className="text-[14px] font-semibold text-slate-400">+</span>
+        </div>
       </div>
+    </div>
+  )
+}
+
+// ─── Milestone add-child dropdown ──────────────────────────────────────────
+
+function MilestoneAddMenu({ onSelect, canAddActivity }: { onSelect: (type: AddNewType) => void; canAddActivity: boolean }) {
+  const [open, setOpen] = useState(false)
+  const types = canAddActivity ? (['activity', 'task'] as const) : (['task'] as const)
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        aria-label="Add child"
+        className="w-5 h-5 flex items-center justify-center rounded hover:bg-indigo-100 transition-colors"
+        onClick={(e) => { e.stopPropagation(); if (types.length === 1) { onSelect('task') } else { setOpen((v) => !v) } }}
+      >
+        <svg fill="none" viewBox="0 0 12 12" width={10} height={10} className="text-slate-400">
+          <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+        </svg>
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setOpen(false) }} />
+          <div className="absolute right-0 top-6 z-50 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden" style={{ minWidth: 120 }}>
+            {types.map((type) => (
+              <button
+                key={type}
+                type="button"
+                className="w-full text-left px-3 py-2 text-[12.5px] text-slate-700 hover:bg-indigo-50 hover:text-indigo-700 capitalize transition-colors"
+                onClick={(e) => { e.stopPropagation(); setOpen(false); onSelect(type) }}
+              >
+                {type === 'activity' ? 'Activity' : 'Task'}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -141,16 +183,20 @@ function TaskRow({
   expandedIds,
   onToggle,
   onEdit,
+  onAddChild,
+  canAddActivity,
   today,
   childCounts,
 }: {
   node:        TreeNode
   depth:       number
   expandedIds: Set<string>
-  onToggle:    (id: string) => void
-  onEdit:      (task: Task) => void
-  today:       Date
-  childCounts: Map<string, { done: number; total: number }>
+  onToggle:       (id: string) => void
+  onEdit:         (task: Task) => void
+  onAddChild:     (task: Task, type: AddNewType) => void
+  canAddActivity: boolean
+  today:          Date
+  childCounts:    Map<string, { done: number; total: number }>
 }) {
   const { task }    = node
   const hasChildren = node.children.length > 0
@@ -296,6 +342,25 @@ function TaskRow({
             )}
           </div>
 
+          {/* Add child — milestones and activities only */}
+          <div className="relative flex items-center justify-center" style={{ width: COL.add }}>
+            {task.isMilestone
+              ? <MilestoneAddMenu canAddActivity={canAddActivity} onSelect={(type) => onAddChild(task, type)} />
+              : task.isGroup && (
+                <button
+                  type="button"
+                  aria-label="Add task"
+                  className="w-5 h-5 flex items-center justify-center rounded hover:bg-indigo-100 transition-colors"
+                  onClick={(e) => { e.stopPropagation(); onAddChild(task, 'task') }}
+                >
+                  <svg fill="none" viewBox="0 0 12 12" width={10} height={10} className="text-slate-400">
+                    <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                  </svg>
+                </button>
+              )
+            }
+          </div>
+
         </div>
       </div>
 
@@ -313,6 +378,8 @@ function TaskRow({
               expandedIds={expandedIds}
               node={child}
               onEdit={onEdit}
+              onAddChild={onAddChild}
+              canAddActivity={canAddActivity}
               onToggle={onToggle}
               today={today}
               childCounts={childCounts}
@@ -395,8 +462,9 @@ function SkeletonTree() {
 // ─── Page ───────────────────────────────────────────────────────────────────
 
 export function TaskTreePage() {
-  const username     = useAuthStore((s) => s.user?.username)
-  const userFullName = useAuthStore((s) => s.user?.fullName)
+  const username        = useAuthStore((s) => s.user?.username)
+  const userFullName    = useAuthStore((s) => s.user?.fullName)
+  const canAddActivity  = useAuthStore((s) => s.user?.roles?.some((r) => ['Project Lead', 'Projects Manager'].includes(r)) ?? false)
   const tasks        = useWorkStore((s) => s.tasks)
   const projects     = useWorkStore((s) => s.projects)
   const status       = useWorkStore((s) => s.status)
@@ -415,8 +483,9 @@ export function TaskTreePage() {
   const [myTasksOnly,   setMyTasksOnly]   = useState(false)
   const [projectFilter, setProjectFilter] = useState(() => searchParams.get('project') ?? 'all')
   const [showClosed,    setShowClosed]    = useState(true)
-  const [isCreateOpen,  setIsCreateOpen]  = useState(false)
-  const [createType,    setCreateType]    = useState<AddNewType>('task')
+  const [isCreateOpen,   setIsCreateOpen]   = useState(false)
+  const [createType,     setCreateType]     = useState<AddNewType>('task')
+  const [createParentId, setCreateParentId] = useState<string | undefined>(undefined)
 
   useEffect(() => {
     setProjectFilter(searchParams.get('project') ?? 'all')
@@ -503,9 +572,6 @@ export function TaskTreePage() {
       return next
     })
 
-  const expandAll   = () => setExpandedIds(new Set(allExpandableIds))
-  const collapseAll = () => setExpandedIds(new Set())
-
   // ── Refresh ─────────────────────────────────────────────────────────────
 
   const handleRefresh = async () => {
@@ -562,8 +628,9 @@ export function TaskTreePage() {
 
   // ── Modals ───────────────────────────────────────────────────────────────
 
-  const openCreateModal  = (type: AddNewType = 'task') => { resetTaskFeedback(); setCreateType(type); setIsCreateOpen(true) }
-  const closeCreateModal = () => { if (createTaskStatus === 'submitting') return; setIsCreateOpen(false) }
+  const openCreateModal  = (type: AddNewType = 'task') => { resetTaskFeedback(); setCreateType(type); setCreateParentId(undefined); setIsCreateOpen(true) }
+  const openCreateChild  = (parent: Task, type: AddNewType = 'task') => { resetTaskFeedback(); setCreateType(type); setCreateParentId(parent.id); setIsCreateOpen(true) }
+  const closeCreateModal = () => { if (createTaskStatus === 'submitting') return; setIsCreateOpen(false); setCreateParentId(undefined) }
   const handleCreateTask = (input: CreateTaskInput) => {
     if (!username) return Promise.resolve(null)
     return createTask(input, username)
@@ -627,8 +694,6 @@ export function TaskTreePage() {
         projects={projects}
         showClosed={showClosed}
         totalCount={totalCount}
-        onExpandAll={expandAll}
-        onCollapseAll={collapseAll}
       />
 
       {/* ── Content ── */}
@@ -682,6 +747,8 @@ export function TaskTreePage() {
                             expandedIds={expandedIds}
                             node={node}
                             onEdit={(t) => setDetailTaskId(t.id)}
+                            onAddChild={openCreateChild}
+                            canAddActivity={canAddActivity}
                             onToggle={toggleExpanded}
                             today={today}
                             childCounts={taskChildCounts}
@@ -707,6 +774,8 @@ export function TaskTreePage() {
                             expandedIds={expandedIds}
                             node={node}
                             onEdit={(t) => setDetailTaskId(t.id)}
+                            onAddChild={openCreateChild}
+                            canAddActivity={canAddActivity}
                             onToggle={toggleExpanded}
                             today={today}
                             childCounts={taskChildCounts}
@@ -725,6 +794,8 @@ export function TaskTreePage() {
                       expandedIds={expandedIds}
                       node={node}
                       onEdit={(t) => setDetailTaskId(t.id)}
+                      onAddChild={openCreateChild}
+                      canAddActivity={canAddActivity}
                       onToggle={toggleExpanded}
                       today={today}
                       childCounts={taskChildCounts}
@@ -789,6 +860,7 @@ export function TaskTreePage() {
           tasks={tasks}
           serverError={createTaskError}
           initialProject={projectFilter !== 'all' ? projectFilter : undefined}
+          initialParentTask={createParentId}
           {...getTaskTypeDefaults(createType)}
           mode={createType}
         />

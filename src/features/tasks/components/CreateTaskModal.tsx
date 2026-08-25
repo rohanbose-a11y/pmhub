@@ -61,6 +61,7 @@ interface CreateTaskModalProps {
   isSubmitting: boolean
   serverError: string | null
   initialProject?: string
+  initialParentTask?: string
   initialIsMilestone?: boolean
   initialIsGroup?: boolean
   mode?: AddNewType
@@ -77,6 +78,7 @@ export function CreateTaskModal({
   isSubmitting,
   serverError,
   initialProject,
+  initialParentTask,
   initialIsMilestone = false,
   initialIsGroup = false,
   onSubmit,
@@ -91,13 +93,11 @@ export function CreateTaskModal({
   const [startDate,   setStartDate]   = useState('')
   const [dueDate,     setDueDate]     = useState('')
   const [engDays,     setEngDays]     = useState('')
-  const [parentTask,  setParentTask]  = useState('')
+  const [parentTask,  setParentTask]  = useState(initialParentTask ?? '')
   const [isMilestone, setIsMilestone] = useState(initialIsMilestone)
   const [isGroup,     setIsGroup]     = useState(initialIsGroup)
   const [description, setDescription] = useState('')
   const [depTaskIds,    setDepTaskIds]    = useState<string[]>([])
-  const [showDepPicker, setShowDepPicker] = useState(false)
-  const [depPickerValue, setDepPickerValue] = useState('')
   const [kraQuery,    setKraQuery]    = useState('')
   const [parentQuery, setParentQuery] = useState('')
   const [titleError,   setTitleError]   = useState(false)
@@ -301,6 +301,18 @@ export function CreateTaskModal({
     return () => window.removeEventListener('keydown', h)
   }, [onClose, showPriorityMenu, showActTypeMenu, showProjectMenu, showParentMenu])
 
+  // ── Auto-populate dates from project ────────────────────────────────────────
+  useEffect(() => {
+    const proj = projects.find((p) => p.name === project)
+    if (!proj) return
+    const s = proj.expectedStartDate ?? ''
+    const e = proj.expectedEndDate   ?? ''
+    if (s) setStartDate(s)
+    if (e) setDueDate(e)
+    const calc = calcEngagementDays(s, e)
+    if (calc !== undefined) setEngDays(String(calc))
+  }, [project]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Submit ────────────────────────────────────────────────────────────────
   const doSubmit = async (andAnother = false) => {
     if (!subject.trim()) { setTitleError(true); titleInputRef.current?.focus(); return }
@@ -350,7 +362,7 @@ export function CreateTaskModal({
         // Reset form for another entry
         setSubject(''); setActType(''); setStartDate(''); setDueDate('')
         setEngDays(''); setParentTask(''); setIsMilestone(initialIsMilestone); setIsGroup(initialIsGroup)
-        setDescription(''); setDepTaskIds([]); setShowDepPicker(false); setDepPickerValue(''); setPendingAssignees([]); setEditorKey((k) => k + 1); setProjectError(false)
+        setDescription(''); setDepTaskIds([]); setPendingAssignees([]); setEditorKey((k) => k + 1); setProjectError(false)
         setRepeatEnabled(false); setRepeatStart(''); setRepeatEnd(''); setRepeatOnDay(''); setRepeatOnWeekdays([])
         setPendingComments([]); setCommentText(''); setPendingLinks([]); setLinkName(''); setLinkUrl('')
         setTimeout(() => titleInputRef.current?.focus(), 60)
@@ -364,6 +376,16 @@ export function CreateTaskModal({
   const pg              = PRIORITY_CONFIG.find((p) => p.key === priority)
   const selectedProject = projects.find((p) => p.name === project)
   const selectedParent  = tasks.find((t) => t.id === parentTask)
+  const projStart = selectedProject?.expectedStartDate ?? null
+  const projEnd   = selectedProject?.expectedEndDate   ?? null
+  const dateWarning = startDate && dueDate && dueDate < startDate
+    ? 'End date cannot be before start date'
+    : (projStart || projEnd) && (startDate || dueDate) && (
+        (startDate && projStart && startDate < projStart) ||
+        (startDate && projEnd   && startDate > projEnd)   ||
+        (dueDate   && projStart && dueDate   < projStart) ||
+        (dueDate   && projEnd   && dueDate   > projEnd)
+      ) ? `Dates should be within the project range: ${projStart ?? '—'} → ${projEnd ?? '—'}` : ''
   const filteredParents = tasks.filter((t) =>
     (!project || t.project === project) &&
     (!parentQuery || t.subject.toLowerCase().includes(parentQuery.toLowerCase())),
@@ -517,23 +539,9 @@ export function CreateTaskModal({
                       />
                     </div>
                   </div>
-
-                  {/* Engagement Days */}
-                  <div
-                    className="flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 transition-colors group cursor-text"
-                    onClick={() => engDaysInputRef.current?.focus()}
-                  >
-                    <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0">Engagement Days</span>
-                    <input
-                      ref={engDaysInputRef}
-                      type="number"
-                      min="0"
-                      placeholder="—"
-                      value={engDays}
-                      onChange={(e) => setEngDays(e.target.value)}
-                      className="w-20 text-[12.5px] text-slate-700 bg-transparent outline-none border-0 placeholder:text-slate-300 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                    />
-                  </div>
+                  {dateWarning && (
+                    <p className="text-[11px] text-amber-600 px-4 pb-1 -mt-1">{dateWarning}</p>
+                  )}
 
                   {/* Repeat */}
                   <div
@@ -550,6 +558,23 @@ export function CreateTaskModal({
                         <span className="text-[12.5px] text-slate-300 group-hover:text-slate-400 transition-colors">None</span>
                       )}
                     </div>
+                  </div>
+
+                  {/* Engagement Days */}
+                  <div
+                    className="flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 transition-colors group cursor-text"
+                    onClick={() => engDaysInputRef.current?.focus()}
+                  >
+                    <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0">Engagement Days</span>
+                    <input
+                      ref={engDaysInputRef}
+                      type="number"
+                      min="0"
+                      placeholder="—"
+                      value={engDays}
+                      onChange={(e) => setEngDays(e.target.value)}
+                      className="w-20 text-[12.5px] text-slate-700 bg-transparent outline-none border-0 placeholder:text-slate-300 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
                   </div>
 
                   {/* Parent Task — hidden for milestones */}
@@ -600,8 +625,8 @@ export function CreateTaskModal({
                     </div>
                   </div>
 
-                  {/* Activity Type */}
-                  <div
+                  {/* Activity Type — hidden for milestones */}
+                  {!isMilestone && <div
                     ref={actTypeTriggerRef}
                     className="flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 transition-colors group cursor-pointer"
                     onClick={openActTypeMenu}
@@ -617,7 +642,7 @@ export function CreateTaskModal({
                         <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.3"/>
                       </svg>
                     </div>
-                  </div>
+                  </div>}
 
 
                   {/* Assignees */}
@@ -669,88 +694,6 @@ export function CreateTaskModal({
                 onChange={(html) => setDescription(html)}
                 placeholder="Add a description…"
               />
-
-              {/* ── Subtasks ── */}
-              <div className="h-px bg-slate-100 mt-5 mb-4"/>
-              <div className="mb-5">
-                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                  Subtasks{depTaskIds.length > 0 && <span className="ml-1.5 font-normal normal-case tracking-normal text-slate-300">({depTaskIds.length})</span>}
-                </p>
-
-                {depTaskIds.length > 0 && (
-                  <div className="mb-2.5 rounded-lg border border-slate-100 divide-y divide-slate-50 overflow-hidden">
-                    {depTaskIds.map((depId) => {
-                      const depTask = tasks.find((t) => t.id === depId)
-                      return (
-                        <div key={depId} className="flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 transition-colors">
-                          <div className="w-1.5 h-1.5 rounded-full bg-slate-400 flex-shrink-0"/>
-                          <span className="flex-1 text-[12.5px] text-slate-700 truncate">{depTask?.subject ?? depId}</span>
-                          <button
-                            type="button"
-                            aria-label="Remove"
-                            onClick={() => setDepTaskIds((p) => p.filter((x) => x !== depId))}
-                            className="flex-shrink-0 w-5 h-5 flex items-center justify-center rounded-full hover:bg-rose-100 text-slate-300 hover:text-rose-500 transition-colors"
-                          >
-                            <svg className="w-3 h-3" fill="none" viewBox="0 0 12 12">
-                              <path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-                            </svg>
-                          </button>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )}
-
-                {showDepPicker && (
-                  <div className="flex gap-2 mb-2">
-                    <div className="relative flex-1 min-w-0">
-                      <select
-                        className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 appearance-none pr-9 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-all"
-                        onChange={(e) => setDepPickerValue(e.target.value)}
-                        value={depPickerValue}
-                      >
-                        <option value="">Select a task…</option>
-                        {tasks.filter((t) => (!project || t.project === project) && !depTaskIds.includes(t.id)).map((t) => (
-                          <option key={t.id} value={t.id}>{t.subject}</option>
-                        ))}
-                      </select>
-                      <svg className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" viewBox="0 0 16 16">
-                        <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </div>
-                    <button
-                      type="button"
-                      disabled={!depPickerValue}
-                      onClick={() => {
-                        setDepTaskIds((p) => [...p, depPickerValue])
-                        setShowDepPicker(false)
-                        setDepPickerValue('')
-                      }}
-                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-all disabled:opacity-40 disabled:pointer-events-none flex-shrink-0"
-                    >
-                      Add
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setShowDepPicker(false); setDepPickerValue('') }}
-                      className="px-3 py-2 text-sm text-slate-500 hover:text-slate-700 transition-colors flex-shrink-0"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => { setShowDepPicker(true); setDepPickerValue('') }}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] text-slate-500 border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-colors"
-                >
-                  <svg fill="none" viewBox="0 0 12 12" width="11" height="11">
-                    <path d="M6 1v10M1 6h10" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5"/>
-                  </svg>
-                  Add Task
-                </button>
-              </div>
 
               {/* Error */}
               <ErrorBanner message={serverError} className="mt-5" />

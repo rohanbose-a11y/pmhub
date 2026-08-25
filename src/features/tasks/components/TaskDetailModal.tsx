@@ -514,6 +514,17 @@ export function TaskDetailModal({
   const pg       = PRIORITY_CONFIG.find((p) => p.key === task.priority)
   const shortId  = task.id
   const duePast  = localDueDate && new Date(localDueDate) < new Date()
+  const selectedProject = projects.find((p) => p.name === localProject)
+  const projStart = selectedProject?.expectedStartDate ?? null
+  const projEnd   = selectedProject?.expectedEndDate   ?? null
+  const dateWarning = localStartDate && localDueDate && localDueDate < localStartDate
+    ? 'End date cannot be before start date'
+    : (projStart || projEnd) && (localStartDate || localDueDate) && (
+        (localStartDate && projStart && localStartDate < projStart) ||
+        (localStartDate && projEnd   && localStartDate > projEnd)   ||
+        (localDueDate   && projStart && localDueDate   < projStart) ||
+        (localDueDate   && projEnd   && localDueDate   > projEnd)
+      ) ? `Dates should be within the project range: ${projStart ?? '—'} → ${projEnd ?? '—'}` : ''
   const updLabel = task.updatedAt
     ? `Updated ${new Date(task.updatedAt).toLocaleDateString('en', { month: 'short', day: 'numeric' })}`
     : 'Created recently'
@@ -962,6 +973,26 @@ export function TaskDetailModal({
                         />
                       </div>
                     </div>
+                    {dateWarning && (
+                      <p className="text-[11px] text-amber-600 px-4 pb-1 -mt-1">{dateWarning}</p>
+                    )}
+
+                    {/* Repeat */}
+                    <div
+                      className="flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 transition-colors group cursor-pointer"
+                      onClick={() => setShowRepeatModal(true)}
+                    >
+                      <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0">Repeat</span>
+                      <div className="flex items-center gap-1.5">
+                        {savedRepeat ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 text-[11px] font-semibold border border-indigo-100">
+                            {savedRepeat.frequency}
+                          </span>
+                        ) : (
+                          <span className="text-[12.5px] text-slate-300 group-hover:text-slate-400 transition-colors">None</span>
+                        )}
+                      </div>
+                    </div>
 
                     {/* Engagement Days */}
                     <div
@@ -991,23 +1022,6 @@ export function TaskDetailModal({
                       ) : (
                         <span className="text-[12.5px] text-slate-300 group-hover:text-slate-400 transition-colors">Empty</span>
                       )}
-                    </div>
-
-                    {/* Repeat */}
-                    <div
-                      className="flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 transition-colors group cursor-pointer"
-                      onClick={() => setShowRepeatModal(true)}
-                    >
-                      <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0">Repeat</span>
-                      <div className="flex items-center gap-1.5">
-                        {savedRepeat ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 text-[11px] font-semibold border border-indigo-100">
-                            {savedRepeat.frequency}
-                          </span>
-                        ) : (
-                          <span className="text-[12.5px] text-slate-300 group-hover:text-slate-400 transition-colors">None</span>
-                        )}
-                      </div>
                     </div>
 
                     {/* Parent Task — hidden for milestones */}
@@ -1116,7 +1130,8 @@ export function TaskDetailModal({
                       </div>
                     </div>
 
-                    {/* Activity Type / KRA — dropdown from useKraOptions */}
+                    {/* Activity Type / KRA — hidden for milestones */}
+                    {!task.isMilestone && (
                     <div
                       ref={actTypeTriggerRef}
                       className="flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 transition-colors group cursor-pointer"
@@ -1134,6 +1149,7 @@ export function TaskDetailModal({
                         </svg>
                       </div>
                     </div>
+                    )}
 
                   </div>
                 </div>

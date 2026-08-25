@@ -364,6 +364,7 @@ export function EditTaskForm({
             </div>
           </div>
 
+          {!values.isMilestone && (
           <div>
             <FieldLabel htmlFor="edit-kra">Activity Type</FieldLabel>
             <KraCombobox
@@ -374,6 +375,7 @@ export function EditTaskForm({
               value={values.activityType as string ?? ''}
             />
           </div>
+          )}
         </div>
 
       </div>

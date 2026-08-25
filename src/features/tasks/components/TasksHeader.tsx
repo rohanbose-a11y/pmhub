@@ -11,46 +11,6 @@ export type { AddNewType }  // re-export so existing imports from this file keep
 // with any recognised project role gets it. Falls back to Task-only if the
 // user has no recognised role.
 
-interface AddMenuItem {
-  type:   AddNewType
-  label:  string
-  allowedRoles: string[]
-  icon: React.ReactNode
-}
-
-const ADD_MENU_ITEMS: AddMenuItem[] = [
-  {
-    type:  'milestone',
-    label: 'Milestone',
-    allowedRoles: ['Project Lead'],
-    icon: (
-      <svg fill="none" viewBox="0 0 12 12" width={11} height={11}>
-        <rect x="1.5" y="1.5" width="9" height="9" rx="2" transform="rotate(45 6 6)" stroke="currentColor" strokeWidth="1.3"/>
-      </svg>
-    ),
-  },
-  {
-    type:  'activity',
-    label: 'Activity',
-    allowedRoles: ['Project Lead', 'Projects Manager'],
-    icon: (
-      <svg fill="none" viewBox="0 0 12 12" width={11} height={11}>
-        <path d="M7 1L3 6.5h4.5L5 11l7-6H8L10 1H7z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
-      </svg>
-    ),
-  },
-  {
-    type:  'task',
-    label: 'Task',
-    allowedRoles: ['Project Lead', 'Projects Manager', 'Projects User'],
-    icon: (
-      <svg fill="none" viewBox="0 0 12 12" width={11} height={11}>
-        <rect x="1" y="1" width="10" height="10" rx="2" stroke="currentColor" strokeWidth="1.3"/>
-        <path d="M3.5 6l2 2 3-3" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.3"/>
-      </svg>
-    ),
-  },
-]
 
 interface TasksHeaderProps {
   projects:              Project[]
@@ -68,14 +28,11 @@ interface TasksHeaderProps {
   onAddNew:              (type: AddNewType) => void
   groupBy?:              'status' | 'none'
   onGroupByChange?:      (v: 'status' | 'none') => void
-  onExpandAll?:          () => void
-  onCollapseAll?:        () => void
 }
 
 const TAB_ITEMS = [
   { label: 'Tree',  to: '/tasks' },
   { label: 'Board', to: '/tasks/kanban' },
-  { label: 'List',  to: '/tasks/list' },
   { label: 'Gantt', to: '/tasks/gantt' },
 ]
 
@@ -95,20 +52,10 @@ export function TasksHeader({
   onAddNew,
   groupBy,
   onGroupByChange,
-  onExpandAll,
-  onCollapseAll,
 }: TasksHeaderProps) {
   const [showGroupMenu, setShowGroupMenu] = useState(false)
-  const [showAddMenu,   setShowAddMenu]   = useState(false)
 
   const userRoles = useAuthStore((s) => s.user?.roles ?? [])
-  // Items visible to this user; fall back to Task-only for unrecognised roles
-  const visibleMenuItems = ADD_MENU_ITEMS.filter((item) =>
-    item.allowedRoles.some((r) => userRoles.includes(r))
-  )
-  const menuItems = visibleMenuItems.length > 0
-    ? visibleMenuItems
-    : ADD_MENU_ITEMS.filter((item) => item.type === 'task')
 
   const selectedProject = projects.find((p) => p.name === projectFilter)
 
@@ -261,34 +208,6 @@ export function TasksHeader({
         {/* Divider */}
         <div style={{ width: 1, height: 18, background: '#E5E7EB', margin: '0 8px', flexShrink: 0 }} />
 
-        {/* ── Expand / Collapse (Tree view only) ── */}
-        {onExpandAll && onCollapseAll && (
-          <>
-            <button type="button" onClick={onExpandAll} style={{
-              display: 'flex', alignItems: 'center', gap: 5,
-              height: 30, padding: '0 10px', borderRadius: 7, cursor: 'pointer',
-              fontSize: 12, fontWeight: 400, color: '#6B7280',
-              background: 'white', border: '1px solid #E5E7EB',
-            }}>
-              <svg fill="none" viewBox="0 0 14 14" width={11} height={11}>
-                <path d="M7 2v10M2 7h5M9 7h3M12 4v6" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5"/>
-              </svg>
-              Expand all
-            </button>
-            <button type="button" onClick={onCollapseAll} style={{
-              display: 'flex', alignItems: 'center', gap: 5,
-              height: 30, padding: '0 10px', borderRadius: 7, cursor: 'pointer',
-              fontSize: 12, fontWeight: 400, color: '#6B7280',
-              background: 'white', border: '1px solid #E5E7EB',
-            }}>
-              <svg fill="none" viewBox="0 0 14 14" width={11} height={11}>
-                <path d="M2 7h10" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5"/>
-              </svg>
-              Collapse all
-            </button>
-          </>
-        )}
-
         {/* ── Group dropdown ── */}
         {groupBy !== undefined && onGroupByChange && (
           <div style={{ position: 'relative' }}>
@@ -361,20 +280,7 @@ export function TasksHeader({
           </div>
         )}
 
-        {/* ── Filter ── */}
-        <button type="button" aria-label="Filter tasks" style={{
-          display: 'flex', alignItems: 'center', gap: 5,
-          height: 30, padding: '0 10px', borderRadius: 7, cursor: 'pointer',
-          fontSize: 12, fontWeight: 400, color: '#6B7280',
-          background: 'white', border: '1px solid #E5E7EB',
-        }}>
-          <svg aria-hidden="true" fill="none" viewBox="0 0 14 14" width={11} height={11}>
-            <path d="M1 3h12M3 7h8M5.5 11h3" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5"/>
-          </svg>
-          Filter
-        </button>
-
-        {/* ── Sort ── */}
+{/* ── Sort ── */}
         <button type="button" aria-label="Sort tasks" style={{
           display: 'flex', alignItems: 'center', gap: 5,
           height: 30, padding: '0 10px', borderRadius: 7, cursor: 'pointer',
@@ -430,13 +336,11 @@ export function TasksHeader({
           {showClosed ? 'Hide Done' : 'Show Done'}
         </button>
 
-        {/* ── Add New (dropdown) ── */}
-        <div style={{ position: 'relative' }}>
+        {/* ── New Milestone — Project Lead only ── */}
+        {userRoles.includes('Project Lead') && (
           <button
             type="button"
-            aria-haspopup="menu"
-            aria-expanded={showAddMenu}
-            onClick={() => setShowAddMenu((v) => !v)}
+            onClick={() => onAddNew('milestone')}
             style={{
               display: 'flex', alignItems: 'center', gap: 6,
               height: 30, padding: '0 14px', borderRadius: 8,
@@ -449,54 +353,9 @@ export function TasksHeader({
             <svg aria-hidden="true" fill="none" viewBox="0 0 12 12" width={10} height={10}>
               <path d="M6 1v10M1 6h10" stroke="white" strokeLinecap="round" strokeWidth="1.9"/>
             </svg>
-            Add New
-            <svg aria-hidden="true" fill="none" viewBox="0 0 10 10" width={8} height={8} style={{ opacity: 0.75, marginLeft: 1 }}>
-              <path d="M2 3.5l3 3 3-3" stroke="white" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.4"/>
-            </svg>
+            New Milestone
           </button>
-
-          {showAddMenu && (
-            <>
-              <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setShowAddMenu(false)} />
-              <div
-                role="menu"
-                style={{
-                  position: 'absolute', top: 36, right: 0, zIndex: 50,
-                  background: 'white', border: '1px solid #E5E7EB',
-                  borderRadius: 10, boxShadow: '0 8px 24px rgba(0,0,0,.10)',
-                  minWidth: 152, padding: '4px 0', overflow: 'hidden',
-                }}
-              >
-                <p style={{ fontSize: 10, fontWeight: 700, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.08em', padding: '7px 12px 5px' }}>
-                  Create
-                </p>
-
-                {menuItems.map((item) => (
-                  <button
-                    key={item.type}
-                    type="button"
-                    role="menuitem"
-                    onClick={() => { onAddNew(item.type); setShowAddMenu(false) }}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: 9,
-                      width: '100%', padding: '7px 12px', textAlign: 'left',
-                      background: 'transparent', color: '#374151',
-                      fontSize: 13, fontWeight: 400,
-                      border: 'none', cursor: 'pointer',
-                    }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = '#F9F8FF'; e.currentTarget.style.color = '#7B3FF2' }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#374151' }}
-                  >
-                    <span style={{ width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      {item.icon}
-                    </span>
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
+        )}
       </div>
     </>
   )

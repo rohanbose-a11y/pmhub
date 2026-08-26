@@ -409,7 +409,7 @@ export function CreateTaskModal({
           {/* ── Top bar ── */}
           <div className="flex-shrink-0 flex items-center gap-2 px-3 h-11 border-b border-slate-100 bg-white">
             <div className="flex items-center gap-1.5 text-[12px] min-w-0">
-              <span className="hidden sm:inline text-slate-400 shrink-0">Team Space</span>
+              <span className="hidden sm:inline text-slate-400 shrink-0">Project</span>
               <span className="hidden sm:inline text-slate-200">/</span>
               <span className="text-slate-600 font-medium truncate">
                 {selectedProject?.displayName ?? 'New Task'}

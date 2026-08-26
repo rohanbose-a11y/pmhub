@@ -818,7 +818,7 @@ export function TaskDetailModal({
             </div>
 
             <div className="flex items-center gap-1 text-[12px] text-slate-400 mx-1.5 min-w-0">
-              <span className="hidden sm:inline shrink-0">Team Space</span>
+              <span className="hidden sm:inline shrink-0">Project</span>
               <span className="hidden sm:inline text-slate-200">/</span>
               <span className="truncate text-slate-600 font-medium">{dt.project ?? 'No Project'}</span>
             </div>

@@ -66,9 +66,12 @@ const matchesIdentity = (value: string | null | undefined, identityTokens: strin
   return identityTokens.some((token) => normalizedValue === normalizeIdentity(token))
 }
 
+const toSlug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+
 const toProject = (record: FrappeProjectRecord): Project => ({
   id: record.name,
   name: record.name,
+  slug: toSlug(record.project_name?.trim() || record.name),
   displayName: record.project_name?.trim() || record.name,
   status: record.status?.trim() || 'Open',
   completion: typeof record.percent_complete === 'number' ? record.percent_complete : null,

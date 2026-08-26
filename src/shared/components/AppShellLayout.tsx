@@ -189,7 +189,7 @@ export function AppShellLayout() {
       .map((p) => ({
         type: 'project' as const,
         label: p.displayName || p.name,
-        to: `/tasks?project=${encodeURIComponent(p.name)}`,
+        to: `/tasks?project=${encodeURIComponent(p.slug)}`,
         subtitle: `${tasks.filter((t) => t.project === p.name).length} tasks`,
       }))
 
@@ -610,9 +610,9 @@ export function AppShellLayout() {
           {(!sidebarOpen || !spacesCollapsed) && projects.map((proj) => {
             const count    = taskCountByProject[proj.name] ?? 0
             const abbr     = projInitials(proj.displayName)
-            const isActive = activeProjectFilter === proj.name
+            const isActive = activeProjectFilter === proj.slug
             return (
-              <Link key={proj.name} to={`/tasks?project=${encodeURIComponent(proj.name)}`} style={{ textDecoration: 'none' }}>
+              <Link key={proj.name} to={`/tasks?project=${encodeURIComponent(proj.slug)}`} style={{ textDecoration: 'none' }}>
                 <div
                   style={{
                     display: 'flex', alignItems: 'center',

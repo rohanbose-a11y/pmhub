@@ -57,7 +57,7 @@ export function TasksHeader({
 
   const userRoles = useAuthStore((s) => s.user?.roles ?? [])
 
-  const selectedProject = projects.find((p) => p.name === projectFilter)
+  const selectedProject = projects.find((p) => p.slug === projectFilter)
 
   const groupLabel = groupBy === 'status' ? 'Group: Status' : 'Group'
 

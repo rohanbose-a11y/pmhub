@@ -130,6 +130,11 @@ export function TasksPage() {
     setProjectFilter(searchParams.get('project') ?? 'all')
   }, [searchParams])
 
+  const resolvedProjectName = useMemo(
+    () => projectFilter === 'all' ? 'all' : (projects.find((p) => p.slug === projectFilter)?.name ?? projectFilter),
+    [projectFilter, projects],
+  )
+
   const toggleCollapse = (key: string) =>
     setCollapsed((prev) => {
       const next = new Set(prev)
@@ -188,9 +193,9 @@ export function TasksPage() {
   const filteredTasks = useMemo(() => {
     let t = tasks
     if (myTasksOnly && username) t = t.filter((tk) => myTaskIds.has(tk.id))
-    if (projectFilter !== 'all') t = t.filter((tk) => tk.project === projectFilter)
+    if (resolvedProjectName !== 'all') t = t.filter((tk) => tk.project === resolvedProjectName)
     return t
-  }, [tasks, myTasksOnly, myTaskIds, projectFilter, username])
+  }, [tasks, myTasksOnly, myTaskIds, resolvedProjectName, username])
 
   const knownStatuses = useMemo(() => new Set(STATUS_GROUPS.flatMap((g) => g.statuses)), [])
 
@@ -771,7 +776,7 @@ export function TasksPage() {
           projects={projects}
           tasks={tasks}
           serverError={createTaskError}
-          initialProject={projectFilter !== 'all' ? projectFilter : undefined}
+          initialProject={resolvedProjectName !== 'all' ? resolvedProjectName : undefined}
           {...getTaskTypeDefaults(createType)}
           mode={createType}
         />

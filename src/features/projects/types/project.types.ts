@@ -1,6 +1,7 @@
 export interface Project {
   id: string
   name: string
+  slug: string
   displayName: string
   status: string
   completion: number | null

@@ -265,6 +265,11 @@ export function TaskGanttPage() {
     setProjectFilter(searchParams.get('project') ?? 'all')
   }, [searchParams])
 
+  const resolvedProjectName = useMemo(
+    () => projectFilter === 'all' ? 'all' : (projects.find((p) => p.slug === projectFilter)?.name ?? projectFilter),
+    [projectFilter, projects],
+  )
+
   const myTaskIds = useMemo(() => {
     if (!username) return new Set<string>()
     return new Set(tasks.filter((t) => t.owner === username || t.assignedTo.includes(username)).map((t) => t.id))
@@ -280,9 +285,9 @@ export function TaskGanttPage() {
   const tasksForCounts = useMemo(() => {
     let t = tasks
     if (myTasksOnly && username) t = t.filter((tk) => myTaskIds.has(tk.id))
-    if (projectFilter !== 'all')  t = t.filter((tk) => tk.project === projectFilter)
+    if (resolvedProjectName !== 'all')  t = t.filter((tk) => tk.project === resolvedProjectName)
     return t
-  }, [tasks, myTasksOnly, myTaskIds, projectFilter, username])
+  }, [tasks, myTasksOnly, myTaskIds, resolvedProjectName, username])
 
   const filteredTasks = useMemo(() => {
     if (!showClosed) return tasksForCounts.filter((tk) => isActiveStatus(tk.status))
@@ -1011,7 +1016,7 @@ export function TaskGanttPage() {
           isSubmitting={createTaskStatus === 'submitting'}
           onClose={closeCreateModal} onSubmit={handleCreateTask} onSuccess={closeCreateModal}
           projects={projects} tasks={tasks} serverError={createTaskError}
-          initialProject={projectFilter !== 'all' ? projectFilter : undefined}
+          initialProject={resolvedProjectName !== 'all' ? resolvedProjectName : undefined}
           {...getTaskTypeDefaults(createType)}
           mode={createType}
         />

@@ -363,6 +363,11 @@ export function TaskKanbanPage() {
     setProjectFilter(searchParams.get('project') ?? 'all')
   }, [searchParams])
 
+  const resolvedProjectName = useMemo(
+    () => projectFilter === 'all' ? 'all' : (projects.find((p) => p.slug === projectFilter)?.name ?? projectFilter),
+    [projectFilter, projects],
+  )
+
   const myTaskIds = useMemo(() => {
     if (!username) return new Set<string>()
     return new Set(
@@ -380,9 +385,9 @@ export function TaskKanbanPage() {
   const tasksForCounts = useMemo(() => {
     let t = tasks
     if (myTasksOnly && username) t = t.filter((task) => myTaskIds.has(task.id))
-    if (projectFilter !== 'all')  t = t.filter((task) => task.project === projectFilter)
+    if (resolvedProjectName !== 'all')  t = t.filter((task) => task.project === resolvedProjectName)
     return t
-  }, [tasks, myTasksOnly, myTaskIds, projectFilter, username])
+  }, [tasks, myTasksOnly, myTaskIds, resolvedProjectName, username])
 
   const filteredTasks = useMemo(() => {
     if (!showClosed) return tasksForCounts.filter((task) => isActive(task.status))
@@ -637,7 +642,7 @@ export function TaskKanbanPage() {
           projects={projects}
           tasks={tasks}
           serverError={createTaskError}
-          initialProject={projectFilter !== 'all' ? projectFilter : undefined}
+          initialProject={resolvedProjectName !== 'all' ? resolvedProjectName : undefined}
           {...getTaskTypeDefaults(createType)}
           mode={createType}
         />

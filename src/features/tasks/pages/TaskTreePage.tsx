@@ -491,6 +491,11 @@ export function TaskTreePage() {
     setProjectFilter(searchParams.get('project') ?? 'all')
   }, [searchParams])
 
+  const resolvedProjectName = useMemo(
+    () => projectFilter === 'all' ? 'all' : (projects.find((p) => p.slug === projectFilter)?.name ?? projectFilter),
+    [projectFilter, projects],
+  )
+
   const myTaskIds = useMemo(() => {
     if (!username) return new Set<string>()
     return new Set(tasks.filter((t) => t.owner === username || t.assignedTo.includes(username)).map((t) => t.id))
@@ -499,10 +504,10 @@ export function TaskTreePage() {
   const filteredTasks = useMemo(() => {
     let t = tasks
     if (myTasksOnly && username) t = t.filter((tk) => myTaskIds.has(tk.id))
-    if (projectFilter !== 'all') t = t.filter((tk) => tk.project === projectFilter)
+    if (resolvedProjectName !== 'all') t = t.filter((tk) => tk.project === resolvedProjectName)
     if (!showClosed) t = t.filter((tk) => isActive(tk.status))
     return t
-  }, [tasks, myTasksOnly, myTaskIds, projectFilter, showClosed, username])
+  }, [tasks, myTasksOnly, myTaskIds, resolvedProjectName, showClosed, username])
 
   // ── Group tasks by project ──────────────────────────────────────────────
 
@@ -585,9 +590,9 @@ export function TaskTreePage() {
   const tasksForCounts = useMemo(() => {
     let t = tasks
     if (myTasksOnly && username) t = t.filter((tk) => myTaskIds.has(tk.id))
-    if (projectFilter !== 'all') t = t.filter((tk) => tk.project === projectFilter)
+    if (resolvedProjectName !== 'all') t = t.filter((tk) => tk.project === resolvedProjectName)
     return t
-  }, [tasks, myTasksOnly, myTaskIds, projectFilter, username])
+  }, [tasks, myTasksOnly, myTaskIds, resolvedProjectName, username])
 
   const projectCounts = useMemo(() => {
     const m = new Map<string, { done: number; total: number }>()
@@ -859,7 +864,7 @@ export function TaskTreePage() {
           projects={projects}
           tasks={tasks}
           serverError={createTaskError}
-          initialProject={projectFilter !== 'all' ? projectFilter : undefined}
+          initialProject={resolvedProjectName !== 'all' ? resolvedProjectName : undefined}
           initialParentTask={createParentId}
           {...getTaskTypeDefaults(createType)}
           mode={createType}

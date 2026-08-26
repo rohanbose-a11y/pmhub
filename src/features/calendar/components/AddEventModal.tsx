@@ -264,7 +264,7 @@ export function AddEventModal({
     if (!q.trim()) { setPResults([]); return }
     setPSearching(true)
     try {
-      const users = await userApi.searchActiveEmployees(q)
+      const users = await userApi.searchUsers(q)
       setPResults(users.map(u => ({ name: u.name, display: u.fullName, email: u.name })))
     }
     catch { setPResults([]) }

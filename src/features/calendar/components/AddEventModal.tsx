@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { RichTextEditor } from '../../../shared/components/RichTextEditor'
 import { employeeApi } from '../../../api/employeeApi'
+import { userApi } from '../../../api/userApi'
 import { useAuthStore } from '../../../store/authStore'
 import {
   createErpEvent,
   updateErpEvent,
   getGoogleCalendars,
-  searchDoctype,
   type DoctypeRecord,
   type ErpEventDetail,
   type GoogleCalendarConfig,
@@ -110,7 +110,7 @@ export function AddEventModal({
 
   // ── Participants sub-form ───────────────────────────────────────────────────
   const [evtParticipants, setEvtParticipants] = useState<Participant[]>([])
-  const pDoctype = 'Contact'
+  const pDoctype = 'User'
   const [pQuery,          setPQuery]          = useState('')
   const [pResults,        setPResults]        = useState<DoctypeRecord[]>([])
   const [pSearching,      setPSearching]      = useState(false)
@@ -263,7 +263,10 @@ export function AddEventModal({
     setPQuery(q); setPSelected(null)
     if (!q.trim()) { setPResults([]); return }
     setPSearching(true)
-    try { setPResults(await searchDoctype(pDoctype, q)) }
+    try {
+      const users = await userApi.searchActiveEmployees(q)
+      setPResults(users.map(u => ({ name: u.name, display: u.fullName, email: u.name })))
+    }
     catch { setPResults([]) }
     finally { setPSearching(false) }
   }
@@ -571,7 +574,7 @@ export function AddEventModal({
                     <input type="text"
                       value={pSelected ? pSelected.display : pQuery}
                       onChange={e => { setPSelected(null); void handleParticipantSearch(e.target.value) }}
-                      placeholder={`Search ${pDoctype}…`}
+                      placeholder="Search users…"
                       className="w-full h-9 px-3 text-[13px] text-slate-800 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:border-transparent placeholder:text-slate-400"
                       style={{ '--tw-ring-color': '#c4b5fd' } as React.CSSProperties}
                     />

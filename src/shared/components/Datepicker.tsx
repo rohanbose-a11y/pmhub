@@ -2,7 +2,11 @@ import { useRef } from 'react'
 
 function fmtDate(v: string) {
   try {
-    return new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short' }).format(new Date(v))
+    const d = new Date(v)
+    const day = d.getDate()
+    const mon = d.toLocaleString('en', { month: 'short' })
+    const yr  = d.getFullYear()
+    return `${day} ${mon} ${yr}`
   } catch {
     return v
   }

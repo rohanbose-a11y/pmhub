@@ -32,7 +32,7 @@ interface RepeatModalProps {
 }
 
 export function RepeatModal({ open, onClose, savedRepeat, defaultStartDate, onSave, onRemove }: RepeatModalProps) {
-  const [repeatEnabled, setRepeatEnabled] = useState(false)
+  const [repeatEnabled, setRepeatEnabled] = useState(true)
   const [freq,      setFreq]      = useState<RepeatFrequency>('Weekly')
   const [startDate, setStartDate] = useState('')
   const [endDate,   setEndDate]   = useState('')
@@ -53,7 +53,7 @@ export function RepeatModal({ open, onClose, savedRepeat, defaultStartDate, onSa
       setOnDay(String(savedRepeat.repeatOnDay ?? ''))
       setWeekdays(savedRepeat.repeatOnWeekdays ?? [])
     } else {
-      setRepeatEnabled(false)
+      setRepeatEnabled(true)
       setFreq('Weekly')
       setStartDate(defaultStartDate ?? '')
       setEndDate('')

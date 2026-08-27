@@ -543,8 +543,8 @@ export function CreateTaskModal({
                     <p className="text-[11px] text-amber-600 px-4 pb-1 -mt-1">{dateWarning}</p>
                   )}
 
-                  {/* Repeat */}
-                  <div
+                  {/* Repeat — tasks only */}
+                  {!isMilestone && !isGroup && <div
                     className="flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 transition-colors group cursor-pointer"
                     onClick={() => setShowRepeatModal(true)}
                   >
@@ -558,7 +558,7 @@ export function CreateTaskModal({
                         <span className="text-[12.5px] text-slate-300 group-hover:text-slate-400 transition-colors">None</span>
                       )}
                     </div>
-                  </div>
+                  </div>}
 
                   {/* Engagement Days */}
                   <div
@@ -584,7 +584,7 @@ export function CreateTaskModal({
                     className="flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 transition-colors cursor-pointer group"
                     onClick={openParentMenu}
                   >
-                    <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0">Parent Task</span>
+                    <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0">{isGroup ? 'Milestone' : 'Activity'}</span>
                     <div className="flex items-center gap-1.5 flex-1 min-w-0">
                       {selectedParent ? (
                         <span className="text-[12.5px] text-slate-700 truncate">{selectedParent.subject}</span>
@@ -711,6 +711,7 @@ export function CreateTaskModal({
               Cancel
             </button>
             <div className="flex items-center gap-2">
+              {!isMilestone && !isGroup && (
               <button
                 type="button"
                 disabled={isSubmitting}
@@ -719,6 +720,7 @@ export function CreateTaskModal({
               >
                 Save &amp; add another
               </button>
+              )}
               <button
                 type="button"
                 disabled={isSubmitting}
@@ -794,11 +796,11 @@ export function CreateTaskModal({
                   badge: null,
                   icon: <svg fill="none" viewBox="0 0 14 14" width="15" height="15"><rect x="1" y="3.5" width="8.5" height="7" rx="1.2" stroke="currentColor" strokeWidth="1.3"/><path d="M9.5 6.2l3-1.7v5l-3-1.7V6.2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>,
                 },
-              ] as const).map(({ tab, label, icon, badge }) => (
+              ] as const).filter(({ tab }) => tab !== 'repeat' || (!isMilestone && !isGroup)).map(({ tab, label, icon, badge }) => (
                 <button
                   key={tab}
                   type="button"
-                  onClick={() => { setCommTab(tab); setCommExpanded(true) }}
+                  onClick={() => { if (tab === 'repeat' && !repeatEnabled) { setShowRepeatModal(true) } else { setCommTab(tab); setCommExpanded(true) } }}
                   title={label}
                   className={[
                     'relative flex flex-col items-center justify-center gap-1 w-10 h-10 rounded-xl transition-all',
@@ -836,11 +838,11 @@ export function CreateTaskModal({
 
               {/* Tab bar — all 4 always visible */}
               <div className="flex-shrink-0 flex items-center border-b border-slate-100 px-1">
-                {(['repeat', 'comments', 'links', 'activity', 'meet'] as const).map((tab) => (
+                {(['repeat', 'comments', 'links', 'activity', 'meet'] as const).filter((tab) => tab !== 'repeat' || (!isMilestone && !isGroup)).map((tab) => (
                   <button
                     key={tab}
                     type="button"
-                    onClick={() => setCommTab(tab)}
+                    onClick={() => { if (tab === 'repeat' && !repeatEnabled) { setShowRepeatModal(true) } else { setCommTab(tab) } }}
                     className={[
                       'px-2.5 py-2.5 text-[11.5px] font-medium border-b-2 -mb-px transition-colors',
                       commTab === tab
@@ -865,22 +867,9 @@ export function CreateTaskModal({
               {/* Content */}
               <div className="flex-1 overflow-y-auto scrollbar-none">
 
-                {/* ── Repeat tab — upcoming dates only; full form opens via the Repeat row ── */}
+                {/* ── Repeat tab — upcoming dates only; full form opens via RepeatModal ── */}
                 {commTab === 'repeat' && (() => {
-                  if (!repeatEnabled || !repeatStart) return (
-                    <div className="flex flex-col items-center justify-center py-10 gap-3 text-center px-4">
-                      <div className="w-11 h-11 rounded-full bg-slate-100 flex items-center justify-center">
-                        <svg fill="none" viewBox="0 0 20 20" width="18" height="18" className="text-slate-400">
-                          <path d="M3 10a7 7 0 0 1 13-3.5M17 10a7 7 0 0 1-13 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-                          <path d="M16 6.5l1-2 2 1.5M4 13.5l-1 2-2-1.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      </div>
-                      <div>
-                        <p className="text-[13px] font-semibold text-slate-600">No repeat configured</p>
-                        <p className="text-[11.5px] text-slate-400 mt-0.5">Click Repeat in the properties panel to set up a schedule</p>
-                      </div>
-                    </div>
-                  )
+                  if (!repeatEnabled || !repeatStart) return null
                   const mockRepeat = { frequency: repeatFreq, startDate: repeatStart, endDate: repeatEnd || null, repeatOnDay: repeatOnDay ? parseInt(repeatOnDay) : null, repeatOnWeekdays }
                   const upcoming = getUpcomingRepeatDates(mockRepeat, 5)
                   const t = new Date()

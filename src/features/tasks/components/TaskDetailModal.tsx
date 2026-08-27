@@ -343,21 +343,7 @@ export function TaskDetailModal({
       setHolidayDates(new Set())
       return
     }
-    httpClient
-      .get<{ data: { holiday_list?: string | null } }>('/api/resource/HR Settings')
-      .then(({ data }) => {
-        const listName = data.data.holiday_list
-        if (!listName) return
-        return httpClient.get<{ data: { holidays?: { holiday_date: string }[] } }>(
-          `/api/resource/Holiday List/${encodeURIComponent(listName)}`,
-        )
-      })
-      .then((res) => {
-        if (!res) return
-        const dates = new Set((res.data.data.holidays ?? []).map((h) => h.holiday_date.slice(0, 10)))
-        setHolidayDates(dates)
-      })
-      .catch(() => setHolidayDates(new Set()))
+    setHolidayDates(new Set())
   }, [savedRepeat?.id, savedRepeat?.frequency]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Load meetings linked to this task when Meet tab is opened ────────────
@@ -606,6 +592,8 @@ export function TaskDetailModal({
     if (!depId || depTaskIds.includes(depId)) return
     setDepTaskIds((prev) => [...prev, depId])
     setDepPickerValue('')
+    const depTask = allTasks.find((t) => t.id === depId)
+    if (depTask) void onUpdate(depId, { subject: depTask.subject, status: depTask.status, priority: depTask.priority, parentTask: task.id })
   }
 
   const removeDep = (depId: string) => {
@@ -686,15 +674,17 @@ export function TaskDetailModal({
 
 // ── Batch save (title, dates, engagement, actType, project, parentTask, deps) ─
 
-  const isDirty =
-    title.trim() !== (dt.subject ?? '') ||
-    localStartDate !== (dt.startDate ?? '') ||
-    localDueDate   !== (dt.dueDate   ?? '') ||
-    engDays        !== String(dt.engagementDays ?? '') ||
-    actType        !== (dt.activityType ?? '') ||
-    localProject   !== (dt.project      ?? '') ||
-    localParentTask !== (dt.parentTask  ?? null) ||
-    depTaskIds.join(',') !== (dt.dependsOnTasks ?? '')
+  const isDirty = !!fullTask && (
+    title.trim() !== (fullTask.subject ?? '') ||
+    localStartDate !== (fullTask.startDate ?? '') ||
+    localDueDate   !== (fullTask.dueDate   ?? '') ||
+    engDays        !== String(fullTask.engagementDays ?? '') ||
+    actType        !== (fullTask.activityType ?? '') ||
+    localProject   !== (fullTask.project      ?? '') ||
+    localParentTask !== (fullTask.parentTask  ?? null) ||
+    depTaskIds.join(',') !== (fullTask.dependsOnTasks ?? '') ||
+    (isEditingDesc && description !== (fullTask.description ?? ''))
+  )
 
   const saveAll = async () => {
     setIsSaving(true)
@@ -721,6 +711,7 @@ export function TaskDetailModal({
       project:        localProject   || undefined,
       parentTask:     localParentTask ?? undefined,
       dependsOnTasks: depTaskIds.join(',') || undefined,
+      description:    description    || undefined,
     })
 
     if (ok) {
@@ -756,6 +747,9 @@ export function TaskDetailModal({
         ? dt.dependsOnTasks.split(',').map((s) => s.trim()).filter(Boolean)
         : []
     )
+    setDescription(dt.description ?? '')
+    setDescEditKey((k) => k + 1)
+    setIsEditingDesc(false)
   }
 
 // ── Render ─────────────────────────────────────────────────────────────────
@@ -977,8 +971,8 @@ export function TaskDetailModal({
                       <p className="text-[11px] text-amber-600 px-4 pb-1 -mt-1">{dateWarning}</p>
                     )}
 
-                    {/* Repeat */}
-                    <div
+                    {/* Repeat — tasks only */}
+                    {!task.isMilestone && !task.isGroup && <div
                       className="flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 transition-colors group cursor-pointer"
                       onClick={() => setShowRepeatModal(true)}
                     >
@@ -992,7 +986,7 @@ export function TaskDetailModal({
                           <span className="text-[12.5px] text-slate-300 group-hover:text-slate-400 transition-colors">None</span>
                         )}
                       </div>
-                    </div>
+                    </div>}
 
                     {/* Engagement Days */}
                     <div
@@ -1031,7 +1025,7 @@ export function TaskDetailModal({
                       className="flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 transition-colors cursor-pointer group"
                       onClick={openParentTaskMenu}
                     >
-                      <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0">Parent Task</span>
+                      <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0">{task.isGroup ? 'Milestone' : 'Activity'}</span>
                       <div className="flex items-center gap-1.5 flex-1 min-w-0">
                         {localParentTask ? (
                           <span className="text-[12.5px] text-slate-700 truncate">
@@ -1168,22 +1162,6 @@ export function TaskDetailModal({
                     onChange={(html) => setDescription(html)}
                     placeholder="Add a description…"
                   />
-                  <div className="flex items-center gap-2 mt-2">
-                    <button
-                      type="button"
-                      onClick={() => void saveDesc()}
-                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[12px] font-medium rounded-lg transition-colors"
-                    >
-                      Save
-                    </button>
-                    <button
-                      type="button"
-                      onClick={cancelDesc}
-                      className="px-3 py-1.5 text-[12px] text-slate-500 hover:text-slate-700 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  </div>
                 </div>
               ) : description ? (
                 <div
@@ -1203,9 +1181,9 @@ export function TaskDetailModal({
                 </div>
               )}
 
-              {/* ── Subtasks (dependency tasks) ── */}
-              <div className="h-px bg-slate-100 mb-4"/>
-              <div className="mb-5">
+              {/* ── Subtasks (dependency tasks) — milestones & activities only ── */}
+              {(task.isMilestone || task.isGroup) && <div className="h-px bg-slate-100 mb-4"/>}
+              {(task.isMilestone || task.isGroup) && <div className="mb-5">
                 <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
                   Subtasks {depTaskIds.length > 0 && <span className="ml-1 font-normal text-slate-300 normal-case tracking-normal">({depTaskIds.length})</span>}
                 </p>
@@ -1281,7 +1259,7 @@ export function TaskDetailModal({
                   <svg fill="none" viewBox="0 0 12 12" width="11" height="11"><path d="M6 1v10M1 6h10" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5"/></svg>
                   Add Task
                 </button>
-              </div>
+              </div>}
 
             </div>
           </div>
@@ -1387,7 +1365,7 @@ export function TaskDetailModal({
                     : null,
                   icon: <svg fill="none" viewBox="0 0 14 14" width="15" height="15"><rect x="1" y="3.5" width="8.5" height="7" rx="1.2" stroke="currentColor" strokeWidth="1.3"/><path d="M9.5 6.2l3-1.7v5l-3-1.7V6.2z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/></svg>,
                 },
-              ]).map(({ tab, label, icon, badge }) => (
+              ]).filter(({ tab }) => tab !== 'repeat' || (!task.isMilestone && !task.isGroup)).map(({ tab, label, icon, badge }) => (
                 <button
                   key={tab}
                   type="button"
@@ -1430,7 +1408,7 @@ export function TaskDetailModal({
 
               {/* Tabs */}
               <div className="flex-shrink-0 flex items-center border-b border-slate-100 px-1">
-                {(['repeat', 'comments', 'attachments', 'activity', 'meet'] as const).map((tab) => (
+                {(['repeat', 'comments', 'attachments', 'activity', 'meet'] as const).filter((tab) => tab !== 'repeat' || (!task.isMilestone && !task.isGroup)).map((tab) => (
                   <button
                     key={tab}
                     type="button"

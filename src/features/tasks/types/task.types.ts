@@ -45,7 +45,7 @@ export interface UpdateTaskInput {
   priority: string
   isMilestone?: boolean
   isGroup?: boolean
-  parentTask?: string
+  parentTask?: string | null
   dependsOnTasks?: string
   startDate?: string
   dueDate?: string

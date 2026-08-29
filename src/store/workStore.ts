@@ -24,6 +24,8 @@ interface WorkState {
   assignTask: (taskId: string, userId: string) => Promise<boolean>
   unassignTask: (taskId: string, userId: string) => Promise<boolean>
   updateTask: (taskId: string, input: UpdateTaskInput) => Promise<boolean>
+  deleteTask: (taskId: string) => Promise<boolean>
+  setParentTask: (taskId: string, parentTaskId: string | null) => Promise<boolean>
   resetTaskFeedback: () => void
   clearUpdateTaskError: () => void
 }
@@ -115,6 +117,24 @@ export const useWorkStore = create<WorkState>((set, get) => ({
       set({ updateTaskError: e instanceof Error ? e.message : 'Unable to update task.' })
       return false
     }
+  },
+
+  deleteTask: async (taskId) => {
+    try {
+      await taskApi.deleteTask(taskId)
+      set((state) => ({ tasks: state.tasks.filter((t) => t.id !== taskId) }))
+      return true
+    } catch { return false }
+  },
+
+  setParentTask: async (taskId, parentTaskId) => {
+    try {
+      await taskApi.setParentTask(taskId, parentTaskId)
+      set((state) => ({
+        tasks: state.tasks.map((t) => t.id === taskId ? { ...t, parentTask: parentTaskId } : t),
+      }))
+      return true
+    } catch { return false }
   },
 
   assignTask: async (taskId, userId) => {

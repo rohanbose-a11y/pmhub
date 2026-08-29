@@ -160,7 +160,8 @@ const toPayload = (input: AnyTaskInput) => {
     priority: input.priority,
     ...('isMilestone' in input && { is_milestone: input.isMilestone ? 1 : 0 }),
     ...(input.isGroup !== undefined && { is_group: input.isGroup ? 1 : 0 }),
-    parent_task: input.parentTask?.trim() || undefined,
+    // null explicitly clears parent_task; omit the key if parentTask not provided
+    ...('parentTask' in input ? { parent_task: input.parentTask?.trim() || null } : {}),
     exp_start_date: input.startDate || undefined,
     exp_end_date: input.dueDate || undefined,
     description: input.description?.trim() || undefined,
@@ -198,7 +199,7 @@ const toPayloadCore = (input: AnyTaskInput) => {
     priority: input.priority,
     ...(input.activityType?.trim() && { custom_kra: input.activityType.trim() }),
     ...(input.customRaci?.trim() && { custom_raci: input.customRaci.trim() }),
-    parent_task: input.parentTask?.trim() || undefined,
+    ...('parentTask' in input ? { parent_task: input.parentTask?.trim() || null } : {}),
     ...('status'      in input && { status: input.status }),
     ...('completedBy' in input && input.completedBy && { completed_by: input.completedBy }),
     ...('completedOn' in input && input.completedOn && { completed_on: input.completedOn }),
@@ -441,6 +442,33 @@ export const taskApi = {
       re_assign: false,
       notify: false,
     })
+  },
+
+  async deleteTask(taskId: string): Promise<void> {
+    await httpClient.delete(`/api/resource/Task/${encodeURIComponent(taskId)}`)
+  },
+
+  /**
+   * Sets parent_task via frappe.client.set_value — a purpose-built whitelisted
+   * Frappe method that updates a single field without running the full doctype
+   * validation chain that rejects minimal REST PUTs with 417/500.
+   * Falls back to direct REST PUT if set_value itself errors.
+   */
+  async setParentTask(taskId: string, parentTaskId: string | null): Promise<void> {
+    try {
+      await httpClient.post('/api/method/frappe.client.set_value', {
+        doctype: 'Task',
+        name: taskId,
+        fieldname: 'parent_task',
+        value: parentTaskId ?? '',
+      })
+    } catch (err) {
+      console.warn('[taskApi] set_value failed for parent_task — falling back to REST PUT.', axios.isAxiosError(err) ? err.response?.data : err)
+      await httpClient.put<FrappeDocumentResponse<FrappeTaskRecord>>(
+        `/api/resource/Task/${encodeURIComponent(taskId)}`,
+        { parent_task: parentTaskId },
+      )
+    }
   },
 
   async unassignTask(taskId: string, userId: string): Promise<void> {

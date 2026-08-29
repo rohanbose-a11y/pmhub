@@ -65,9 +65,12 @@ interface CreateTaskModalProps {
   initialIsMilestone?: boolean
   initialIsGroup?: boolean
   mode?: AddNewType
+  submitLabel?: string
+  pendingSubTasks?: Task[]
+  onSubTasksChange?: (tasks: Task[]) => void
   onSubmit: (input: CreateTaskInput) => Promise<Task | null>
   onClose: () => void
-  onSuccess: () => void
+  onSuccess: (task?: Task | null) => void
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -81,6 +84,9 @@ export function CreateTaskModal({
   initialParentTask,
   initialIsMilestone = false,
   initialIsGroup = false,
+  submitLabel,
+  pendingSubTasks: initialSubTasks,
+  onSubTasksChange,
   onSubmit,
   onClose,
   onSuccess,
@@ -122,6 +128,12 @@ export function CreateTaskModal({
   const [mentionIdx,     setMentionIdx]     = useState(0)
   const [mentionDropPos, setMentionDropPos] = useState({ bottom: 0, left: 0, width: 0 })
   const mentionDropRef = useRef<HTMLDivElement>(null)
+
+  // ── Sub-tasks (activity creation flow) ───────────────────────────────────
+  const [subTasks,       setSubTasks]       = useState<Task[]>(initialSubTasks ?? [])
+  const [showSubPicker,  setShowSubPicker]  = useState(false)
+  const [subPickerValue, setSubPickerValue] = useState('')
+  const updateSubTasks = (next: Task[]) => { setSubTasks(next); onSubTasksChange?.(next) }
 
   // ── Links ─────────────────────────────────────────────────────────────────
   const [pendingLinks, setPendingLinks] = useState<{ label: string; url: string }[]>([])
@@ -317,6 +329,8 @@ export function CreateTaskModal({
   const doSubmit = async (andAnother = false) => {
     if (!subject.trim()) { setTitleError(true); titleInputRef.current?.focus(); return }
     if (projects.length > 0 && !project) { setProjectError(true); return }
+    // Activity flow: require at least 2 sub-tasks
+    if (initialSubTasks !== undefined && subTasks.length < 2) return
     // Validate repeat: must have a start date if enabled
     if (repeatEnabled && !repeatStart) {
       setShowRepeatModal(true)
@@ -367,7 +381,7 @@ export function CreateTaskModal({
         setPendingComments([]); setCommentText(''); setPendingLinks([]); setLinkName(''); setLinkUrl('')
         setTimeout(() => titleInputRef.current?.focus(), 60)
       } else {
-        onSuccess()
+        onSuccess(created)
       }
     }
   }
@@ -695,6 +709,82 @@ export function CreateTaskModal({
                 placeholder="Add a description…"
               />
 
+              {/* ── Sub-tasks (activity creation flow) ── */}
+              {initialSubTasks !== undefined && (
+                <div className="mt-5">
+                  <div className="h-px bg-slate-100 mb-4"/>
+                  <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
+                    Subtasks {subTasks.length > 0 && <span className="ml-1 font-normal text-slate-300 normal-case tracking-normal">({subTasks.length})</span>}
+                  </p>
+                  {subTasks.length > 0 && (
+                    <div className="mb-2.5 rounded-lg border border-slate-100 divide-y divide-slate-50 overflow-hidden">
+                      {subTasks.map((t) => (
+                        <div key={t.id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 transition-colors">
+                          <div className="w-1.5 h-1.5 rounded-full bg-slate-400 flex-shrink-0"/>
+                          <span className="flex-1 text-[12.5px] text-slate-700 truncate">{t.subject}</span>
+                          <button
+                            type="button"
+                            aria-label="Remove"
+                            onClick={() => updateSubTasks(subTasks.filter((s) => s.id !== t.id))}
+                            className="flex-shrink-0 w-5 h-5 flex items-center justify-center rounded-full hover:bg-rose-100 text-slate-300 hover:text-rose-500 transition-colors"
+                          >
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 12 12">
+                              <path d="M3 3l6 6M9 3l-6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+                            </svg>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {showSubPicker && (
+                    <div className="flex gap-2 mb-2">
+                      <div className="relative flex-1 min-w-0">
+                        <select
+                          className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 appearance-none pr-9 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-all"
+                          onChange={(e) => setSubPickerValue(e.target.value)}
+                          value={subPickerValue}
+                        >
+                          <option value="">Select a task…</option>
+                          {tasks
+                            .filter((t) => !t.isMilestone && !t.isGroup && !subTasks.some((s) => s.id === t.id))
+                            .map((t) => <option key={t.id} value={t.id}>{t.subject}</option>)}
+                        </select>
+                        <svg className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" viewBox="0 0 16 16">
+                          <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={!subPickerValue}
+                        onClick={() => {
+                          const t = tasks.find((t) => t.id === subPickerValue)
+                          if (t) updateSubTasks([...subTasks, t])
+                          setShowSubPicker(false); setSubPickerValue('')
+                        }}
+                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-all disabled:opacity-40 disabled:pointer-events-none flex-shrink-0"
+                      >
+                        Add
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { setShowSubPicker(false); setSubPickerValue('') }}
+                        className="px-3 py-2 text-sm text-slate-500 hover:text-slate-700 transition-colors flex-shrink-0"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => { setShowSubPicker(true); setSubPickerValue('') }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] text-slate-500 border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-colors"
+                  >
+                    <svg fill="none" viewBox="0 0 12 12" width="11" height="11"><path d="M6 1v10M1 6h10" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5"/></svg>
+                    Add more
+                  </button>
+                </div>
+              )}
+
               {/* Error */}
               <ErrorBanner message={serverError} className="mt-5" />
 
@@ -711,7 +801,10 @@ export function CreateTaskModal({
               Cancel
             </button>
             <div className="flex items-center gap-2">
-              {!isMilestone && !isGroup && (
+              {initialSubTasks !== undefined && subTasks.length < 2 && (
+                <span className="text-[12px] text-rose-500">At least 2 tasks required</span>
+              )}
+              {!isMilestone && !isGroup && !submitLabel && (
               <button
                 type="button"
                 disabled={isSubmitting}
@@ -723,7 +816,7 @@ export function CreateTaskModal({
               )}
               <button
                 type="button"
-                disabled={isSubmitting}
+                disabled={isSubmitting || (initialSubTasks !== undefined && subTasks.length < 2)}
                 onClick={() => void doSubmit(false)}
                 className="flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[13px] font-medium transition-all active:scale-[0.98] disabled:opacity-60 disabled:pointer-events-none"
               >
@@ -735,7 +828,7 @@ export function CreateTaskModal({
                     </svg>
                     Creating…
                   </>
-                ) : initialIsMilestone ? 'Create Milestone' : initialIsGroup ? 'Create Activity' : 'Create Task'}
+                ) : submitLabel ?? (initialIsMilestone ? 'Create Milestone' : initialIsGroup ? 'Create Activity' : 'Create Task')}
               </button>
             </div>
           </div>

@@ -100,12 +100,12 @@ const COL = {
   status:   148,
   repeat:    96,
   members:   72,
-  add:       36,
+  add:       200,
 } as const
 
 // ─── Column header strip ────────────────────────────────────────────────────
 
-function ColHeader() {
+function ColHeader({ onAdd }: { onAdd: () => void }) {
   return (
     <div
       className="flex-shrink-0 flex items-center border-b border-slate-100 bg-slate-50"
@@ -117,6 +117,18 @@ function ColHeader() {
         Task
       </span>
       <div className="hidden md:flex items-center flex-shrink-0">
+        <div className="flex items-center justify-center" style={{ width: COL.add, flexShrink: 0 }}>
+          <button
+            type="button"
+            aria-label="New task"
+            onClick={onAdd}
+            className="w-5 h-5 flex items-center justify-center rounded hover:bg-indigo-100 transition-colors"
+          >
+            <svg fill="none" viewBox="0 0 12 12" width="10" height="10" className="text-slate-400">
+              <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+            </svg>
+          </button>
+        </div>
         {([
           { label: 'Progress', w: COL.progress },
           { label: 'Due',      w: COL.due      },
@@ -129,8 +141,128 @@ function ColHeader() {
             <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{label}</span>
           </div>
         ))}
-        <div className="flex items-center justify-center" style={{ width: COL.add, flexShrink: 0 }}>
-          <span className="text-[14px] font-semibold text-slate-400">+</span>
+      </div>
+    </div>
+  )
+}
+
+// ─── Activity flow: step 1 task picker ────────────────────────────────────
+
+function ActivityTaskPicker({
+  tasks,
+  projectName,
+  onSelect,
+  onClose,
+}: {
+  tasks: Task[]
+  projectName: string
+  onSelect: (tasks: Task[]) => void
+  onClose: () => void
+}) {
+  const [query,    setQuery]    = useState('')
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+
+  const options = tasks.filter(
+    (t) => !t.isMilestone && !t.isGroup &&
+    (projectName === 'all' || t.project === projectName)
+  ).filter((t) => !query || t.subject.toLowerCase().includes(query.toLowerCase()))
+
+  const toggle = (id: string) =>
+    setSelected((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next })
+
+  const selectedTasks = tasks.filter((t) => selected.has(t.id))
+
+  // Unique users across selected tasks — assignedTo preferred, owner as fallback
+  const uniqueUsers = new Set(
+    selectedTasks.flatMap((t) => t.assignedTo.length > 0 ? t.assignedTo : (t.owner ? [t.owner] : []))
+  )
+  const hasEnoughTasks  = selected.size >= 2
+  const hasEnoughUsers  = uniqueUsers.size >= 2
+  const canNext         = hasEnoughTasks && hasEnoughUsers
+
+  const hint = !hasEnoughTasks
+    ? null
+    : !hasEnoughUsers
+      ? 'All selected tasks belong to the same user — select a task from a different user'
+      : null
+
+  // Helper: display label for a task's user
+  const taskUser = (t: Task) => {
+    const u = t.assignedTo[0] ?? t.owner
+    return u ? u.split('@')[0] : null
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/30">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md flex flex-col max-h-[70vh]">
+        <div className="px-5 py-4 border-b border-slate-100">
+          <h2 className="text-[15px] font-semibold text-slate-800">Select Tasks</h2>
+          <p className="text-[12px] text-slate-400 mt-0.5">Select at least 2 tasks from 2 different users</p>
+        </div>
+        <div className="px-4 py-2.5 border-b border-slate-100">
+          <input
+            autoFocus
+            type="text"
+            placeholder="Search tasks…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            className="w-full text-[13px] outline-none text-slate-700 placeholder:text-slate-300"
+          />
+        </div>
+        <div className="overflow-y-auto flex-1 py-1">
+          {options.length === 0 ? (
+            <p className="text-[12.5px] text-slate-400 text-center py-6">No tasks found</p>
+          ) : options.map((t) => {
+            const checked = selected.has(t.id)
+            const user    = taskUser(t)
+            return (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => toggle(t.id)}
+                className={[
+                  'w-full text-left px-4 py-2.5 text-[13px] transition-colors flex items-center gap-3',
+                  checked ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-50',
+                ].join(' ')}
+              >
+                <span className={[
+                  'w-4 h-4 rounded border flex-shrink-0 flex items-center justify-center transition-colors',
+                  checked ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300',
+                ].join(' ')}>
+                  {checked && (
+                    <svg fill="none" viewBox="0 0 10 10" width="8" height="8">
+                      <path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </span>
+                <span className="flex-1 min-w-0">
+                  <span className="block truncate">{t.subject}</span>
+                  {user && <span className="block text-[11px] text-slate-400 truncate">{user}</span>}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+        <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-between gap-3">
+          <button type="button" onClick={onClose} className="text-[13px] text-slate-500 hover:text-slate-700 px-3 py-2 rounded-lg hover:bg-slate-50 flex-shrink-0">
+            Cancel
+          </button>
+          <div className="flex items-center gap-3 min-w-0">
+            {hint && (
+              <span className="text-[11.5px] text-rose-500 truncate">{hint}</span>
+            )}
+            {!hint && selected.size > 0 && (
+              <span className="text-[12px] text-slate-400 flex-shrink-0">{selected.size} selected</span>
+            )}
+            <button
+              type="button"
+              disabled={!canNext}
+              onClick={() => onSelect(selectedTasks)}
+              className="px-5 py-2 bg-indigo-600 text-white text-[13px] font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-40 disabled:pointer-events-none flex-shrink-0"
+            >
+              Next →
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -157,7 +289,7 @@ function MilestoneAddMenu({ onSelect, canAddActivity }: { onSelect: (type: AddNe
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={(e) => { e.stopPropagation(); setOpen(false) }} />
-          <div className="absolute right-0 top-6 z-50 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden" style={{ minWidth: 120 }}>
+          <div className="absolute left-0 top-6 z-50 bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden" style={{ minWidth: 120 }}>
             {types.map((type) => (
               <button
                 key={type}
@@ -267,6 +399,25 @@ function TaskRow({
         {/* Right columns — desktop only */}
         <div className="hidden md:flex items-center flex-shrink-0">
 
+          {/* Add child — milestones and activities only */}
+          <div className="relative flex items-center justify-center" style={{ width: COL.add }}>
+            {task.isMilestone
+              ? <MilestoneAddMenu canAddActivity={canAddActivity} onSelect={(type) => onAddChild(task, type)} />
+              : task.isGroup && (
+                <button
+                  type="button"
+                  aria-label="Add task"
+                  className="w-5 h-5 flex items-center justify-center rounded hover:bg-indigo-100 transition-colors"
+                  onClick={(e) => { e.stopPropagation(); onAddChild(task, 'task') }}
+                >
+                  <svg fill="none" viewBox="0 0 12 12" width={10} height={10} className="text-slate-400">
+                    <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
+                  </svg>
+                </button>
+              )
+            }
+          </div>
+
           {/* Progress / child count */}
           <div className="flex items-center gap-1.5" style={{ width: COL.progress }}>
             {cc && cc.total > 0 ? (
@@ -340,25 +491,6 @@ function TaskRow({
                 <span className="text-[10px] font-medium text-indigo-400">Repeat</span>
               </>
             )}
-          </div>
-
-          {/* Add child — milestones and activities only */}
-          <div className="relative flex items-center justify-center" style={{ width: COL.add }}>
-            {task.isMilestone
-              ? <MilestoneAddMenu canAddActivity={canAddActivity} onSelect={(type) => onAddChild(task, type)} />
-              : task.isGroup && (
-                <button
-                  type="button"
-                  aria-label="Add task"
-                  className="w-5 h-5 flex items-center justify-center rounded hover:bg-indigo-100 transition-colors"
-                  onClick={(e) => { e.stopPropagation(); onAddChild(task, 'task') }}
-                >
-                  <svg fill="none" viewBox="0 0 12 12" width={10} height={10} className="text-slate-400">
-                    <path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/>
-                  </svg>
-                </button>
-              )
-            }
           </div>
 
         </div>
@@ -476,6 +608,8 @@ export function TaskTreePage() {
   const createTaskStatus   = useWorkStore((s) => s.createTaskStatus)
   const createTaskError    = useWorkStore((s) => s.createTaskError)
   const resetTaskFeedback  = useWorkStore((s) => s.resetTaskFeedback)
+  const deleteTask         = useWorkStore((s) => s.deleteTask)
+  const setParentTask      = useWorkStore((s) => s.setParentTask)
 
   const today = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d }, [])
 
@@ -486,6 +620,12 @@ export function TaskTreePage() {
   const [isCreateOpen,   setIsCreateOpen]   = useState(false)
   const [createType,     setCreateType]     = useState<AddNewType>('task')
   const [createParentId, setCreateParentId] = useState<string | undefined>(undefined)
+  // Two-step activity creation flow: pick tasks first, then create activity with them as sub-tasks
+  const [actStep,        setActStep]        = useState<'task' | 'activity' | null>(null)
+  const [actFlowParent,  setActFlowParent]  = useState<string | undefined>()
+  const [actFlowTasks,   setActFlowTasks]   = useState<Task[]>([])
+  const [actFlowError,   setActFlowError]   = useState<string | null>(null)
+  const [isLinkingTasks, setIsLinkingTasks] = useState(false)
 
   useEffect(() => {
     setProjectFilter(searchParams.get('project') ?? 'all')
@@ -634,11 +774,59 @@ export function TaskTreePage() {
   // ── Modals ───────────────────────────────────────────────────────────────
 
   const openCreateModal  = (type: AddNewType = 'task') => { resetTaskFeedback(); setCreateType(type); setCreateParentId(undefined); setIsCreateOpen(true) }
-  const openCreateChild  = (parent: Task, type: AddNewType = 'task') => { resetTaskFeedback(); setCreateType(type); setCreateParentId(parent.id); setIsCreateOpen(true) }
-  const closeCreateModal = () => { if (createTaskStatus === 'submitting') return; setIsCreateOpen(false); setCreateParentId(undefined) }
+  const openCreateChild  = (parent: Task, type: AddNewType = 'task') => {
+    resetTaskFeedback()
+    if (type === 'activity') {
+      // Two-step flow: create task first, then create the activity with task as sub-task
+      setActStep('task'); setActFlowParent(parent.id); setActFlowTasks([])
+    } else {
+      setIsCreateOpen(true); setCreateType(type); setCreateParentId(parent.id)
+    }
+  }
+  const closeCreateModal = () => {
+    if (createTaskStatus === 'submitting' || isLinkingTasks) return
+    setIsCreateOpen(false); setCreateParentId(undefined)
+    setActStep(null); setActFlowParent(undefined); setActFlowTasks([]); setIsLinkingTasks(false)
+  }
   const handleCreateTask = (input: CreateTaskInput) => {
     if (!username) return Promise.resolve(null)
     return createTask(input, username)
+  }
+  const handleActivityFlowStep1 = (selectedTasks: Task[]) => {
+    setActFlowTasks(selectedTasks)
+    setActStep('activity')
+    resetTaskFeedback()
+  }
+  const handleActivityFlowStep2 = async (activity?: Task | null) => {
+    if (!activity) return
+    setActFlowError(null)
+    setIsLinkingTasks(true)
+    try {
+      // Snapshot original parents before touching anything (needed for rollback)
+      const snapshots = actFlowTasks.map((t) => ({ id: t.id, origParent: t.parentTask ?? null }))
+
+      // Use minimal setParentTask to avoid triggering unrelated field validation (was causing 500s)
+      const results = await Promise.allSettled(
+        snapshots.map((s) => setParentTask(s.id, activity.id))
+      )
+
+      const succeeded = snapshots.filter((_, i) => {
+        const r = results[i]
+        return r.status === 'fulfilled' && r.value
+      })
+      const anyFailed = succeeded.length < snapshots.length
+
+      if (anyFailed) {
+        // Revert the ones that did link so the activity has no children, then delete it
+        await Promise.allSettled(succeeded.map((s) => setParentTask(s.id, s.origParent)))
+        await deleteTask(activity.id)
+        setActFlowError('Could not link all tasks to the activity — it was not saved. Please try again.')
+      } else {
+        setActStep(null); setActFlowParent(undefined); setActFlowTasks([]); setActFlowError(null)
+      }
+    } finally {
+      setIsLinkingTasks(false)
+    }
   }
 
   const [detailTaskId,  setDetailTaskId]  = useState<string | null>(null)
@@ -730,7 +918,7 @@ export function TaskTreePage() {
         ) : (
           /* Single card — fixed header + scrollable body */
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden flex flex-col flex-1 min-h-0">
-            <ColHeader />
+            <ColHeader onAdd={() => openCreateModal('task')} />
 
             <div className="flex-1 min-h-0 overflow-y-auto scrollbar-none">
               {projectFilter === 'all' ? (
@@ -854,8 +1042,8 @@ export function TaskTreePage() {
         )
       })()}
 
-      {/* ── Create task modal ── */}
-      {isCreateOpen && (
+      {/* ── Create task modal (normal flow) ── */}
+      {isCreateOpen && !actStep && (
         <CreateTaskModal
           isSubmitting={createTaskStatus === 'submitting'}
           onClose={closeCreateModal}
@@ -868,6 +1056,36 @@ export function TaskTreePage() {
           initialParentTask={createParentId}
           {...getTaskTypeDefaults(createType)}
           mode={createType}
+        />
+      )}
+
+      {/* ── Activity flow: step 1 — pick an existing task ── */}
+      {actStep === 'task' && (
+        <ActivityTaskPicker
+          tasks={tasks}
+          projectName={resolvedProjectName}
+          onSelect={handleActivityFlowStep1}
+          onClose={closeCreateModal}
+        />
+      )}
+
+      {/* ── Activity flow: step 2 — create activity with pending sub-task ── */}
+      {actStep === 'activity' && (
+        <CreateTaskModal
+          key="af-activity"
+          isSubmitting={createTaskStatus === 'submitting' || isLinkingTasks}
+          onClose={closeCreateModal}
+          onSubmit={handleCreateTask}
+          onSuccess={handleActivityFlowStep2}
+          projects={projects}
+          tasks={tasks}
+          serverError={createTaskError ?? actFlowError}
+          initialProject={resolvedProjectName !== 'all' ? resolvedProjectName : undefined}
+          initialParentTask={actFlowParent}
+          initialIsGroup={true}
+          pendingSubTasks={actFlowTasks}
+          onSubTasksChange={setActFlowTasks}
+          mode="activity"
         />
       )}
     </main>

@@ -9,7 +9,6 @@ import { RepeatModal } from './RepeatModal'
 import { PRIORITY_CONFIG } from '../config/priorityConfig'
 import type { Project } from '../../projects/types/project.types'
 import { taskApi, type TaskActivity } from '../../../api/taskApi'
-import { httpClient } from '../../../api/httpClient'
 import { userApi } from '../../../api/userApi'
 import type { UserOption } from '../../../api/userApi'
 import { useKraOptions } from '../../../hooks/useKraOptions'
@@ -526,24 +525,7 @@ export function TaskDetailModal({
     if (!title.trim()) setTitle(dt.subject ?? '')
   }
 
-  const saveDesc = async () => {
-    setIsEditingDesc(false)
-    if (description !== (dt.description ?? '')) {
-      const ok = await onUpdate(task.id, { subject: task.subject, status: liveStatus, priority: livePriority, description })
-      if (ok) {
-        setFullTask((prev) => prev ? { ...prev, description } : null)
-        addActivity({ type: 'desc', text: 'Description updated' })
-      }
-    }
-  }
-
-  const cancelDesc = () => {
-    setDescription(dt.description ?? '')
-    setDescEditKey((k) => k + 1)
-    setIsEditingDesc(false)
-  }
-
-  const saveLink = async () => {
+const saveLink = async () => {
     const name = linkName.trim()
     const url  = linkUrl.trim()
     if (!url) return

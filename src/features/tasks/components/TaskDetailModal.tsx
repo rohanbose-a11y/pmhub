@@ -228,12 +228,8 @@ export function TaskDetailModal({
   // Fixed-position dropdown anchoring (escape overflow:hidden on the modal)
   const [priorityDropPos,   setPriorityDropPos]   = useState({ top: 0, left: 0, width: 0 })
   const [actTypeDropPos,    setActTypeDropPos]    = useState({ top: 0, left: 0, width: 0 })
-  const [parentTaskDropPos, setParentTaskDropPos] = useState({ top: 0, left: 0, width: 0 })
-  const [projectDropPos,    setProjectDropPos]    = useState({ top: 0, left: 0, width: 0 })
   const [showParentTaskMenu, setShowParentTaskMenu] = useState(false)
-  const [parentTaskQuery,   setParentTaskQuery]  = useState('')
   const [showProjectMenu,   setShowProjectMenu]  = useState(false)
-  const [projectQuery,      setProjectQuery]     = useState('')
 
   const priorityTriggerRef   = useRef<HTMLDivElement>(null)
   const priorityDropRef      = useRef<HTMLDivElement>(null)
@@ -427,27 +423,6 @@ export function TaskDetailModal({
     setKraQuery('')
   }
 
-  const openParentTaskMenu = () => {
-    const r = parentTaskTriggerRef.current?.getBoundingClientRect()
-    if (r) setParentTaskDropPos({ top: r.bottom + 4, left: r.left, width: Math.max(r.width, 240) })
-    setShowParentTaskMenu((v) => !v)
-    setParentTaskQuery('')
-  }
-
-  const openProjectMenu = () => {
-    const r = projectTriggerRef.current?.getBoundingClientRect()
-    if (r) setProjectDropPos({ top: r.bottom + 4, left: r.left, width: Math.max(r.width, 220) })
-    setShowProjectMenu((v) => !v)
-    setProjectQuery('')
-  }
-
-  const handleProjectChange = (projectName: string) => {
-    setShowProjectMenu(false)
-    setProjectQuery('')
-    if (projectName === localProject) return
-    setLocalProject(projectName)
-  }
-
   // ── Dropdowns + keyboard ───────────────────────────────────────────────────
   useEffect(() => {
     const h = (e: MouseEvent) => {
@@ -468,13 +443,13 @@ export function TaskDetailModal({
         showParentTaskMenu &&
         parentTaskTriggerRef.current && !parentTaskTriggerRef.current.contains(t) &&
         parentTaskDropRef.current    && !parentTaskDropRef.current.contains(t)
-      ) { setShowParentTaskMenu(false); setParentTaskQuery('') }
+      ) setShowParentTaskMenu(false)
 
       if (
         showProjectMenu &&
         projectTriggerRef.current && !projectTriggerRef.current.contains(t) &&
         projectDropRef.current    && !projectDropRef.current.contains(t)
-      ) { setShowProjectMenu(false); setProjectQuery('') }
+      ) setShowProjectMenu(false)
     }
     document.addEventListener('mousedown', h)
     return () => document.removeEventListener('mousedown', h)
@@ -485,8 +460,8 @@ export function TaskDetailModal({
       if (e.key === 'Escape') {
         if (showPriorityMenu)   { setShowPriorityMenu(false); return }
         if (showActTypeMenu)    { setShowActTypeMenu(false); setKraQuery(''); return }
-        if (showParentTaskMenu) { setShowParentTaskMenu(false); setParentTaskQuery(''); return }
-        if (showProjectMenu)    { setShowProjectMenu(false); setProjectQuery(''); return }
+        if (showParentTaskMenu) { setShowParentTaskMenu(false); return }
+        if (showProjectMenu)    { setShowProjectMenu(false); return }
         onClose()
       }
     }
@@ -569,12 +544,6 @@ const saveLink = async () => {
     setShowActTypeMenu(false)
     setKraQuery('')
     setActType(val)
-  }
-
-  const selectParentTask = (parentId: string | null) => {
-    setShowParentTaskMenu(false)
-    setParentTaskQuery('')
-    setLocalParentTask(parentId)
   }
 
   const addDep = (depId: string) => {

@@ -162,13 +162,12 @@ function ActivityTaskPicker({
   const [query,    setQuery]    = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
-  // Show tasks with no parent OR directly under a milestone, with both dates set
-  const parentById = new Map(tasks.map((t) => [t.id, t]))
+  // Only show tasks that have no parent task and have both dates set
   const options = tasks.filter(
     (t) => !t.isMilestone && !t.isGroup &&
     (projectName === 'all' || t.project === projectName) &&
-    t.startDate !== null && t.dueDate !== null &&
-    (t.parentTask === null || parentById.get(t.parentTask)?.isMilestone === true)
+    t.parentTask === null &&
+    t.startDate !== null && t.dueDate !== null
   ).filter((t) => !query || t.subject.toLowerCase().includes(query.toLowerCase()))
 
   const toggle = (id: string) =>

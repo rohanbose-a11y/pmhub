@@ -109,6 +109,13 @@ export function CreateTaskModal({
   const [titleError,   setTitleError]   = useState(false)
   const [projectError, setProjectError] = useState(false)
   const [editorKey,    setEditorKey]    = useState(0)
+  const [dateToast,    setDateToast]    = useState(false)
+  const dateToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const showDateToast  = () => {
+    setDateToast(true)
+    if (dateToastTimer.current) clearTimeout(dateToastTimer.current)
+    dateToastTimer.current = setTimeout(() => setDateToast(false), 3000)
+  }
 
   // ── Repeat ────────────────────────────────────────────────────────────────
   const [repeatEnabled,     setRepeatEnabled]     = useState(false)
@@ -329,6 +336,7 @@ export function CreateTaskModal({
   const doSubmit = async (andAnother = false) => {
     if (!subject.trim()) { setTitleError(true); titleInputRef.current?.focus(); return }
     if (projects.length > 0 && !project) { setProjectError(true); return }
+    if (!startDate || !dueDate) { showDateToast(); return }
     // Activity flow: require at least 2 sub-tasks
     if (initialSubTasks !== undefined && subTasks.length < 2) return
     // Validate repeat: must have a start date if enabled
@@ -1541,6 +1549,17 @@ export function CreateTaskModal({
         }}
         onClose={() => setShowAssignPicker(false)}
       />
+    )}
+
+    {/* ── Date required toast ── */}
+    {dateToast && (
+      <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-2.5 bg-slate-800 text-white text-[13px] px-4 py-2.5 rounded-lg shadow-xl animate-fade-in pointer-events-none">
+        <svg fill="none" viewBox="0 0 16 16" width="15" height="15" className="text-rose-400 flex-shrink-0">
+          <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.4"/>
+          <path d="M8 5v3.5M8 10.5v.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+        </svg>
+        Start date and end date are required
+      </div>
     )}
     </>
   )

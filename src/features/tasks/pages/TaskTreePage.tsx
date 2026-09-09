@@ -162,9 +162,12 @@ function ActivityTaskPicker({
   const [query,    setQuery]    = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
+  // Only show tasks that have no parent task and have both dates set
   const options = tasks.filter(
     (t) => !t.isMilestone && !t.isGroup &&
-    (projectName === 'all' || t.project === projectName)
+    (projectName === 'all' || t.project === projectName) &&
+    t.parentTask === null &&
+    t.startDate !== null && t.dueDate !== null
   ).filter((t) => !query || t.subject.toLowerCase().includes(query.toLowerCase()))
 
   const toggle = (id: string) =>

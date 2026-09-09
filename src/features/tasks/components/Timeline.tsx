@@ -45,7 +45,7 @@ export function Timeline({ startDate, dueDate, onStartDateChange, onDueDateChang
 
         {/* Start date — tap to edit */}
         <div className="text-left min-w-0">
-          <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold">Start</p>
+          <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold">Start <span className="text-rose-500">*</span></p>
           <InlineDatePicker value={startDate} onChange={onStartDateChange} placeholder="+ Set" className="text-sm font-bold mt-0.5" />
         </div>
 
@@ -64,7 +64,7 @@ export function Timeline({ startDate, dueDate, onStartDateChange, onDueDateChang
 
         {/* Due date — tap to edit */}
         <div className="text-right min-w-0">
-          <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold">Due</p>
+          <p className="text-[10px] text-slate-400 uppercase tracking-wide font-semibold">Due <span className="text-rose-500">*</span></p>
           <InlineDatePicker value={dueDate} onChange={onDueDateChange} placeholder="+ Set" overdue={isOverdue} className="text-sm font-bold mt-0.5" />
         </div>
       </div>

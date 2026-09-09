@@ -162,13 +162,14 @@ export function EditTaskForm({
     completedOn: task.completedOn ?? '',
   })
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({})
-  const [dateToast, setDateToast] = useState(false)
-  const dateToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const showDateToast = () => {
-    setDateToast(true)
-    if (dateToastTimer.current) clearTimeout(dateToastTimer.current)
-    dateToastTimer.current = setTimeout(() => setDateToast(false), 3000)
+  const [toast,    setToast]    = useState('')
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const showToast  = (msg: string) => {
+    setToast(msg)
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(''), 3000)
   }
+  const showDateToast = () => showToast('Start date and end date are required')
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false)
   const [pendingStatus, setPendingStatus] = useState('')
   const [depTaskIds, setDepTaskIds] = useState<string[]>(() =>
@@ -348,27 +349,9 @@ export function EditTaskForm({
         {/* Project + KRA — stacked on mobile, side-by-side on desktop */}
         <div className="grid gap-3 md:grid-cols-2">
           <div>
-            <FieldLabel htmlFor="edit-project">Project</FieldLabel>
-            <div className="relative w-full">
-              <select
-                className={selectClass}
-                id="edit-project"
-                name="project"
-                onChange={handleChange}
-                value={values.project ?? ''}
-              >
-                <option value="">No project — general task</option>
-                {/* Preserve current project if user is not a member of it */}
-                {values.project && !projects.some((p) => p.name === values.project) && (
-                  <option value={values.project}>{values.project}</option>
-                )}
-                {projects.map((p) => (
-                  <option key={p.id} value={p.name}>{p.displayName}</option>
-                ))}
-              </select>
-              <svg className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 flex-shrink-0" fill="none" viewBox="0 0 16 16">
-                <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
+            <FieldLabel>Project</FieldLabel>
+            <div className={`${selectClass} flex items-center cursor-default select-none text-slate-500 bg-slate-50`}>
+              {projects.find((p) => p.name === values.project)?.displayName ?? values.project ?? '—'}
             </div>
           </div>
 
@@ -690,13 +673,13 @@ export function EditTaskForm({
         </div>
       )}
 
-      {dateToast && (
+      {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-2.5 bg-slate-800 text-white text-[13px] px-4 py-2.5 rounded-lg shadow-xl animate-fade-in pointer-events-none">
           <svg fill="none" viewBox="0 0 16 16" width="15" height="15" className="text-rose-400 flex-shrink-0">
             <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.4"/>
             <path d="M8 5v3.5M8 10.5v.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
           </svg>
-          Start date and end date are required
+          {toast}
         </div>
       )}
     </form>

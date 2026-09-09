@@ -109,13 +109,14 @@ export function CreateTaskModal({
   const [titleError,   setTitleError]   = useState(false)
   const [projectError, setProjectError] = useState(false)
   const [editorKey,    setEditorKey]    = useState(0)
-  const [dateToast,    setDateToast]    = useState(false)
-  const dateToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const showDateToast  = () => {
-    setDateToast(true)
-    if (dateToastTimer.current) clearTimeout(dateToastTimer.current)
-    dateToastTimer.current = setTimeout(() => setDateToast(false), 3000)
+  const [toast,      setToast]      = useState('')
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const showToast  = (msg: string) => {
+    setToast(msg)
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(''), 3000)
   }
+  const showDateToast = () => showToast('Start date and end date are required')
 
   // ── Repeat ────────────────────────────────────────────────────────────────
   const [repeatEnabled,     setRepeatEnabled]     = useState(false)
@@ -336,6 +337,7 @@ export function CreateTaskModal({
   const doSubmit = async (andAnother = false) => {
     if (!subject.trim()) { setTitleError(true); titleInputRef.current?.focus(); return }
     if (!startDate || !dueDate) { showDateToast(); return }
+    if (pendingAssignees.length === 0) { showToast('At least one assignee is required'); return }
     // Activity flow: require at least 2 sub-tasks
     if (initialSubTasks !== undefined && subTasks.length < 2) return
     // Validate repeat: must have a start date if enabled
@@ -503,9 +505,17 @@ export function CreateTaskModal({
                 {/* Left column */}
                 <div className="divide-y divide-slate-50">
 
+                  {/* Project — read-only */}
+                  {selectedProject && (
+                    <div className="flex items-center gap-2 px-4 py-2.5">
+                      <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0">Project</span>
+                      <span className="text-[12.5px] text-slate-500 truncate">{selectedProject.displayName}</span>
+                    </div>
+                  )}
+
                   {/* Dates */}
                   <div className="flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 transition-colors group">
-                    <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0">Dates</span>
+                    <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0">Dates <span className="text-rose-500">*</span></span>
                     <div className="flex items-center gap-1.5 text-[12.5px]">
                       <svg fill="none" viewBox="0 0 14 14" width="12" height="12" className="text-slate-400 flex-shrink-0">
                         <rect x="1" y="2.5" width="12" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
@@ -572,25 +582,12 @@ export function CreateTaskModal({
                     />
                   </div>
 
-                  {/* Parent Task — hidden for milestones */}
-                  {!isMilestone && (
-                  <div
-                    ref={parentTriggerRef}
-                    className="flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 transition-colors cursor-pointer group"
-                    onClick={openParentMenu}
-                  >
-                    <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0">{isGroup ? 'Milestone' : 'Activity'}</span>
-                    <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                      {selectedParent ? (
-                        <span className="text-[12.5px] text-slate-700 truncate">{selectedParent.subject}</span>
-                      ) : (
-                        <span className="text-[12.5px] text-slate-300 group-hover:text-slate-400 transition-colors">None</span>
-                      )}
-                      <svg fill="none" viewBox="0 0 10 10" width="8" height="8" className="text-slate-300 ml-auto flex-shrink-0">
-                        <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.3"/>
-                      </svg>
+                  {/* Parent Task — read-only, hidden for milestones */}
+                  {!isMilestone && selectedParent && (
+                    <div className="flex items-center gap-2 px-4 py-2.5">
+                      <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0">{selectedParent.isMilestone ? 'Milestone' : 'Activity'}</span>
+                      <span className="text-[12.5px] text-slate-500 truncate">{selectedParent.subject}</span>
                     </div>
-                  </div>
                   )}
 
                 </div>
@@ -645,7 +642,7 @@ export function CreateTaskModal({
                     className="flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 transition-colors group cursor-pointer"
                     onClick={() => setShowAssignPicker(true)}
                   >
-                    <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0">Assignees</span>
+                    <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0">Assignees <span className="text-rose-500">*</span></span>
                     <div className="flex items-center gap-1.5">
                       {pendingAssignees.length > 0 && (
                         <div className="flex items-center -space-x-1.5">
@@ -1347,60 +1344,6 @@ export function CreateTaskModal({
           </div>
         )}
 
-        {showParentMenu && (
-          <div
-            ref={parentDropRef}
-            style={{ position: 'fixed', top: parentDropPos.top, left: parentDropPos.left, width: parentDropPos.width, zIndex: 9999 }}
-            className="bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden"
-          >
-            <div className="flex items-center gap-1.5 px-2.5 border-b border-slate-100">
-              <svg fill="none" viewBox="0 0 12 12" width="11" height="11" className="text-slate-400 flex-shrink-0">
-                <circle cx="5" cy="5" r="3.5" stroke="currentColor" strokeWidth="1.3"/>
-                <path d="M8 8l2.5 2.5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.3"/>
-              </svg>
-              <input
-                autoFocus
-                type="text"
-                value={parentQuery}
-                onChange={(e) => setParentQuery(e.target.value)}
-                placeholder="Search tasks..."
-                className="w-full h-8 text-[12px] text-slate-700 placeholder:text-slate-400 bg-transparent outline-none border-0"
-              />
-            </div>
-            <div className="max-h-52 overflow-y-auto scrollbar-none py-1">
-              <button
-                type="button"
-                onClick={() => { setParentTask(''); setShowParentMenu(false); setParentQuery('') }}
-                className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-[12.5px] text-slate-400 hover:bg-slate-50 transition-colors"
-              >
-                <span>None — top-level task</span>
-                {!parentTask && (
-                  <svg fill="none" viewBox="0 0 12 12" width="11" height="11" className="text-indigo-500 flex-shrink-0">
-                    <path d="M2 6l3 3 5-5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5"/>
-                  </svg>
-                )}
-              </button>
-              {filteredParents.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => { setParentTask(t.id); setShowParentMenu(false); setParentQuery('') }}
-                  className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-[12.5px] text-slate-700 hover:bg-slate-50 transition-colors"
-                >
-                  <span className="truncate">{t.subject}</span>
-                  {parentTask === t.id && (
-                    <svg fill="none" viewBox="0 0 12 12" width="11" height="11" className="text-indigo-500 flex-shrink-0">
-                      <path d="M2 6l3 3 5-5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5"/>
-                    </svg>
-                  )}
-                </button>
-              ))}
-              {filteredParents.length === 0 && (
-                <p className="text-[12px] text-slate-400 text-center py-3">No tasks found</p>
-              )}
-            </div>
-          </div>
-        )}
 
       </div>
     </div>
@@ -1488,14 +1431,14 @@ export function CreateTaskModal({
       />
     )}
 
-    {/* ── Date required toast ── */}
-    {dateToast && (
+    {/* ── Validation toast ── */}
+    {toast && (
       <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-2.5 bg-slate-800 text-white text-[13px] px-4 py-2.5 rounded-lg shadow-xl animate-fade-in pointer-events-none">
         <svg fill="none" viewBox="0 0 16 16" width="15" height="15" className="text-rose-400 flex-shrink-0">
           <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.4"/>
           <path d="M8 5v3.5M8 10.5v.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
         </svg>
-        Start date and end date are required
+        {toast}
       </div>
     )}
     </>

@@ -199,6 +199,13 @@ export function TaskDetailModal({
   const [showDepPicker,   setShowDepPicker]    = useState(false)
   const [activityLog, setActivityLog]           = useState<ActivityEntry[]>([])
   const [isSaving, setIsSaving]                 = useState(false)
+  const [toast,    setToast]                    = useState('')
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const showToast  = (msg: string) => {
+    setToast(msg)
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(''), 3000)
+  }
 
   const addActivity = (entry: Omit<ActivityEntry, 'time'>) => {
     const time = new Date()
@@ -669,6 +676,8 @@ const saveLink = async () => {
   )
 
   const saveAll = async () => {
+    if (!localStartDate || !localDueDate) { showToast('Start date and end date are required'); return }
+    if (task.assignedTo.length === 0) { showToast('At least one assignee is required'); return }
     setIsSaving(true)
     const today = new Date(); today.setHours(0, 0, 0, 0)
     const subj = title.trim() || dt.subject
@@ -927,7 +936,7 @@ const saveLink = async () => {
 
                     {/* Dates */}
                     <div className="flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 transition-colors group">
-                      <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0">Dates</span>
+                      <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0">Dates <span className="text-rose-500">*</span></span>
                       <div className="flex items-center gap-1.5 text-[12.5px]">
                         <svg fill="none" viewBox="0 0 14 14" width="12" height="12" className="text-slate-400 flex-shrink-0">
                           <rect x="1" y="2.5" width="12" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3"/>
@@ -1000,27 +1009,14 @@ const saveLink = async () => {
                       )}
                     </div>
 
-                    {/* Parent Task — hidden for milestones */}
-                    {!task.isMilestone && (
-                    <div
-                      ref={parentTaskTriggerRef}
-                      className="flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 transition-colors cursor-pointer group"
-                      onClick={openParentTaskMenu}
-                    >
-                      <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0">{task.isGroup ? 'Milestone' : 'Activity'}</span>
-                      <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                        {localParentTask ? (
-                          <span className="text-[12.5px] text-slate-700 truncate">
-                            {allTasks.find((t) => t.id === localParentTask)?.subject ?? localParentTask}
-                          </span>
-                        ) : (
-                          <span className="text-[12.5px] text-slate-300 group-hover:text-slate-400 transition-colors">None</span>
-                        )}
-                        <svg fill="none" viewBox="0 0 10 10" width="8" height="8" className="text-slate-300 ml-auto flex-shrink-0">
-                          <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.3"/>
-                        </svg>
+                    {/* Parent Task — read-only, hidden for milestones */}
+                    {!task.isMilestone && localParentTask && (
+                      <div className="flex items-center gap-2 px-4 py-2.5">
+                        <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0">{allTasks.find((t) => t.id === localParentTask)?.isMilestone ? 'Milestone' : 'Activity'}</span>
+                        <span className="text-[12.5px] text-slate-500 truncate">
+                          {allTasks.find((t) => t.id === localParentTask)?.subject ?? localParentTask}
+                        </span>
                       </div>
-                    </div>
                     )}
 
                   </div>
@@ -1033,7 +1029,7 @@ const saveLink = async () => {
                       className="flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 transition-colors group cursor-pointer"
                       onClick={() => onAssign(task)}
                     >
-                      <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0">Assignees</span>
+                      <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0">Assignees <span className="text-rose-500">*</span></span>
                       <div className="flex items-center gap-1.5">
                         {task.assignedTo.length > 0 ? (
                           <div className="flex items-center -space-x-1.5">
@@ -1063,25 +1059,12 @@ const saveLink = async () => {
                       </div>
                     </div>
 
-                    {/* Project */}
-                    <div
-                      ref={projectTriggerRef}
-                      className="flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 transition-colors group cursor-pointer"
-                      onClick={openProjectMenu}
-                    >
+                    {/* Project — read-only */}
+                    <div className="flex items-center gap-2 px-4 py-2.5">
                       <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0">Project</span>
-                      <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                        {localProject ? (
-                          <span className="text-[12.5px] text-slate-700 truncate">
-                            {projects.find((p) => p.name === localProject)?.displayName ?? localProject}
-                          </span>
-                        ) : (
-                          <span className="text-[12.5px] text-slate-300 group-hover:text-slate-400 transition-colors">None</span>
-                        )}
-                        <svg fill="none" viewBox="0 0 10 10" width="8" height="8" className="text-slate-300 ml-auto flex-shrink-0">
-                          <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.3"/>
-                        </svg>
-                      </div>
+                      <span className="text-[12.5px] text-slate-500 truncate">
+                        {projects.find((p) => p.name === localProject)?.displayName ?? localProject ?? '—'}
+                      </span>
                     </div>
 
                     {/* Priority */}
@@ -1907,64 +1890,6 @@ const saveLink = async () => {
         </div>
       )}
 
-      {showProjectMenu && (
-        <div
-          ref={projectDropRef}
-          style={{ position: 'fixed', top: projectDropPos.top, left: projectDropPos.left, width: projectDropPos.width, zIndex: 9999 }}
-          className="bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden"
-        >
-          {/* Search */}
-          <div className="flex items-center gap-1.5 px-2.5 border-b border-slate-100">
-            <svg fill="none" viewBox="0 0 12 12" width="11" height="11" className="text-slate-400 flex-shrink-0">
-              <circle cx="5" cy="5" r="3.5" stroke="currentColor" strokeWidth="1.3"/>
-              <path d="M8 8l2.5 2.5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.3"/>
-            </svg>
-            <input
-              autoFocus
-              type="text"
-              value={projectQuery}
-              onChange={(e) => setProjectQuery(e.target.value)}
-              placeholder="Search projects…"
-              className="w-full h-8 text-[12px] text-slate-700 placeholder:text-slate-400 bg-transparent outline-none border-0"
-            />
-          </div>
-          {/* Options */}
-          <div className="max-h-48 overflow-y-auto scrollbar-none py-1">
-            {localProject && (
-              <button
-                type="button"
-                onClick={() => handleProjectChange('')}
-                className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition-colors"
-              >
-                <svg fill="none" viewBox="0 0 12 12" width="10" height="10">
-                  <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeLinecap="round" strokeWidth="1.3"/>
-                </svg>
-                No project
-              </button>
-            )}
-            {projects
-              .filter((p) => !projectQuery || p.displayName.toLowerCase().includes(projectQuery.toLowerCase()))
-              .map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => handleProjectChange(p.name)}
-                  className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-[12.5px] text-slate-700 hover:bg-slate-50 transition-colors"
-                >
-                  <span className="truncate">{p.displayName}</span>
-                  {localProject === p.name && (
-                    <svg fill="none" viewBox="0 0 12 12" width="11" height="11" className="text-indigo-500 flex-shrink-0">
-                      <path d="M2 6l3 3 5-5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5"/>
-                    </svg>
-                  )}
-                </button>
-              ))}
-            {projects.filter((p) => !projectQuery || p.displayName.toLowerCase().includes(projectQuery.toLowerCase())).length === 0 && (
-              <p className="px-3 py-2 text-[12px] text-slate-400">No projects found</p>
-            )}
-          </div>
-        </div>
-      )}
 
       {showPriorityMenu && (
         <div
@@ -2063,68 +1988,6 @@ const saveLink = async () => {
         zIndex={60}
       />
 
-      {showParentTaskMenu && (
-        <div
-          ref={parentTaskDropRef}
-          style={{ position: 'fixed', top: parentTaskDropPos.top, left: parentTaskDropPos.left, width: parentTaskDropPos.width, zIndex: 9999 }}
-          className="bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden"
-        >
-          {/* Search */}
-          <div className="flex items-center gap-1.5 px-2.5 border-b border-slate-100">
-            <svg fill="none" viewBox="0 0 12 12" width="11" height="11" className="text-slate-400 flex-shrink-0">
-              <circle cx="5" cy="5" r="3.5" stroke="currentColor" strokeWidth="1.3"/>
-              <path d="M8 8l2.5 2.5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.3"/>
-            </svg>
-            <input
-              autoFocus
-              type="text"
-              value={parentTaskQuery}
-              onChange={(e) => setParentTaskQuery(e.target.value)}
-              placeholder="Search tasks…"
-              className="w-full h-8 text-[12px] text-slate-700 placeholder:text-slate-400 bg-transparent outline-none border-0"
-            />
-          </div>
-          <div className="max-h-52 overflow-y-auto scrollbar-none py-1">
-            {/* Clear option */}
-            {localParentTask && (
-              <button
-                type="button"
-                onClick={() => selectParentTask(null)}
-                className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition-colors"
-              >
-                <svg fill="none" viewBox="0 0 12 12" width="10" height="10">
-                  <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeLinecap="round" strokeWidth="1.3"/>
-                </svg>
-                Clear parent
-              </button>
-            )}
-            {allTasks
-              .filter((t) =>
-                t.id !== task.id &&
-                (!localProject || t.project === localProject) &&
-                (!parentTaskQuery || t.subject.toLowerCase().includes(parentTaskQuery.toLowerCase()))
-              )
-              .map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => selectParentTask(t.id)}
-                  className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-[12.5px] text-slate-700 hover:bg-slate-50 transition-colors"
-                >
-                  <span className="truncate">{t.subject}</span>
-                  {localParentTask === t.id && (
-                    <svg fill="none" viewBox="0 0 12 12" width="11" height="11" className="text-indigo-500 flex-shrink-0">
-                      <path d="M2 6l3 3 5-5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5"/>
-                    </svg>
-                  )}
-                </button>
-              ))}
-            {allTasks.filter((t) => t.id !== task.id && (!parentTaskQuery || t.subject.toLowerCase().includes(parentTaskQuery.toLowerCase()))).length === 0 && (
-              <p className="text-[12px] text-slate-400 text-center py-3">No tasks found</p>
-            )}
-          </div>
-        </div>
-      )}
 
       <RepeatModal
         open={showRepeatModal}
@@ -2142,6 +2005,16 @@ const saveLink = async () => {
           setSavedRepeat(null)
         } : undefined}
       />
+
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[200] flex items-center gap-2.5 bg-slate-800 text-white text-[13px] px-4 py-2.5 rounded-lg shadow-xl animate-fade-in pointer-events-none">
+          <svg fill="none" viewBox="0 0 16 16" width="15" height="15" className="text-rose-400 flex-shrink-0">
+            <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.4"/>
+            <path d="M8 5v3.5M8 10.5v.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+          {toast}
+        </div>
+      )}
     </div>
   )
 }

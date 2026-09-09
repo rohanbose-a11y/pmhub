@@ -166,6 +166,7 @@ function ActivityTaskPicker({
   const parentById = new Map(tasks.map((t) => [t.id, t]))
   const options = tasks.filter(
     (t) => !t.isMilestone && !t.isGroup &&
+    isActive(t.status) &&
     (projectName === 'all' || t.project === projectName) &&
     t.startDate !== null && t.dueDate !== null &&
     (t.parentTask === null || parentById.get(t.parentTask)?.isMilestone === true)

@@ -335,7 +335,6 @@ export function CreateTaskModal({
   // ── Submit ────────────────────────────────────────────────────────────────
   const doSubmit = async (andAnother = false) => {
     if (!subject.trim()) { setTitleError(true); titleInputRef.current?.focus(); return }
-    if (projects.length > 0 && !project) { setProjectError(true); return }
     if (!startDate || !dueDate) { showDateToast(); return }
     // Activity flow: require at least 2 sub-tasks
     if (initialSubTasks !== undefined && subTasks.length < 2) return
@@ -503,32 +502,6 @@ export function CreateTaskModal({
 
                 {/* Left column */}
                 <div className="divide-y divide-slate-50">
-
-                  {/* Project */}
-                  <div
-                    ref={projectTriggerRef}
-                    className={[
-                      'flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 transition-colors cursor-pointer group',
-                      projectError ? 'ring-1 ring-inset ring-rose-300 bg-rose-50/40' : '',
-                    ].join(' ')}
-                    onClick={openProjectMenu}
-                  >
-                    <span className={['text-[11.5px] w-28 flex-shrink-0', projectError ? 'text-rose-500' : 'text-slate-400'].join(' ')}>
-                      Project{projectError ? ' *' : ''}
-                    </span>
-                    <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                      {selectedProject ? (
-                        <span className="text-[12.5px] text-slate-700 truncate">{selectedProject.displayName}</span>
-                      ) : (
-                        <span className={['text-[12.5px] transition-colors', projectError ? 'text-rose-400' : 'text-slate-300 group-hover:text-slate-400'].join(' ')}>
-                          {projectError ? 'Required — select a project' : 'None'}
-                        </span>
-                      )}
-                      <svg fill="none" viewBox="0 0 10 10" width="8" height="8" className="text-slate-300 ml-auto flex-shrink-0">
-                        <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.3"/>
-                      </svg>
-                    </div>
-                  </div>
 
                   {/* Dates */}
                   <div className="flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 transition-colors group">
@@ -1371,42 +1344,6 @@ export function CreateTaskModal({
                 <p className="text-[12px] text-slate-400 text-center py-3">No options found</p>
               )}
             </div>
-          </div>
-        )}
-
-        {showProjectMenu && (
-          <div
-            ref={projectDropRef}
-            style={{ position: 'fixed', top: projectDropPos.top, left: projectDropPos.left, width: projectDropPos.width, zIndex: 9999 }}
-            className="bg-white border border-slate-200 rounded-lg shadow-lg py-1 max-h-56 overflow-y-auto scrollbar-none"
-          >
-            <button
-              type="button"
-              onClick={() => { setProject(''); setShowProjectMenu(false); setProjectError(false) }}
-              className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-[12.5px] text-slate-400 hover:bg-slate-50 transition-colors"
-            >
-              <span>No project</span>
-              {!project && (
-                <svg fill="none" viewBox="0 0 12 12" width="11" height="11" className="text-indigo-500 flex-shrink-0">
-                  <path d="M2 6l3 3 5-5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5"/>
-                </svg>
-              )}
-            </button>
-            {projects.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => { setProject(p.name); setShowProjectMenu(false); setProjectError(false) }}
-                className="w-full flex items-center justify-between gap-2 px-3 py-1.5 text-[12.5px] text-slate-700 hover:bg-slate-50 transition-colors"
-              >
-                <span className="truncate">{p.displayName}</span>
-                {project === p.name && (
-                  <svg fill="none" viewBox="0 0 12 12" width="11" height="11" className="text-indigo-500 flex-shrink-0">
-                    <path d="M2 6l3 3 5-5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5"/>
-                  </svg>
-                )}
-              </button>
-            ))}
           </div>
         )}
 

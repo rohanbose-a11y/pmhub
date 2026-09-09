@@ -93,7 +93,7 @@ export function CreateTaskModal({
 }: CreateTaskModalProps) {
   // ── Form fields ────────────────────────────────────────────────────────────
   const [subject,     setSubject]     = useState('')
-  const [project,     setProject]     = useState(initialProject ?? projects[0]?.name ?? '')
+  const [project] = useState(initialProject ?? projects[0]?.name ?? '')
   const [priority,    setPriority]    = useState('Medium')
   const [actType,     setActType]     = useState('')
   const [startDate,   setStartDate]   = useState('')
@@ -105,9 +105,7 @@ export function CreateTaskModal({
   const [description, setDescription] = useState('')
   const [depTaskIds,    setDepTaskIds]    = useState<string[]>([])
   const [kraQuery,    setKraQuery]    = useState('')
-  const [parentQuery, setParentQuery] = useState('')
   const [titleError,   setTitleError]   = useState(false)
-  const [projectError, setProjectError] = useState(false)
   const [editorKey,    setEditorKey]    = useState(0)
   const [toast,      setToast]      = useState('')
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -162,8 +160,6 @@ export function CreateTaskModal({
   // ── Fixed-position coords ──────────────────────────────────────────────────
   const [priorityDropPos, setPriorityDropPos] = useState({ top: 0, left: 0, width: 0 })
   const [actTypeDropPos,  setActTypeDropPos]  = useState({ top: 0, left: 0, width: 0 })
-  const [projectDropPos,  setProjectDropPos]  = useState({ top: 0, left: 0, width: 0 })
-  const [parentDropPos,   setParentDropPos]   = useState({ top: 0, left: 0, width: 0 })
 
   const priorityTriggerRef = useRef<HTMLDivElement>(null)
   const priorityDropRef    = useRef<HTMLDivElement>(null)
@@ -282,18 +278,6 @@ export function CreateTaskModal({
     setShowActTypeMenu((v) => !v)
     setKraQuery('')
   }
-  const openProjectMenu = () => {
-    const r = projectTriggerRef.current?.getBoundingClientRect()
-    if (r) setProjectDropPos({ top: r.bottom + 4, left: r.left, width: Math.max(r.width, 180) })
-    setShowProjectMenu((v) => !v)
-  }
-  const openParentMenu = () => {
-    const r = parentTriggerRef.current?.getBoundingClientRect()
-    if (r) setParentDropPos({ top: r.bottom + 4, left: r.left, width: Math.max(r.width, 220) })
-    setShowParentMenu((v) => !v)
-    setParentQuery('')
-  }
-
   // ── Outside-click to close menus ──────────────────────────────────────────
   useEffect(() => {
     const h = (e: MouseEvent) => {
@@ -301,7 +285,7 @@ export function CreateTaskModal({
       if (showPriorityMenu && priorityTriggerRef.current && !priorityTriggerRef.current.contains(t) && priorityDropRef.current && !priorityDropRef.current.contains(t)) setShowPriorityMenu(false)
       if (showActTypeMenu  && actTypeTriggerRef.current  && !actTypeTriggerRef.current.contains(t)  && actTypeDropRef.current  && !actTypeDropRef.current.contains(t))  { setShowActTypeMenu(false); setKraQuery('') }
       if (showProjectMenu  && projectTriggerRef.current  && !projectTriggerRef.current.contains(t)  && projectDropRef.current  && !projectDropRef.current.contains(t))  setShowProjectMenu(false)
-      if (showParentMenu   && parentTriggerRef.current   && !parentTriggerRef.current.contains(t)   && parentDropRef.current   && !parentDropRef.current.contains(t))   { setShowParentMenu(false); setParentQuery('') }
+      if (showParentMenu   && parentTriggerRef.current   && !parentTriggerRef.current.contains(t)   && parentDropRef.current   && !parentDropRef.current.contains(t))   setShowParentMenu(false)
     }
     document.addEventListener('mousedown', h)
     return () => document.removeEventListener('mousedown', h)
@@ -314,7 +298,7 @@ export function CreateTaskModal({
       if (showPriorityMenu) { setShowPriorityMenu(false); return }
       if (showActTypeMenu)  { setShowActTypeMenu(false); setKraQuery(''); return }
       if (showProjectMenu)  { setShowProjectMenu(false); return }
-      if (showParentMenu)   { setShowParentMenu(false); setParentQuery(''); return }
+      if (showParentMenu)   { setShowParentMenu(false); return }
       onClose()
     }
     window.addEventListener('keydown', h)
@@ -385,7 +369,7 @@ export function CreateTaskModal({
         // Reset form for another entry
         setSubject(''); setActType(''); setStartDate(''); setDueDate('')
         setEngDays(''); setParentTask(''); setIsMilestone(initialIsMilestone); setIsGroup(initialIsGroup)
-        setDescription(''); setDepTaskIds([]); setPendingAssignees([]); setEditorKey((k) => k + 1); setProjectError(false)
+        setDescription(''); setDepTaskIds([]); setPendingAssignees([]); setEditorKey((k) => k + 1)
         setRepeatEnabled(false); setRepeatStart(''); setRepeatEnd(''); setRepeatOnDay(''); setRepeatOnWeekdays([])
         setPendingComments([]); setCommentText(''); setPendingLinks([]); setLinkName(''); setLinkUrl('')
         setTimeout(() => titleInputRef.current?.focus(), 60)
@@ -409,11 +393,6 @@ export function CreateTaskModal({
         (dueDate   && projStart && dueDate   < projStart) ||
         (dueDate   && projEnd   && dueDate   > projEnd)
       ) ? `Dates should be within the project range: ${projStart ?? '—'} → ${projEnd ?? '—'}` : ''
-  const filteredParents = tasks.filter((t) =>
-    (!project || t.project === project) &&
-    (!parentQuery || t.subject.toLowerCase().includes(parentQuery.toLowerCase())),
-  )
-
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <>

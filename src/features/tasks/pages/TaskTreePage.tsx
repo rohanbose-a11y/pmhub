@@ -162,12 +162,11 @@ function ActivityTaskPicker({
   const [query,    setQuery]    = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
-  // Show parentless tasks + tasks directly under a milestone, both dates required
+  // Show parentless tasks + tasks directly under a milestone
   const parentById = new Map(tasks.map((t) => [t.id, t]))
   const options = tasks.filter(
     (t) => !t.isMilestone && !t.isGroup &&
     (projectName === 'all' || t.project === projectName) &&
-    t.startDate !== null && t.dueDate !== null &&
     (t.parentTask === null || parentById.get(t.parentTask)?.isMilestone === true)
   ).filter((t) => !query || t.subject.toLowerCase().includes(query.toLowerCase()))
 

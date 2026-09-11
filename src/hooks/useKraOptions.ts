@@ -71,8 +71,8 @@ export function useKraOptions() {
     fetchActivityTypes()
       .then((names) => {
         if (cancelled) return
-        cache = names
-        setOptions(names)
+        cache = [...names].sort((a, b) => a.localeCompare(b))
+        setOptions(cache)
       })
       .catch(() => {
         if (cancelled) return

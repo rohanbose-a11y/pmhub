@@ -11,7 +11,7 @@ set -euo pipefail
 DEV_DIR="/var/www/dev-pm.sauramandala.org"
 DEV_BRANCH="master"
 
-PROD_DIR="/var/www/pmhub.sauramandala.org"
+PROD_DIR="/var/www/project.sauramandala.org"
 PROD_BRANCH="master"
 # ───────────────────────────────────────────────────────────────────────────
 

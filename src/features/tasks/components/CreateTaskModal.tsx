@@ -68,6 +68,7 @@ interface CreateTaskModalProps {
   submitLabel?: string
   pendingSubTasks?: Task[]
   onSubTasksChange?: (tasks: Task[]) => void
+  initialAssignees?: string[]
   onSubmit: (input: CreateTaskInput) => Promise<Task | null>
   onClose: () => void
   onSuccess: (task?: Task | null) => void
@@ -87,6 +88,7 @@ export function CreateTaskModal({
   submitLabel,
   pendingSubTasks: initialSubTasks,
   onSubTasksChange,
+  initialAssignees,
   onSubmit,
   onClose,
   onSuccess,
@@ -176,7 +178,7 @@ export function CreateTaskModal({
   const currentUser = useAuthStore((s) => s.user)
 
   // Assignees selected before creation — passed to taskApi.createTask as assignedTo
-  const [pendingAssignees,  setPendingAssignees]  = useState<string[]>([])
+  const [pendingAssignees,  setPendingAssignees]  = useState<string[]>(initialAssignees ?? [])
   const [showAssignPicker,  setShowAssignPicker]  = useState(false)
 
   // Focus title on mount
@@ -492,6 +494,14 @@ export function CreateTaskModal({
                     </div>
                   )}
 
+                  {/* Parent Task — read-only, hidden for milestones */}
+                  {!isMilestone && selectedParent && (
+                    <div className="flex items-center gap-2 px-4 py-2.5">
+                      <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0">{selectedParent.isMilestone ? 'Milestone' : 'Activity'}</span>
+                      <span className="text-[12.5px] text-slate-500 truncate">{selectedParent.subject}</span>
+                    </div>
+                  )}
+
                   {/* Dates */}
                   <div className="flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 transition-colors group">
                     <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0">Dates <span className="text-rose-500">*</span></span>
@@ -561,14 +571,6 @@ export function CreateTaskModal({
                     />
                   </div>
 
-                  {/* Parent Task — read-only, hidden for milestones */}
-                  {!isMilestone && selectedParent && (
-                    <div className="flex items-center gap-2 px-4 py-2.5">
-                      <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0">{selectedParent.isMilestone ? 'Milestone' : 'Activity'}</span>
-                      <span className="text-[12.5px] text-slate-500 truncate">{selectedParent.subject}</span>
-                    </div>
-                  )}
-
                 </div>
 
                 {/* Right column */}
@@ -596,8 +598,8 @@ export function CreateTaskModal({
                     </div>
                   </div>
 
-                  {/* Activity Type — hidden for milestones */}
-                  {!isMilestone && <div
+                  {/* Activity Type — hidden for milestones and activities */}
+                  {!isMilestone && !isGroup && <div
                     ref={actTypeTriggerRef}
                     className="flex items-center gap-2 px-4 py-2.5 hover:bg-slate-50 transition-colors group cursor-pointer"
                     onClick={openActTypeMenu}

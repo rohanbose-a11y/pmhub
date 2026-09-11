@@ -1088,6 +1088,7 @@ export function TaskTreePage() {
           initialProject={resolvedProjectName !== 'all' ? resolvedProjectName : undefined}
           initialParentTask={actFlowParent}
           initialIsGroup={true}
+          initialAssignees={[...new Set(actFlowTasks.flatMap((t) => t.assignedTo))]}
           pendingSubTasks={actFlowTasks}
           onSubTasksChange={setActFlowTasks}
           mode="activity"

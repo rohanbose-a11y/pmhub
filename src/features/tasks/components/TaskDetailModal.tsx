@@ -556,6 +556,8 @@ const saveLink = async () => {
 
   const removeDep = (depId: string) => {
     setDepTaskIds((prev) => prev.filter((id) => id !== depId))
+    const depTask = allTasks.find((t) => t.id === depId)
+    if (depTask) void onUpdate(depId, { subject: depTask.subject, status: depTask.status, priority: depTask.priority, parentTask: null })
   }
 
   const handleCommentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -830,20 +832,14 @@ const saveLink = async () => {
 
               {/* Task-type chip + short ID */}
               <div className="flex items-center gap-2 mb-4">
-                <button className="flex items-center gap-1 px-2 py-1 rounded-md bg-slate-100 text-slate-500 text-[11.5px] font-medium hover:bg-slate-200 transition-colors">
-                  Task
-                  <svg fill="none" viewBox="0 0 10 10" width="8" height="8">
-                    <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.3"/>
-                  </svg>
-                </button>
-                <span className="font-mono text-[11px] text-slate-400 select-all bg-slate-50 px-1.5 py-0.5 rounded">{shortId}</span>
                 {task.isMilestone ? (
-                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Milestone</span>
+                  <span className="text-[11.5px] font-semibold px-2 py-1 rounded-md bg-amber-50 text-amber-700">Milestone</span>
                 ) : task.isGroup ? (
-                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700">Activity</span>
+                  <span className="text-[11.5px] font-semibold px-2 py-1 rounded-md bg-indigo-50 text-indigo-600">Activity</span>
                 ) : (
-                  <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">Task</span>
+                  <span className="text-[11.5px] font-semibold px-2 py-1 rounded-md bg-slate-100 text-slate-500">Task</span>
                 )}
+                <span className="font-mono text-[11px] text-slate-400 select-all bg-slate-50 px-1.5 py-0.5 rounded">{shortId}</span>
                 {fetchError && (
                   <span className="text-[11px] text-amber-500 bg-amber-50 px-2 py-0.5 rounded">Some fields may be incomplete</span>
                 )}
@@ -1158,7 +1154,14 @@ const saveLink = async () => {
                       >
                         <option value="">Select a task…</option>
                         {allTasks
-                          .filter((t) => t.id !== task.id && !depTaskIds.includes(t.id) && (!localProject || t.project === localProject))
+                          .filter((t) =>
+                            t.id !== task.id &&
+                            !t.isMilestone &&
+                            !t.isGroup &&
+                            !depTaskIds.includes(t.id) &&
+                            t.project === (localProject || task.project) &&
+                            (!t.parentTask || t.parentTask === task.parentTask)
+                          )
                           .map((t) => (
                             <option key={t.id} value={t.id}>{t.subject}</option>
                           ))}

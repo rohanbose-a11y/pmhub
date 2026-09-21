@@ -141,7 +141,12 @@ export function CreateTaskModal({
   const [subTasks,       setSubTasks]       = useState<Task[]>(initialSubTasks ?? [])
   const [showSubPicker,  setShowSubPicker]  = useState(false)
   const [subPickerValue, setSubPickerValue] = useState('')
-  const updateSubTasks = (next: Task[]) => { setSubTasks(next); onSubTasksChange?.(next) }
+  const updateSubTasks = (next: Task[]) => {
+    setSubTasks(next)
+    onSubTasksChange?.(next)
+    if (initialSubTasks !== undefined)
+      setPendingAssignees([...new Set(next.flatMap((t) => t.assignedTo))])
+  }
 
   // ── Links ─────────────────────────────────────────────────────────────────
   const [pendingLinks, setPendingLinks] = useState<{ label: string; url: string }[]>([])
@@ -323,9 +328,8 @@ export function CreateTaskModal({
   const doSubmit = async (andAnother = false) => {
     if (!subject.trim()) { setTitleError(true); titleInputRef.current?.focus(); return }
     if (!startDate || !dueDate) { showDateToast(); return }
-    if (pendingAssignees.length === 0) { showToast('At least one assignee is required'); return }
-    // Activity flow: require at least 2 sub-tasks
-    if (initialSubTasks !== undefined && subTasks.length < 2) return
+    if (!isGroup && pendingAssignees.length === 0) { showToast('At least one assignee is required'); return }
+
     // Validate repeat: must have a start date if enabled
     if (repeatEnabled && !repeatStart) {
       setShowRepeatModal(true)
@@ -705,7 +709,12 @@ export function CreateTaskModal({
                         >
                           <option value="">Select a task…</option>
                           {tasks
-                            .filter((t) => !t.isMilestone && !t.isGroup && !subTasks.some((s) => s.id === t.id))
+                            .filter((t) =>
+                              !t.isMilestone &&
+                              !t.isGroup &&
+                              !subTasks.some((s) => s.id === t.id) &&
+                              t.parentTask === initialParentTask
+                            )
                             .map((t) => <option key={t.id} value={t.id}>{t.subject}</option>)}
                         </select>
                         <svg className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" viewBox="0 0 16 16">
@@ -760,9 +769,7 @@ export function CreateTaskModal({
               Cancel
             </button>
             <div className="flex items-center gap-2">
-              {initialSubTasks !== undefined && subTasks.length < 2 && (
-                <span className="text-[12px] text-rose-500">At least 2 tasks required</span>
-              )}
+
               {!isMilestone && !isGroup && !submitLabel && (
               <button
                 type="button"
@@ -775,7 +782,7 @@ export function CreateTaskModal({
               )}
               <button
                 type="button"
-                disabled={isSubmitting || (initialSubTasks !== undefined && subTasks.length < 2)}
+                disabled={isSubmitting}
                 onClick={() => void doSubmit(false)}
                 className="flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[13px] font-medium transition-all active:scale-[0.98] disabled:opacity-60 disabled:pointer-events-none"
               >

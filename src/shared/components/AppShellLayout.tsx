@@ -63,15 +63,6 @@ function projInitials(s: string) {
 
 // ─── Mock sidebar data ────────────────────────────────────────────────────────
 
-const MOCK_CHANNELS = [
-  { id: 'general',         name: 'general'         },
-  { id: 'announcements',   name: 'announcements'   },
-  { id: 'project-updates', name: 'project-updates' },
-]
-const MOCK_DMS = [
-  { id: 'admin', name: 'Team Admin',    online: true  },
-  { id: 'lead',  name: 'Project Lead',  online: false },
-]
 
 // ─── SectionHeader ────────────────────────────────────────────────────────────
 
@@ -219,8 +210,6 @@ export function AppShellLayout() {
   // ── Sidebar sections ───────────────────────────────────────────────────────
   const [dashboardCollapsed, setDashboardCollapsed] = useState(false)
   const [spacesCollapsed,   setSpacesCollapsed]   = useState(false)
-  const [channelsCollapsed, setChannelsCollapsed] = useState(false)
-  const [dmsCollapsed,      setDmsCollapsed]      = useState(false)
 
   useEffect(() => {
     if (username) loadForUser(username)
@@ -653,47 +642,6 @@ export function AppShellLayout() {
             <p style={{ fontSize: 11.5, color: '#9CA3AF', padding: '4px 10px' }}>No spaces yet</p>
           )}
 
-          {/* ─── Channels + DMs (hidden when collapsed) ─── */}
-          {sidebarOpen && (
-            <>
-              <div style={{ height: 1, background: '#F3F4F6', margin: '8px 0' }} />
-
-              <SectionHeader label="Channels" collapsed={channelsCollapsed} onToggle={() => setChannelsCollapsed((v) => !v)} />
-
-              {!channelsCollapsed && MOCK_CHANNELS.map((ch) => (
-                <Link key={ch.id} to="/channels" style={{ textDecoration: 'none' }}>
-                  <div
-                    style={{ display: 'flex', alignItems: 'center', gap: 6, height: 30, padding: '0 10px', borderRadius: 6, cursor: 'pointer', color: '#6B7280', transition: 'background 100ms' }}
-                    className="hover:bg-gray-50"
-                  >
-                    <span style={{ fontSize: 13, color: '#9CA3AF', flexShrink: 0 }}>#</span>
-                    <span style={{ fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ch.name}</span>
-                  </div>
-                </Link>
-              ))}
-
-              <div style={{ height: 1, background: '#F3F4F6', margin: '8px 0' }} />
-
-              <SectionHeader label="Direct Messages" collapsed={dmsCollapsed} onToggle={() => setDmsCollapsed((v) => !v)} />
-
-              {!dmsCollapsed && MOCK_DMS.map((dm) => (
-                <Link key={dm.id} to="/dm" style={{ textDecoration: 'none' }}>
-                  <div
-                    style={{ display: 'flex', alignItems: 'center', gap: 8, height: 30, padding: '0 10px', borderRadius: 6, cursor: 'pointer', color: '#6B7280', transition: 'background 100ms' }}
-                    className="hover:bg-gray-50"
-                  >
-                    <div style={{ position: 'relative', flexShrink: 0 }}>
-                      <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 8, fontWeight: 700, color: '#6B7280' }}>
-                        {dm.name.slice(0, 2).toUpperCase()}
-                      </div>
-                      <span style={{ position: 'absolute', bottom: -1, right: -1, width: 6, height: 6, borderRadius: '50%', background: dm.online ? '#22C55E' : '#9CA3AF', border: '1.5px solid white' }} />
-                    </div>
-                    <span style={{ fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{dm.name}</span>
-                  </div>
-                </Link>
-              ))}
-            </>
-          )}
 
         </nav>
 

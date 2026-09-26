@@ -32,6 +32,7 @@ export interface Task {
   assignedTo: string[]
   completedBy: string | null
   completedOn: string | null
+  taskUpdatedOn: string | null
   comments: TaskComment[]
   autoRepeat: string | null   // Auto Repeat document name, set by Frappe on the Task
 }

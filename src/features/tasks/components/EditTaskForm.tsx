@@ -609,14 +609,14 @@ export function EditTaskForm({
           initialStatus={pendingStatus}
           isSubmitting={false}
           onCancel={() => setIsStatusModalOpen(false)}
-          onConfirm={(newStatus, note) => {
+          onConfirm={(newStatus, note, completedOn) => {
             const noteHtml = `<p><strong>→ ${newStatus}:</strong> ${note}</p>`
             set('description', values.description ? `${values.description}${noteHtml}` : noteHtml)
             set('status', newStatus)
             set('progress', STATUS_PROGRESS[newStatus] ?? 0)
             if (newStatus === 'Completed') {
               set('completedBy', currentUser?.username || currentUser?.fullName || '')
-              set('completedOn', new Date().toISOString().slice(0, 10))
+              set('completedOn', completedOn || new Date().toISOString().slice(0, 10))
             }
             setIsStatusModalOpen(false)
           }}

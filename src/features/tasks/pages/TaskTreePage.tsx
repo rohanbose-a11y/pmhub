@@ -7,7 +7,8 @@ import { AvatarStack } from '../../../shared/components/UserAvatar'
 import { TaskDetailModal } from '../components/TaskDetailModal'
 import { AssignTaskModal } from '../components/AssignTaskModal'
 import { StatusChangeModal } from '../components/StatusChangeModal'
-import { TasksHeader } from '../components/TasksHeader'
+import { TasksHeader, EMPTY_FILTERS } from '../components/TasksHeader'
+import type { TaskFilters } from '../components/TasksHeader'
 import { CreateTaskModal } from '../components/CreateTaskModal'
 import type { AddNewType, Task, UpdateTaskInput, CreateTaskInput } from '../types/task.types'
 import { getTaskTypeDefaults } from '../types/task.types'
@@ -494,6 +495,7 @@ export function TaskTreePage() {
   const [myTasksOnly,   setMyTasksOnly]   = useState(false)
   const [projectFilter, setProjectFilter] = useState(() => searchParams.get('project') ?? 'all')
   const [showClosed,    setShowClosed]    = useState(true)
+  const [filters, setFilters] = useState<TaskFilters>(EMPTY_FILTERS)
   const [isCreateOpen,   setIsCreateOpen]   = useState(false)
   const [createType,     setCreateType]     = useState<AddNewType>('task')
   const [createParentId, setCreateParentId] = useState<string | undefined>(undefined)
@@ -523,8 +525,12 @@ export function TaskTreePage() {
     if (myTasksOnly && username) t = t.filter((tk) => myTaskIds.has(tk.id))
     if (resolvedProjectName !== 'all') t = t.filter((tk) => tk.project === resolvedProjectName)
     if (!showClosed) t = t.filter((tk) => isActive(tk.status))
+    if (filters.statuses.length > 0) t = t.filter((tk) => filters.statuses.includes(tk.status))
+    if (filters.dateFrom) t = t.filter((tk) => tk.dueDate && tk.dueDate >= filters.dateFrom)
+    if (filters.dateTo)   t = t.filter((tk) => tk.dueDate && tk.dueDate <= filters.dateTo)
+    if (filters.activityTypes.length > 0) t = t.filter((tk) => tk.activityType && filters.activityTypes.includes(tk.activityType))
     return t
-  }, [tasks, myTasksOnly, myTaskIds, resolvedProjectName, showClosed, username])
+  }, [tasks, myTasksOnly, myTaskIds, resolvedProjectName, showClosed, filters, username])
 
   // ── Group tasks by project ──────────────────────────────────────────────
 
@@ -747,7 +753,7 @@ export function TaskTreePage() {
   const [statusChangeTarget, setStatusChangeTarget] = useState<Task | null>(null)
   const [isStatusChanging,   setIsStatusChanging]   = useState(false)
 
-  const handleStatusChangeConfirm = async (newStatus: string, note: string) => {
+  const handleStatusChangeConfirm = async (newStatus: string, note: string, completedOn?: string) => {
     if (!statusChangeTarget) return
     setIsStatusChanging(true)
     const noteHtml = `<p><strong>→ ${newStatus}:</strong> ${note}</p>`
@@ -755,7 +761,7 @@ export function TaskTreePage() {
       subject: statusChangeTarget.subject, status: newStatus, priority: statusChangeTarget.priority,
       description: statusChangeTarget.description ? `${statusChangeTarget.description}${noteHtml}` : noteHtml,
       ...(newStatus === 'Completed'
-        ? { completedBy: username || userFullName, completedOn: new Date().toISOString().split('T')[0] }
+        ? { completedBy: username || userFullName, completedOn: completedOn || new Date().toISOString().split('T')[0] }
         : {}),
     })
     setIsStatusChanging(false)
@@ -783,6 +789,8 @@ export function TaskTreePage() {
         projects={projects}
         showClosed={showClosed}
         totalCount={totalCount}
+        filters={filters}
+        onFiltersChange={setFilters}
       />
 
       {/* ── Content ── */}

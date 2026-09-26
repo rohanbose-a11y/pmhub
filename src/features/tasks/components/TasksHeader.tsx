@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom'
 import type { Project } from '../../projects/types/project.types'
 import { useAuthStore } from '../../../store/authStore'
 import type { AddNewType } from '../types/task.types'
+import { useKraOptions } from '../../../hooks/useKraOptions'
 
 export type { AddNewType }  // re-export so existing imports from this file keep working
 
@@ -11,6 +12,15 @@ export type { AddNewType }  // re-export so existing imports from this file keep
 // with any recognised project role gets it. Falls back to Task-only if the
 // user has no recognised role.
 
+
+export interface TaskFilters {
+  statuses:      string[]
+  dateFrom:      string
+  dateTo:        string
+  activityTypes: string[]
+}
+
+export const EMPTY_FILTERS: TaskFilters = { statuses: [], dateFrom: '', dateTo: '', activityTypes: [] }
 
 interface TasksHeaderProps {
   projects:              Project[]
@@ -28,6 +38,8 @@ interface TasksHeaderProps {
   onAddNew:              (type: AddNewType) => void
   groupBy?:              'status' | 'none'
   onGroupByChange?:      (v: 'status' | 'none') => void
+  filters?:              TaskFilters
+  onFiltersChange?:      (f: TaskFilters) => void
 }
 
 const TAB_ITEMS = [
@@ -35,6 +47,8 @@ const TAB_ITEMS = [
   { label: 'Board', to: '/tasks/kanban' },
   { label: 'Gantt', to: '/tasks/gantt' },
 ]
+
+const STATUS_OPTIONS = ['Open', 'Working', 'Pending Review', 'Overdue', 'Completed', 'Cancelled']
 
 export function TasksHeader({
   projects,
@@ -52,8 +66,31 @@ export function TasksHeader({
   onAddNew,
   groupBy,
   onGroupByChange,
+  filters = EMPTY_FILTERS,
+  onFiltersChange,
 }: TasksHeaderProps) {
-  const [showGroupMenu, setShowGroupMenu] = useState(false)
+  const [showGroupMenu,    setShowGroupMenu]    = useState(false)
+  const [showFilterPanel,  setShowFilterPanel]  = useState(false)
+  const [statusSearch,     setStatusSearch]     = useState('')
+  const [showStatusList,   setShowStatusList]   = useState(false)
+  const [activitySearch,   setActivitySearch]   = useState('')
+  const [showActivityList, setShowActivityList] = useState(false)
+  const { options: activityTypes } = useKraOptions()
+
+  const filteredActivityTypes = activityTypes.filter((a) =>
+    !activitySearch || a.toLowerCase().includes(activitySearch.toLowerCase())
+  )
+
+  const isFiltered = filters.statuses.length > 0 || !!filters.dateFrom || !!filters.dateTo || filters.activityTypes.length > 0
+
+  const fmtChipDate = (d: string) =>
+    d ? new Date(d + 'T00:00:00').toLocaleDateString('en', { day: 'numeric', month: 'short' }) : '…'
+
+  const toggle = <K extends keyof Pick<TaskFilters, 'statuses' | 'activityTypes'>>(key: K, val: string) => {
+    if (!onFiltersChange) return
+    const cur = filters[key] as string[]
+    onFiltersChange({ ...filters, [key]: cur.includes(val) ? cur.filter((v) => v !== val) : [...cur, val] })
+  }
 
   const userRoles = useAuthStore((s) => s.user?.roles ?? [])
 
@@ -280,18 +317,226 @@ export function TasksHeader({
           </div>
         )}
 
-{/* ── Sort ── */}
-        <button type="button" aria-label="Sort tasks" style={{
-          display: 'flex', alignItems: 'center', gap: 5,
-          height: 30, padding: '0 10px', borderRadius: 7, cursor: 'pointer',
-          fontSize: 12, fontWeight: 400, color: '#6B7280',
-          background: 'white', border: '1px solid #E5E7EB',
-        }}>
-          <svg aria-hidden="true" fill="none" viewBox="0 0 14 14" width={11} height={11}>
-            <path d="M2 4h5M2 7h8M2 10h11" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5"/>
-          </svg>
-          Sort
-        </button>
+        {/* ── Filter ── */}
+        {onFiltersChange && (
+          <>
+            <div style={{ position: 'relative' }}>
+              <button
+                type="button"
+                aria-label="Filter tasks"
+                aria-expanded={showFilterPanel}
+                onClick={() => setShowFilterPanel((v) => !v)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  height: 28, padding: '0 10px', borderRadius: 7, cursor: 'pointer',
+                  fontSize: 12, fontWeight: isFiltered ? 600 : 400,
+                  background: isFiltered ? '#F3F0FF' : 'white',
+                  color:      isFiltered ? '#7B3FF2' : '#6B7280',
+                  border:     isFiltered ? '1px solid #C4B5FD' : '1px solid #E5E7EB',
+                  transition: 'all 120ms',
+                }}
+              >
+                <svg aria-hidden="true" fill="none" viewBox="0 0 14 14" width={11} height={11}>
+                  <path d="M2 4h10M4 7h6M6 10h2" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5"/>
+                </svg>
+                Filter
+                {isFiltered && (
+                  <span style={{ minWidth: 16, height: 16, borderRadius: 8, background: '#7B3FF2', color: 'white', fontSize: 9, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 4px' }}>
+                    {filters.statuses.length + filters.activityTypes.length + (filters.dateFrom || filters.dateTo ? 1 : 0)}
+                  </span>
+                )}
+              </button>
+
+              {showFilterPanel && (
+                <>
+                  <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => { setShowFilterPanel(false); setShowStatusList(false); setStatusSearch(''); setShowActivityList(false); setActivitySearch('') }} />
+                  <div style={{ position: 'absolute', top: 36, left: 0, zIndex: 50, background: 'white', border: '1px solid #E5E7EB', borderRadius: 12, boxShadow: '0 4px 24px rgba(0,0,0,.09), 0 1px 4px rgba(0,0,0,.05)', width: 660 }}>
+
+                    {/* Header */}
+                    <div style={{ display: 'flex', alignItems: 'center', padding: '11px 16px', borderBottom: '1px solid #F3F4F6' }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#111827', flex: 1 }}>Filter by</span>
+                      {isFiltered && (
+                        <button type="button"
+                          onClick={() => { onFiltersChange(EMPTY_FILTERS); setStatusSearch(''); setShowStatusList(false); setActivitySearch(''); setShowActivityList(false) }}
+                          style={{ fontSize: 11.5, color: '#6B7280', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 500, padding: '2px 6px', borderRadius: 5, transition: 'color 100ms' }}
+                          onMouseEnter={(e) => (e.currentTarget.style.color = '#EF4444')}
+                          onMouseLeave={(e) => (e.currentTarget.style.color = '#6B7280')}
+                        >
+                          Clear all
+                        </button>
+                      )}
+                    </div>
+
+                    {/* 3-column body */}
+                    <div style={{ display: 'flex', alignItems: 'stretch' }}>
+
+                      {/* Col 1 — Status */}
+                      <div style={{ flex: 1, padding: '14px 16px', minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                          <span style={{ fontSize: 10.5, fontWeight: 600, color: '#6B7280', letterSpacing: '0.04em' }}>Status</span>
+                          {filters.statuses.length > 0 && (
+                            <span style={{ fontSize: 10, fontWeight: 700, color: '#7B3FF2', background: '#F3F0FF', borderRadius: 999, padding: '0 6px', lineHeight: '18px' }}>{filters.statuses.length}</span>
+                          )}
+                        </div>
+                        {/* tag input */}
+                        <div
+                          style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center', minHeight: 36, padding: '4px 8px', borderRadius: 7, border: `1px solid ${showStatusList ? '#7B3FF2' : '#D1D5DB'}`, cursor: 'text', transition: 'border-color 150ms, box-shadow 150ms', boxShadow: showStatusList ? '0 0 0 3px rgba(123,63,242,.1)' : 'none' }}
+                          onClick={() => setShowStatusList(true)}
+                        >
+                          {filters.statuses.map((s) => (
+                            <span key={s} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, padding: '2px 4px 2px 7px', borderRadius: 5, background: '#F3F0FF', border: '1px solid #DDD6FE', fontSize: 11, fontWeight: 500, color: '#5B21B6', lineHeight: 1.4 }}>
+                              {s}
+                              <button type="button" onClick={(e) => { e.stopPropagation(); toggle('statuses', s) }}
+                                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14, borderRadius: 3, background: 'none', border: 'none', cursor: 'pointer', color: '#9B72F0', padding: 0, fontSize: 14, lineHeight: 1 }}
+                                onMouseEnter={(e) => (e.currentTarget.style.color = '#DC2626')}
+                                onMouseLeave={(e) => (e.currentTarget.style.color = '#9B72F0')}
+                              >×</button>
+                            </span>
+                          ))}
+                          <input
+                            type="text" value={statusSearch}
+                            onChange={(e) => { setStatusSearch(e.target.value); setShowStatusList(true) }}
+                            onFocus={() => setShowStatusList(true)}
+                            placeholder={filters.statuses.length === 0 ? 'Search…' : ''}
+                            style={{ flex: 1, minWidth: 50, border: 'none', outline: 'none', fontSize: 12, color: '#374151', background: 'transparent', height: 22, padding: 0 }}
+                          />
+                        </div>
+                        {showStatusList && (() => {
+                          const opts = STATUS_OPTIONS.filter((s) => !filters.statuses.includes(s) && (!statusSearch || s.toLowerCase().includes(statusSearch.toLowerCase())))
+                          return opts.length > 0 ? (
+                            <div style={{ marginTop: 5, paddingTop: 2, maxHeight: 148, overflowY: 'auto' }}>
+                              {opts.map((s) => (
+                                <button key={s} type="button"
+                                  onClick={() => { toggle('statuses', s); setStatusSearch('') }}
+                                  style={{ display: 'block', width: '100%', padding: '6px 8px', borderRadius: 6, textAlign: 'left', background: 'transparent', color: '#374151', fontSize: 12.5, border: 'none', cursor: 'pointer' }}
+                                  onMouseEnter={(e) => { e.currentTarget.style.background = '#F5F3FF'; e.currentTarget.style.color = '#5B21B6' }}
+                                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#374151' }}
+                                >
+                                  {s}
+                                </button>
+                              ))}
+                            </div>
+                          ) : null
+                        })()}
+                      </div>
+
+                      <div style={{ width: 1, background: '#F3F4F6', flexShrink: 0 }} />
+
+                      {/* Col 2 — Due Date */}
+                      <div style={{ flex: 1, padding: '14px 16px', minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                          <span style={{ fontSize: 10.5, fontWeight: 600, color: '#6B7280', letterSpacing: '0.04em' }}>Due Date</span>
+                          {(filters.dateFrom || filters.dateTo) && (
+                            <span style={{ fontSize: 10, fontWeight: 700, color: '#7B3FF2', background: '#F3F0FF', borderRadius: 999, padding: '0 6px', lineHeight: '18px' }}>set</span>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          {([['From', 'dateFrom'], ['To', 'dateTo']] as const).map(([label, key]) => (
+                            <div key={key}>
+                              <label style={{ fontSize: 11, color: '#9CA3AF', display: 'block', marginBottom: 4 }}>{label}</label>
+                              <input type="date" value={filters[key]}
+                                onChange={(e) => onFiltersChange({ ...filters, [key]: e.target.value })}
+                                style={{ width: '100%', height: 32, padding: '0 8px', borderRadius: 7, border: `1px solid ${filters[key] ? '#7B3FF2' : '#D1D5DB'}`, fontSize: 12, color: filters[key] ? '#5B21B6' : '#374151', background: 'white', outline: 'none', boxSizing: 'border-box', fontWeight: filters[key] ? 500 : 400 }}
+                                onFocus={(e) => { e.currentTarget.style.borderColor = '#7B3FF2'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(123,63,242,.1)' }}
+                                onBlur={(e) => { e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.borderColor = e.currentTarget.value ? '#7B3FF2' : '#D1D5DB' }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div style={{ width: 1, background: '#F3F4F6', flexShrink: 0 }} />
+
+                      {/* Col 3 — Activity Type */}
+                      <div style={{ flex: 1, padding: '14px 16px', minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                          <span style={{ fontSize: 10.5, fontWeight: 600, color: '#6B7280', letterSpacing: '0.04em' }}>Activity Type</span>
+                          {filters.activityTypes.length > 0 && (
+                            <span style={{ fontSize: 10, fontWeight: 700, color: '#7B3FF2', background: '#F3F0FF', borderRadius: 999, padding: '0 6px', lineHeight: '18px' }}>{filters.activityTypes.length}</span>
+                          )}
+                        </div>
+                        {/* tag input */}
+                        <div
+                          style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center', minHeight: 36, padding: '4px 8px', borderRadius: 7, border: `1px solid ${showActivityList ? '#7B3FF2' : '#D1D5DB'}`, cursor: 'text', transition: 'border-color 150ms, box-shadow 150ms', boxShadow: showActivityList ? '0 0 0 3px rgba(123,63,242,.1)' : 'none' }}
+                          onClick={() => setShowActivityList(true)}
+                        >
+                          {filters.activityTypes.map((a) => (
+                            <span key={a} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, padding: '2px 4px 2px 7px', borderRadius: 5, background: '#F3F0FF', border: '1px solid #DDD6FE', fontSize: 11, fontWeight: 500, color: '#5B21B6', lineHeight: 1.4, maxWidth: 120, overflow: 'hidden' }}>
+                              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a}</span>
+                              <button type="button" onClick={(e) => { e.stopPropagation(); toggle('activityTypes', a) }}
+                                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14, borderRadius: 3, background: 'none', border: 'none', cursor: 'pointer', color: '#9B72F0', padding: 0, fontSize: 14, lineHeight: 1, flexShrink: 0 }}
+                                onMouseEnter={(e) => (e.currentTarget.style.color = '#DC2626')}
+                                onMouseLeave={(e) => (e.currentTarget.style.color = '#9B72F0')}
+                              >×</button>
+                            </span>
+                          ))}
+                          <input
+                            type="text" value={activitySearch}
+                            onChange={(e) => { setActivitySearch(e.target.value); setShowActivityList(true) }}
+                            onFocus={() => setShowActivityList(true)}
+                            placeholder={filters.activityTypes.length === 0 ? 'Search…' : ''}
+                            style={{ flex: 1, minWidth: 50, border: 'none', outline: 'none', fontSize: 12, color: '#374151', background: 'transparent', height: 22, padding: 0 }}
+                          />
+                        </div>
+                        {showActivityList && (() => {
+                          const opts = filteredActivityTypes.filter((a) => !filters.activityTypes.includes(a))
+                          return activityTypes.length === 0 ? (
+                            <p style={{ fontSize: 12, color: '#9CA3AF', margin: '8px 0 0' }}>Loading…</p>
+                          ) : opts.length > 0 ? (
+                            <div style={{ marginTop: 5, paddingTop: 2, maxHeight: 148, overflowY: 'auto' }}>
+                              {opts.map((a) => (
+                                <button key={a} type="button"
+                                  onClick={() => { toggle('activityTypes', a); setActivitySearch('') }}
+                                  style={{ display: 'block', width: '100%', padding: '6px 8px', borderRadius: 6, textAlign: 'left', background: 'transparent', color: '#374151', fontSize: 12.5, border: 'none', cursor: 'pointer', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}
+                                  onMouseEnter={(e) => { e.currentTarget.style.background = '#F5F3FF'; e.currentTarget.style.color = '#5B21B6' }}
+                                  onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#374151' }}
+                                >
+                                  {a}
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <p style={{ fontSize: 12, color: '#9CA3AF', margin: '8px 0 0' }}>No matches</p>
+                          )
+                        })()}
+                      </div>
+
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Active filter chips */}
+            {filters.statuses.map((s) => (
+              <span key={s} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, height: 22, padding: '0 4px 0 8px', borderRadius: 999, background: '#F3F0FF', border: '1px solid #C4B5FD', fontSize: 11, fontWeight: 500, color: '#7B3FF2', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                {s}
+                <button type="button" onClick={() => toggle('statuses', s)} aria-label={`Remove ${s} filter`}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14, borderRadius: 999, background: 'none', border: 'none', cursor: 'pointer', color: '#9B72F0', padding: 0, fontSize: 14, lineHeight: 1 }}>
+                  ×
+                </button>
+              </span>
+            ))}
+            {(filters.dateFrom || filters.dateTo) && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, height: 22, padding: '0 4px 0 8px', borderRadius: 999, background: '#F3F0FF', border: '1px solid #C4B5FD', fontSize: 11, fontWeight: 500, color: '#7B3FF2', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                {fmtChipDate(filters.dateFrom)} – {fmtChipDate(filters.dateTo)}
+                <button type="button" onClick={() => onFiltersChange({ ...filters, dateFrom: '', dateTo: '' })} aria-label="Remove date filter"
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14, borderRadius: 999, background: 'none', border: 'none', cursor: 'pointer', color: '#9B72F0', padding: 0, fontSize: 14, lineHeight: 1 }}>
+                  ×
+                </button>
+              </span>
+            )}
+            {filters.activityTypes.map((a) => (
+              <span key={a} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, height: 22, padding: '0 4px 0 8px', borderRadius: 999, background: '#F3F0FF', border: '1px solid #C4B5FD', fontSize: 11, fontWeight: 500, color: '#7B3FF2', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                {a}
+                <button type="button" onClick={() => toggle('activityTypes', a)} aria-label={`Remove ${a} filter`}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 14, height: 14, borderRadius: 999, background: 'none', border: 'none', cursor: 'pointer', color: '#9B72F0', padding: 0, fontSize: 14, lineHeight: 1 }}>
+                  ×
+                </button>
+              </span>
+            ))}
+          </>
+        )}
 
         <div style={{ flex: 1 }} />
 

@@ -173,7 +173,7 @@ export function TasksPage() {
   const openCreateModal  = (type: AddNewType = 'task') => { resetTaskFeedback(); setCreateType(type); setIsCreateOpen(true) }
   const closeCreateModal = () => { if (createTaskStatus === 'submitting') return; setIsCreateOpen(false) }
 
-  const handleStatusChangeConfirm = async (newStatus: string, note: string) => {
+  const handleStatusChangeConfirm = async (newStatus: string, note: string, completedOn?: string) => {
     if (!statusChangeTarget) return
     setIsStatusChanging(true)
     const noteHtml = `<p><strong>→ ${newStatus}:</strong> ${note}</p>`
@@ -182,7 +182,7 @@ export function TasksPage() {
       status:      newStatus,
       priority:    statusChangeTarget.priority,
       description: statusChangeTarget.description ? `${statusChangeTarget.description}${noteHtml}` : noteHtml,
-      ...(newStatus === 'Completed' ? { completedBy: username || userFullName, completedOn: new Date().toISOString().split('T')[0] } : {}),
+      ...(newStatus === 'Completed' ? { completedBy: username || userFullName, completedOn: completedOn || new Date().toISOString().split('T')[0] } : {}),
     })
     setIsStatusChanging(false)
     if (ok) setStatusChangeTarget(null)

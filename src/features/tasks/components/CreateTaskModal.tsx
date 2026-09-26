@@ -140,7 +140,6 @@ export function CreateTaskModal({
   // ── Sub-tasks (activity creation flow) ───────────────────────────────────
   const [subTasks,       setSubTasks]       = useState<Task[]>(initialSubTasks ?? [])
   const [showSubPicker,  setShowSubPicker]  = useState(false)
-  const [subPickerValue, setSubPickerValue] = useState('')
   const updateSubTasks = (next: Task[]) => {
     setSubTasks(next)
     onSubTasksChange?.(next)
@@ -677,14 +676,34 @@ export function CreateTaskModal({
                 <div className="mt-5">
                   <div className="h-px bg-slate-100 mb-4"/>
                   <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
-                    Subtasks {subTasks.length > 0 && <span className="ml-1 font-normal text-slate-300 normal-case tracking-normal">({subTasks.length})</span>}
+                    Select Task {subTasks.length > 0 && <span className="ml-1 font-normal text-slate-300 normal-case tracking-normal">({subTasks.length})</span>}
                   </p>
                   {subTasks.length > 0 && (
                     <div className="mb-2.5 rounded-lg border border-slate-100 divide-y divide-slate-50 overflow-hidden">
                       {subTasks.map((t) => (
                         <div key={t.id} className="flex items-center gap-2.5 px-3 py-2 hover:bg-slate-50 transition-colors">
-                          <div className="w-1.5 h-1.5 rounded-full bg-slate-400 flex-shrink-0"/>
-                          <span className="flex-1 text-[12.5px] text-slate-700 truncate">{t.subject}</span>
+                          <div className="flex-1 min-w-0">
+                            <span className="block text-[12.5px] text-slate-700 truncate font-medium">{t.subject}</span>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              {t.assignedTo.length > 0 && (
+                                <div className="flex items-center -space-x-1">
+                                  {t.assignedTo.slice(0, 3).map((u) => (
+                                    <div key={u} title={u} className={`w-4 h-4 rounded-full flex items-center justify-center text-white text-[8px] font-bold ring-1 ring-white flex-shrink-0 ${avColor(u)}`}>
+                                      {initials(u)}
+                                    </div>
+                                  ))}
+                                  {t.assignedTo.length > 3 && <span className="text-[10px] text-slate-400 ml-1">+{t.assignedTo.length - 3}</span>}
+                                </div>
+                              )}
+                              {(t.startDate || t.dueDate) && (
+                                <span className="text-[11px] text-slate-400">
+                                  {t.startDate ? new Date(t.startDate).toLocaleDateString('en', { day: 'numeric', month: 'short' }) : '—'}
+                                  {' → '}
+                                  {t.dueDate ? new Date(t.dueDate).toLocaleDateString('en', { day: 'numeric', month: 'short' }) : '—'}
+                                </span>
+                              )}
+                            </div>
+                          </div>
                           <button
                             type="button"
                             aria-label="Remove"
@@ -699,52 +718,59 @@ export function CreateTaskModal({
                       ))}
                     </div>
                   )}
-                  {showSubPicker && (
-                    <div className="flex gap-2 mb-2">
-                      <div className="relative flex-1 min-w-0">
-                        <select
-                          className="w-full px-3.5 py-2 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 appearance-none pr-9 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-all"
-                          onChange={(e) => setSubPickerValue(e.target.value)}
-                          value={subPickerValue}
-                        >
-                          <option value="">Select a task…</option>
-                          {tasks
-                            .filter((t) =>
-                              !t.isMilestone &&
-                              !t.isGroup &&
-                              !subTasks.some((s) => s.id === t.id) &&
-                              t.parentTask === initialParentTask
-                            )
-                            .map((t) => <option key={t.id} value={t.id}>{t.subject}</option>)}
-                        </select>
-                        <svg className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" viewBox="0 0 16 16">
-                          <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
+                  {showSubPicker && (() => {
+                    const pickerTasks = tasks.filter((t) =>
+                      !t.isMilestone && !t.isGroup && !subTasks.some((s) => s.id === t.id) && t.parentTask === initialParentTask
+                    )
+                    return (
+                      <div className="mb-2 rounded-lg border border-slate-200 overflow-hidden">
+                        <div className="max-h-44 overflow-y-auto divide-y divide-slate-50">
+                          {pickerTasks.map((t) => (
+                            <button
+                              key={t.id}
+                              type="button"
+                              onClick={() => updateSubTasks([...subTasks, t])}
+                              className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-indigo-50 text-left transition-colors"
+                            >
+                              <div className="flex-1 min-w-0">
+                                <span className="block text-[12.5px] text-slate-700 truncate font-medium">{t.subject}</span>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  {t.assignedTo.length > 0 && (
+                                    <div className="flex items-center -space-x-1">
+                                      {t.assignedTo.slice(0, 3).map((u) => (
+                                        <div key={u} title={u} className={`w-4 h-4 rounded-full flex items-center justify-center text-white text-[8px] font-bold ring-1 ring-white flex-shrink-0 ${avColor(u)}`}>
+                                          {initials(u)}
+                                        </div>
+                                      ))}
+                                      {t.assignedTo.length > 3 && <span className="text-[10px] text-slate-400 ml-1">+{t.assignedTo.length - 3}</span>}
+                                    </div>
+                                  )}
+                                  {(t.startDate || t.dueDate) && (
+                                    <span className="text-[11px] text-slate-400">
+                                      {t.startDate ? new Date(t.startDate).toLocaleDateString('en', { day: 'numeric', month: 'short' }) : '—'}
+                                      {' → '}
+                                      {t.dueDate ? new Date(t.dueDate).toLocaleDateString('en', { day: 'numeric', month: 'short' }) : '—'}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </button>
+                          ))}
+                          {pickerTasks.length === 0 && (
+                            <div className="px-3 py-3 text-[12px] text-slate-400 text-center">No tasks available</div>
+                          )}
+                        </div>
+                        <div className="px-3 py-1.5 bg-slate-50 border-t border-slate-100 flex justify-end">
+                          <button type="button" onClick={() => setShowSubPicker(false)} className="text-[12px] text-slate-500 hover:text-slate-700 transition-colors">
+                            Close
+                          </button>
+                        </div>
                       </div>
-                      <button
-                        type="button"
-                        disabled={!subPickerValue}
-                        onClick={() => {
-                          const t = tasks.find((t) => t.id === subPickerValue)
-                          if (t) updateSubTasks([...subTasks, t])
-                          setShowSubPicker(false); setSubPickerValue('')
-                        }}
-                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-all disabled:opacity-40 disabled:pointer-events-none flex-shrink-0"
-                      >
-                        Add
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setShowSubPicker(false); setSubPickerValue('') }}
-                        className="px-3 py-2 text-sm text-slate-500 hover:text-slate-700 transition-colors flex-shrink-0"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  )}
+                    )
+                  })()}
                   <button
                     type="button"
-                    onClick={() => { setShowSubPicker(true); setSubPickerValue('') }}
+                    onClick={() => setShowSubPicker(true)}
                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] text-slate-500 border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-colors"
                   >
                     <svg fill="none" viewBox="0 0 12 12" width="11" height="11"><path d="M6 1v10M1 6h10" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5"/></svg>
@@ -1404,6 +1430,7 @@ export function CreateTaskModal({
           assignedTo: pendingAssignees,
           completedBy: null,
           completedOn: null,
+          taskUpdatedOn: null,
           comments: [],
         }}
         currentUser={currentUser?.username ?? ''}

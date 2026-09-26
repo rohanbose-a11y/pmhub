@@ -14,8 +14,9 @@
   "dependencies": {
     "@types/dompurify": "^3.0.5",
     "axios": "^1.14.0",
+    "caniuse-lite": "^1.0.30001812",
     "dompurify": "^3.4.13",
-    "quill": "^2.0.3",
+    "quill": "^2.0.2",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-router-dom": "^7.13.2",

@@ -5,7 +5,7 @@ interface StatusChangeModalProps {
   isSubmitting: boolean
   /** Pre-select a status when the modal opens (e.g. the status button the user just clicked). */
   initialStatus?: string
-  onConfirm: (newStatus: string, note: string) => void
+  onConfirm: (newStatus: string, note: string, completedOn?: string) => void
   onCancel: () => void
 }
 
@@ -18,9 +18,12 @@ const STATUSES = [
   { key: 'Cancelled',      dot: 'bg-rose-400',    ring: 'ring-rose-300',    bg: 'bg-rose-50',     text: 'text-rose-600'    },
 ]
 
+const todayStr = () => new Date().toISOString().split('T')[0]
+
 export function StatusChangeModal({ currentStatus, isSubmitting, initialStatus, onConfirm, onCancel }: StatusChangeModalProps) {
   const [selectedStatus, setSelectedStatus] = useState<string>(initialStatus ?? '')
   const [note, setNote] = useState('')
+  const [completedOn, setCompletedOn] = useState(todayStr())
   const trimmed = note.trim()
   const firedRef = useRef(false)
 
@@ -89,6 +92,21 @@ export function StatusChangeModal({ currentStatus, isSubmitting, initialStatus, 
             </div>
           </div>
 
+          {/* Completed On — only when Completed is selected */}
+          {selectedStatus === 'Completed' && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                Completed on
+              </label>
+              <input
+                type="date"
+                value={completedOn}
+                onChange={(e) => setCompletedOn(e.target.value)}
+                className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-100 focus:border-indigo-400 transition-all"
+              />
+            </div>
+          )}
+
           {/* Note */}
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1.5">
@@ -120,7 +138,7 @@ export function StatusChangeModal({ currentStatus, isSubmitting, initialStatus, 
               onClick={() => {
                 if (!canConfirm || firedRef.current) return
                 firedRef.current = true
-                onConfirm(selectedStatus, trimmed)
+                onConfirm(selectedStatus, trimmed, selectedStatus === 'Completed' ? completedOn : undefined)
               }}
               type="button"
             >

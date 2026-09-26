@@ -1,4 +1,6 @@
 import axios from 'axios'
+
+const today = () => new Date().toISOString().split('T')[0]
 import type { CreateTaskInput, Task, TaskComment, UpdateTaskInput } from '../features/tasks/types/task.types'
 import { httpClient } from './httpClient'
 
@@ -37,6 +39,7 @@ interface FrappeTaskRecord {
   _assign?: string | null
   completed_by?: string | null
   completed_on?: string | null
+  custom_task_updated_on?: string | null
   custom_comments?: string | null
   auto_repeat?: string | null
 }
@@ -73,6 +76,7 @@ const taskFieldsFull = [
   '_assign',
   'completed_by',
   'completed_on',
+  'custom_task_updated_on',
   'custom_comments',
   'auto_repeat',
 ]
@@ -146,6 +150,7 @@ const toTask = (record: FrappeTaskRecord): Task => ({
   assignedTo: parseAssign(record._assign),
   completedBy: record.completed_by || null,
   completedOn: record.completed_on || null,
+  taskUpdatedOn: record.custom_task_updated_on || null,
   comments: parseComments(record.custom_comments),
   autoRepeat: record.auto_repeat || null,
 })
@@ -183,6 +188,7 @@ const toPayload = (input: AnyTaskInput) => {
     ...('completedBy' in input && { completed_by: input.completedBy || undefined }),
     ...('completedOn' in input && { completed_on: input.completedOn || undefined }),
     ...('comments'    in input && { custom_comments: JSON.stringify(input.comments ?? []) }),
+    ...('status' in input && input.status === 'Completed' && { custom_task_updated_on: today() }),
   }
 }
 
@@ -204,6 +210,7 @@ const toPayloadCore = (input: AnyTaskInput) => {
     ...('completedBy' in input && input.completedBy && { completed_by: input.completedBy }),
     ...('completedOn' in input && input.completedOn && { completed_on: input.completedOn }),
     ...('comments'    in input && { custom_comments: JSON.stringify(input.comments ?? []) }),
+    ...('status' in input && input.status === 'Completed' && { custom_task_updated_on: today() }),
   }
 }
 
@@ -220,6 +227,7 @@ const toPayloadMinimal = (input: AnyTaskInput) => {
     ...('status'      in input && { status: input.status }),
     ...('completedBy' in input && input.completedBy && { completed_by: input.completedBy }),
     ...('completedOn' in input && input.completedOn && { completed_on: input.completedOn }),
+    ...('status' in input && input.status === 'Completed' && { custom_task_updated_on: today() }),
   }
 }
 
@@ -301,6 +309,7 @@ export const taskApi = {
     if (status === 'Completed') {
       if (completedBy) payload.completed_by = completedBy
       if (completedOn) payload.completed_on = completedOn
+      payload.custom_task_updated_on = today()
     }
     const { data } = await httpClient.put<FrappeDocumentResponse<FrappeTaskRecord>>(
       `/api/resource/Task/${encodeURIComponent(taskId)}`,
@@ -355,7 +364,7 @@ export const taskApi = {
       try {
         const { data } = await httpClient.post<FrappeDocumentResponse<FrappeTaskRecord>>(
           '/api/resource/Task',
-          { ...toPayload(normalizedInput), status: 'Open' },
+          { ...toPayload(normalizedInput), status: 'Open', custom_task_updated_on: today() },
         )
         return toTask(data.data)
       } catch (err) {
@@ -364,7 +373,7 @@ export const taskApi = {
         try {
           const { data } = await httpClient.post<FrappeDocumentResponse<FrappeTaskRecord>>(
             '/api/resource/Task',
-            { ...toPayloadCore(normalizedInput), status: 'Open' },
+            { ...toPayloadCore(normalizedInput), status: 'Open', custom_task_updated_on: today() },
           )
           return toTask(data.data)
         } catch (err2) {
@@ -372,7 +381,7 @@ export const taskApi = {
           console.warn('[taskApi] createTask core-payload 400/417 — retrying with minimal payload.', axios.isAxiosError(err2) ? err2.response?.data : err2)
           const { data } = await httpClient.post<FrappeDocumentResponse<FrappeTaskRecord>>(
             '/api/resource/Task',
-            { ...toPayloadMinimal(normalizedInput), status: 'Open' },
+            { ...toPayloadMinimal(normalizedInput), status: 'Open', custom_task_updated_on: today() },
           )
           const created = toTask(data.data)
           if (normalizedInput.activityType?.trim()) {

@@ -1,5 +1,5 @@
 const DEFAULT_API_BASE_URL = '/frappe'
-const DEFAULT_API_UPSTREAM = 'https://erp-dev.sauramandala.org'
+const DEFAULT_API_UPSTREAM = 'https://dev.sauramandala.org'
 
 export const env = {
   isDev: import.meta.env.DEV,

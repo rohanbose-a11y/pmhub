@@ -1,5 +1,6 @@
 import type { SVGProps } from 'react'
 import { NavLink } from 'react-router-dom'
+import { useAuthStore } from '../../store/authStore'
 
 function HomeIcon(props: SVGProps<SVGSVGElement>) {
   return (
@@ -63,13 +64,15 @@ export const appNavItems = [
 ] as const
 
 export function MobileBottomNav() {
+  const isAdmin = useAuthStore((s) => s.user?.username === 'Administrator')
+  const visibleItems = appNavItems.filter((item) => item.to !== '/projects' || isAdmin)
   return (
     <nav
       aria-label="Primary"
       className="fixed bottom-4 left-0 right-0 z-20 flex justify-center px-4 pointer-events-none"
     >
       <div className="pointer-events-auto w-full max-w-sm bg-white/85 backdrop-blur-xl rounded-2xl border border-gray-200/50 shadow-elevated px-2 py-1.5 flex items-center justify-around">
-        {appNavItems.map(({ to, label, Icon }) => (
+        {visibleItems.map(({ to, label, Icon }) => (
           <NavLink key={to} to={to}>
             {({ isActive }) => (
               <span

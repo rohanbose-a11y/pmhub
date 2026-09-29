@@ -1319,7 +1319,7 @@ const saveLink = async () => {
                 },
                 {
                   tab: 'activity' as const,
-                  label: 'Activity',
+                  label: 'Log',
                   badge: null,
                   icon: <svg fill="none" viewBox="0 0 14 14" width="15" height="15"><circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.3"/><path d="M7 4.5v3l2 1.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,
                 },
@@ -1358,7 +1358,7 @@ const saveLink = async () => {
               {/* Panel header */}
               <div className="flex-shrink-0 flex items-center gap-2 px-3 h-11 border-b border-slate-100">
                 <span className="flex-1 text-[13px] font-semibold text-slate-700">
-                  {commTab === 'repeat' ? 'Repeat' : commTab === 'comments' ? 'Comments' : commTab === 'attachments' ? 'Links' : commTab === 'meet' ? 'Meet' : 'Activity'}
+                  {commTab === 'repeat' ? 'Repeat' : commTab === 'comments' ? 'Comments' : commTab === 'attachments' ? 'Links' : commTab === 'meet' ? 'Meet' : 'Log'}
                 </span>
                 <button
                   type="button"
@@ -1386,7 +1386,7 @@ const saveLink = async () => {
                         : 'border-transparent text-slate-400 hover:text-slate-600',
                     ].join(' ')}
                   >
-                    {tab === 'repeat' ? 'Repeat' : tab === 'comments' ? 'Comments' : tab === 'attachments' ? 'Links' : tab === 'meet' ? 'Meet' : 'Activity'}
+                    {tab === 'repeat' ? 'Repeat' : tab === 'comments' ? 'Comments' : tab === 'attachments' ? 'Links' : tab === 'meet' ? 'Meet' : 'Log'}
                     {tab === 'repeat' && !!savedRepeat && (
                       <span className="ml-1 inline-flex w-1.5 h-1.5 rounded-full bg-indigo-500 align-middle -mt-0.5"/>
                     )}

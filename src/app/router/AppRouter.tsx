@@ -20,6 +20,7 @@ const TimesheetsPage        = lazy(() => import('../../features/timesheets/pages
 const EmployeeProfilePage   = lazy(() => import('../../features/employees/pages/EmployeeProfilePage').then(m => ({ default: m.EmployeeProfilePage })))
 const WhatsAppAdminPage     = lazy(() => import('../../features/whatsapp/pages/WhatsAppAdminPage').then(m => ({ default: m.WhatsAppAdminPage })))
 const CalendarPage          = lazy(() => import('../../features/calendar/pages/CalendarPage').then(m => ({ default: m.CalendarPage })))
+const NewProjectFormPage    = lazy(() => import('../../features/forms/pages/NewProjectFormPage').then(m => ({ default: m.NewProjectFormPage })))
 
 export function AppRouter() {
   const bootstrap = useAuthStore((state) => state.bootstrap)
@@ -59,6 +60,7 @@ export function AppRouter() {
           <Route element={<Suspense fallback={<PageLoader label="Loading…" />}><EmployeeProfilePage /></Suspense>} path="/employees/profile" />
           <Route element={<Suspense fallback={<PageLoader label="Loading…" />}><WhatsAppAdminPage /></Suspense>} path="/whatsapp" />
           <Route element={<Suspense fallback={<PageLoader label="Loading…" />}><CalendarPage /></Suspense>} path="/calendar" />
+          <Route element={<Suspense fallback={<PageLoader label="Loading…" />}><NewProjectFormPage /></Suspense>} path="/forms/new-project" />
         </Route>
       </Route>
 

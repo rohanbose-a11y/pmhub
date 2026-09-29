@@ -530,19 +530,21 @@ export function AppShellLayout() {
           {/* ─── Divider ─── */}
           <div style={{ height: 1, background: '#F3F4F6', margin: '8px 0' }} />
 
-          <NavLink to="/projects" style={{ textDecoration: 'none' }}>
-            {({ isActive }) => (
-              <div style={navItem(isActive)} title={sidebarOpen ? undefined : 'Projects'}>
-                <svg fill="none" viewBox="0 0 24 24" width={16} height={16} style={{ flexShrink: 0 }}>
-                  <rect x="3.5" y="4.5" width="7" height="7" rx="2" stroke="currentColor" strokeWidth="1.6"/>
-                  <rect x="13.5" y="4.5" width="7" height="7" rx="2" stroke="currentColor" strokeWidth="1.6"/>
-                  <rect x="3.5" y="14.5" width="7" height="7" rx="2" stroke="currentColor" strokeWidth="1.6"/>
-                  <path d="M14 18h6.5M14 15.5h4.5M14 20.5h3" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6"/>
-                </svg>
-                {sidebarOpen && <span style={{ fontSize: 13, fontWeight: isActive ? 600 : 400 }}>Projects</span>}
-              </div>
-            )}
-          </NavLink>
+          {user?.username === 'Administrator' && (
+            <NavLink to="/projects" style={{ textDecoration: 'none' }}>
+              {({ isActive }) => (
+                <div style={navItem(isActive)} title={sidebarOpen ? undefined : 'Projects'}>
+                  <svg fill="none" viewBox="0 0 24 24" width={16} height={16} style={{ flexShrink: 0 }}>
+                    <rect x="3.5" y="4.5" width="7" height="7" rx="2" stroke="currentColor" strokeWidth="1.6"/>
+                    <rect x="13.5" y="4.5" width="7" height="7" rx="2" stroke="currentColor" strokeWidth="1.6"/>
+                    <rect x="3.5" y="14.5" width="7" height="7" rx="2" stroke="currentColor" strokeWidth="1.6"/>
+                    <path d="M14 18h6.5M14 15.5h4.5M14 20.5h3" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6"/>
+                  </svg>
+                  {sidebarOpen && <span style={{ fontSize: 13, fontWeight: isActive ? 600 : 400 }}>Projects</span>}
+                </div>
+              )}
+            </NavLink>
+          )}
 
           <NavLink to="/timesheets" style={{ textDecoration: 'none' }}>
             {({ isActive }) => (
@@ -589,6 +591,18 @@ export function AppShellLayout() {
               )}
             </NavLink>
           )}
+
+          <NavLink to="/forms/new-project" style={{ textDecoration: 'none' }}>
+            {({ isActive }) => (
+              <div style={navItem(isActive)} title={sidebarOpen ? undefined : 'Create New Project'}>
+                <svg fill="none" viewBox="0 0 24 24" width={16} height={16} style={{ flexShrink: 0 }}>
+                  <rect x="4" y="4" width="16" height="16" rx="3" stroke="currentColor" strokeWidth="1.6"/>
+                  <path d="M12 8v8M8 12h8" stroke="currentColor" strokeLinecap="round" strokeWidth="1.6"/>
+                </svg>
+                {sidebarOpen && <span style={{ fontSize: 13, fontWeight: isActive ? 600 : 400 }}>Create New Project</span>}
+              </div>
+            )}
+          </NavLink>
 
           {/* ─── Divider ─── */}
           <div style={{ height: 1, background: '#F3F4F6', margin: '8px 0' }} />

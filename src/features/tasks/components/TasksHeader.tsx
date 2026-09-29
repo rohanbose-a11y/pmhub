@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import type { Project } from '../../projects/types/project.types'
+import { ProjectInfoDrawer } from '../../projects/components/ProjectInfoDrawer'
 import { useAuthStore } from '../../../store/authStore'
 import type { AddNewType } from '../types/task.types'
 import { useKraOptions } from '../../../hooks/useKraOptions'
@@ -75,6 +76,7 @@ export function TasksHeader({
   const [showStatusList,   setShowStatusList]   = useState(false)
   const [activitySearch,   setActivitySearch]   = useState('')
   const [showActivityList, setShowActivityList] = useState(false)
+  const [infoSlug,         setInfoSlug]         = useState<string | null>(null)
   const { options: activityTypes } = useKraOptions()
 
   const filteredActivityTypes = activityTypes.filter((a) =>
@@ -146,14 +148,35 @@ export function TasksHeader({
 
         {selectedProject ? (
           /* Projects > {Project} */
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: 5,
-            padding: '3px 10px', borderRadius: 999,
-            background: '#F3F0FF', border: '1px solid #DDD6FE',
-            fontSize: 12.5, fontWeight: 700, color: '#7B3FF2',
-          }}>
-            {selectedProject.displayName}
-          </span>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '3px 10px', borderRadius: 999,
+              background: '#F3F0FF', border: '1px solid #DDD6FE',
+              fontSize: 12.5, fontWeight: 700, color: '#7B3FF2',
+            }}>
+              {selectedProject.displayName}
+            </span>
+            <button
+              type="button"
+              onClick={() => setInfoSlug(selectedProject.slug)}
+              title="Project details"
+              aria-label="Show project details"
+              style={{
+                width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                borderRadius: 999, background: 'none', border: 'none', cursor: 'pointer',
+                color: '#7B3FF2', opacity: 0.7, transition: 'all 120ms', flexShrink: 0,
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = '#F3F0FF'; e.currentTarget.style.opacity = '1' }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; e.currentTarget.style.opacity = '0.7' }}
+            >
+              <svg fill="none" viewBox="0 0 16 16" width={13} height={13}>
+                <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.4"/>
+                <path d="M8 7.2v3.2" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5"/>
+                <circle cx="8" cy="5" r="0.9" fill="currentColor"/>
+              </svg>
+            </button>
+          </div>
         ) : (
           /* Projects > All Tasks */
           <span style={{ fontSize: 13, fontWeight: 700, color: '#111827', padding: '4px 6px' }}>
@@ -602,6 +625,10 @@ export function TasksHeader({
           </button>
         )}
       </div>
+
+      {infoSlug && selectedProject && infoSlug === selectedProject.slug && (
+        <ProjectInfoDrawer project={selectedProject} onClose={() => setInfoSlug(null)} />
+      )}
     </>
   )
 }

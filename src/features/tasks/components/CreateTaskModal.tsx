@@ -178,7 +178,7 @@ export function CreateTaskModal({
   const engDaysInputRef    = useRef<HTMLInputElement>(null)
   const titleInputRef      = useRef<HTMLInputElement>(null)
 
-  const { options: kraOptions } = useKraOptions()
+  const { options: kraOptions } = useKraOptions(projects.find((p) => p.name === project)?.department)
   const currentUser = useAuthStore((s) => s.user)
 
   // Assignees selected before creation — passed to taskApi.createTask as assignedTo

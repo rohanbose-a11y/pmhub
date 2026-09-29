@@ -8,6 +8,7 @@ export interface Project {
   expectedStartDate: string | null
   expectedEndDate: string | null
   owner?: string | null
+  department?: string | null
   members?: string[]
   updatedAt?: string | null
   notes?: string | null

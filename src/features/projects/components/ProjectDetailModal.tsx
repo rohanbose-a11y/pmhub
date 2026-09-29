@@ -468,6 +468,14 @@ const toggleMember = async (user: UserOption) => {
                 )}
               </div>
 
+              {/* Department */}
+              {project.department && (
+                <div className="flex items-center gap-2 px-6 py-2.5">
+                  <span className="text-[11.5px] text-slate-400 w-28 flex-shrink-0">Department</span>
+                  <span className="text-[12.5px] text-slate-700">{project.department}</span>
+                </div>
+              )}
+
               {/* Notes */}
               {liveNotes && (
                 <div className="flex items-start gap-2 px-6 py-2.5">

@@ -136,7 +136,6 @@ export function EditTaskForm({
   onCancel,
   onSuccess,
 }: EditTaskFormProps) {
-  const { options: kraOptions, loading: kraLoading } = useKraOptions()
   const currentUser = useAuthStore((s) => s.user)
 
   const [values, setValues] = useState<UpdateTaskInput>({
@@ -161,6 +160,9 @@ export function EditTaskForm({
     completedBy: task.completedBy ?? '',
     completedOn: task.completedOn ?? '',
   })
+  const { options: kraOptions, loading: kraLoading } = useKraOptions(
+    projects.find((p) => p.name === values.project)?.department,
+  )
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({})
   const [toast,    setToast]    = useState('')
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null)

@@ -77,8 +77,10 @@ export function CreateTaskForm({
   onCancel,
   onSuccess,
 }: CreateTaskFormProps) {
-  const { options: kraOptions, loading: kraLoading } = useKraOptions()
   const [values, setValues] = useState<CreateTaskFormValues>(() => getInitialValues(projects))
+  const { options: kraOptions, loading: kraLoading } = useKraOptions(
+    projects.find((p) => p.name === values.project)?.department,
+  )
   const [fieldErrors, setFieldErrors] = useState<CreateTaskFieldErrors>({})
   const [editorKey, setEditorKey] = useState(0)
   const [depTaskIds, setDepTaskIds] = useState<string[]>([])

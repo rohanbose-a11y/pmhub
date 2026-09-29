@@ -13,6 +13,7 @@ interface FrappeProjectRecord {
   expected_start_date?: string | null
   expected_end_date?: string | null
   owner?: string | null
+  department?: string | null
   modified?: string | null
   notes?: string | null
 }
@@ -39,6 +40,7 @@ const projectFields = [
   'expected_start_date',
   'expected_end_date',
   'owner',
+  'department',
   'modified',
   'notes',
 ]
@@ -78,6 +80,7 @@ const toProject = (record: FrappeProjectRecord): Project => ({
   expectedStartDate: record.expected_start_date || null,
   expectedEndDate: record.expected_end_date || null,
   owner: record.owner || null,
+  department: record.department || null,
   updatedAt: record.modified || null,
   notes: record.notes || null,
 })

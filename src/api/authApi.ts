@@ -112,7 +112,7 @@ export const authApi = {
       console.log('[getRoles] Strategy 0 response:', data.message, '→ app roles:', roles)
       if (roles.length > 0) return roles
     } catch (err) {
-      console.warn('[getRoles] Strategy 0 failed (Server Script missing or erroring):', err)
+      console.debug('[getRoles] Strategy 0 unavailable (Server Script not installed), falling back:', (err as { message?: string })?.message)
     }
 
     const tryRoleProfile = async (profileName: string | null | undefined): Promise<string[]> => {

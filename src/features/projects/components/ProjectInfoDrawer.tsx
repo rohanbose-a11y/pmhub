@@ -268,6 +268,14 @@ export function ProjectInfoDrawer({ project, onClose }: Props) {
               )}
             </div>
 
+            {/* Department */}
+            {project.department && (
+              <div className="flex items-center gap-3 px-5 py-3">
+                <span className="text-[11.5px] text-slate-400 w-24 flex-shrink-0">Department</span>
+                <span className="text-[12.5px] text-slate-700">{project.department}</span>
+              </div>
+            )}
+
             {/* About */}
             {notes && (
               <div className="flex items-start gap-3 px-5 py-3">

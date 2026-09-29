@@ -239,7 +239,9 @@ export function TaskDetailModal({
   const projectTriggerRef    = useRef<HTMLDivElement>(null)
   const projectDropRef       = useRef<HTMLDivElement>(null)
 
-  const { options: kraOptions } = useKraOptions()
+  const { options: kraOptions } = useKraOptions(
+    projects?.find((p) => p.name === localProject)?.department,
+  )
   const { user: currentUser } = useAuthStore()
 
   // Comments
@@ -1913,6 +1915,7 @@ const saveLink = async () => {
           ref={priorityDropRef}
           style={{ position: 'fixed', top: priorityDropPos.top, left: priorityDropPos.left, width: priorityDropPos.width, zIndex: 9999 }}
           className="bg-white border border-slate-200 rounded-lg shadow-lg py-1"
+          onClick={(e) => e.stopPropagation()}
         >
           {PRIORITY_CONFIG.map((p) => (
             <button
@@ -1938,6 +1941,7 @@ const saveLink = async () => {
           ref={actTypeDropRef}
           style={{ position: 'fixed', top: actTypeDropPos.top, left: actTypeDropPos.left, width: actTypeDropPos.width, zIndex: 9999 }}
           className="bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
         >
           {/* Search */}
           <div className="flex items-center gap-1.5 px-2.5 border-b border-slate-100">

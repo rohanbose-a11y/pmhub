@@ -22,9 +22,8 @@ async function fetchNames(): Promise<string[]> {
     )
     const names = (data.results ?? []).map((r) => r.value).filter(Boolean)
     if (names.length > 0) return names
-    console.warn('[useKraOptions] search_link returned 0 — trying REST for names')
-  } catch (err) {
-    console.warn('[useKraOptions] search_link failed:', err)
+  } catch {
+    // fall through to REST
   }
 
   // Fallback: REST with just name (no custom fields)
@@ -52,15 +51,11 @@ async function fetchDeptMap(): Promise<Map<string, string>> {
         const dept = r[field]
         if (r.name && dept) map.set(r.name, dept)
       }
-      if (map.size > 0) {
-        console.log(`[useKraOptions] department field is "${field}", found ${map.size} entries`)
-        return map
-      }
+      if (map.size > 0) return map
     } catch {
       // try next field name
     }
   }
-  console.warn('[useKraOptions] could not fetch department info — department filtering disabled')
   return new Map()
 }
 

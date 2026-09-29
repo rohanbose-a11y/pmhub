@@ -105,16 +105,6 @@ export const authApi = {
     const toAppRoles = (list: { role: string }[]) =>
       list.map((r) => r.role).filter((r) => r && !BASE_ROLES.has(r))
 
-    // Strategy 0 — Server Script endpoint (most reliable)
-    try {
-      const { data } = await httpClient.get<{ message?: string[] }>('/api/method/get_my_roles')
-      const roles = (data.message ?? []).filter((r) => r && !BASE_ROLES.has(r))
-      console.log('[getRoles] Strategy 0 response:', data.message, '→ app roles:', roles)
-      if (roles.length > 0) return roles
-    } catch (err) {
-      console.debug('[getRoles] Strategy 0 unavailable (Server Script not installed), falling back:', (err as { message?: string })?.message)
-    }
-
     const tryRoleProfile = async (profileName: string | null | undefined): Promise<string[]> => {
       if (!profileName?.trim()) return []
       try {

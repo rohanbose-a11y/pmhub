@@ -51,7 +51,7 @@ async function fetchDeptMap(): Promise<Map<string, string>> {
         const dept = r[field]
         if (r.name && dept) map.set(r.name, dept)
       }
-      if (map.size > 0) return map
+      return map
     } catch {
       // try next field name
     }

@@ -50,7 +50,7 @@ function projColor(s: string) {
   for (let i = 0; i < s.length; i++) h = s.charCodeAt(i) + ((h << 5) - h)
   return PROJ_PALETTE[Math.abs(h) % PROJ_PALETTE.length]
 }
-function projInitials(s: string) {
+function projInitials(s: string, max = 2) {
   return s
     .replace(/[-_]/g, ' ')
     .split(/\s+/)
@@ -58,7 +58,7 @@ function projInitials(s: string) {
     .map((p) => p[0])
     .join('')
     .toUpperCase()
-    .slice(0, 2)
+    .slice(0, max)
 }
 
 // ─── Mock sidebar data ────────────────────────────────────────────────────────
@@ -209,7 +209,23 @@ export function AppShellLayout() {
 
   // ── Sidebar sections ───────────────────────────────────────────────────────
   const [dashboardCollapsed, setDashboardCollapsed] = useState(false)
-  const [spacesCollapsed,   setSpacesCollapsed]   = useState(false)
+  const [companyCollapsed, setCompanyCollapsed] = useState<Record<string, boolean>>({})
+  // Projects grouped by company; no-company projects go last under "Other"
+  const groupedProjects = useMemo(() => {
+    const groups: Record<string, typeof projects> = {}
+    const other: typeof projects = []
+    projects.forEach((proj) => {
+      if (proj.company) {
+        if (!groups[proj.company]) groups[proj.company] = []
+        groups[proj.company].push(proj)
+      } else {
+        other.push(proj)
+      }
+    })
+    if (other.length > 0) groups['Other'] = other
+    return groups
+  }, [projects])
+
 
   useEffect(() => {
     if (username) loadForUser(username)
@@ -608,53 +624,99 @@ export function AppShellLayout() {
           <div style={{ height: 1, background: '#F3F4F6', margin: '8px 0' }} />
 
           {/* ─── PROJECTS ─── */}
-          {sidebarOpen && <SectionHeader label="Projects" collapsed={spacesCollapsed} onToggle={() => setSpacesCollapsed((v) => !v)} />}
-
-          {(!sidebarOpen || !spacesCollapsed) && projects.map((proj) => {
-            const count    = taskCountByProject[proj.name] ?? 0
-            const abbr     = projInitials(proj.displayName)
-            const isActive = activeProjectFilter === proj.slug
-            return (
-              <Link key={proj.name} to={`/tasks?project=${encodeURIComponent(proj.slug)}`} style={{ textDecoration: 'none' }}>
-                <div
-                  style={{
-                    display: 'flex', alignItems: 'center',
-                    gap: sidebarOpen ? 8 : 0,
-                    height: 30,
-                    padding: sidebarOpen ? '0 10px' : '0',
-                    justifyContent: sidebarOpen ? undefined : 'center',
-                    borderRadius: 6,
-                    cursor: 'pointer',
-                    color: isActive ? '#7B3FF2' : '#374151',
-                    background: isActive ? '#F3F0FF' : 'transparent',
-                    transition: 'background 100ms',
-                  }}
-                  className={isActive ? '' : 'hover:bg-gray-50'}
-                  title={sidebarOpen ? undefined : proj.displayName}
-                >
-                  <div style={{ width: 18, height: 18, borderRadius: 4, background: projColor(proj.name), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: 'white', flexShrink: 0 }}>
-                    {abbr}
-                  </div>
-                  {sidebarOpen && (
-                    <>
-                      <span style={{ fontSize: 12.5, fontWeight: isActive ? 600 : 400, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {proj.displayName}
-                      </span>
-                      {count > 0 && (
-                        <span style={{ fontSize: 10, fontWeight: 600, color: isActive ? '#7B3FF2' : '#9CA3AF', background: isActive ? '#EDE9FE' : '#F3F4F6', borderRadius: 999, padding: '1px 6px', flexShrink: 0 }}>
-                          {count}
+          {(() => {
+            const multiCompany = Object.keys(groupedProjects).length > 1
+            const renderProjectRow = (proj: typeof projects[number]) => {
+              const count    = taskCountByProject[proj.name] ?? 0
+              const abbr     = projInitials(proj.displayName)
+              const isActive = activeProjectFilter === proj.slug
+              return (
+                <Link key={proj.name} to={`/tasks?project=${encodeURIComponent(proj.slug)}`} style={{ textDecoration: 'none' }}>
+                  <div
+                    style={{
+                      display: 'flex', alignItems: 'center',
+                      gap: sidebarOpen ? 8 : 0,
+                      height: 30,
+                      padding: sidebarOpen ? '0 10px' : '0',
+                      justifyContent: sidebarOpen ? undefined : 'center',
+                      borderRadius: 6,
+                      cursor: 'pointer',
+                      color: isActive ? '#7B3FF2' : '#374151',
+                      background: isActive ? '#F3F0FF' : 'transparent',
+                      transition: 'background 100ms',
+                    }}
+                    className={isActive ? '' : 'hover:bg-gray-50'}
+                    title={sidebarOpen ? undefined : proj.displayName}
+                  >
+                    <div style={{ width: 18, height: 18, borderRadius: 4, background: projColor(proj.name), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: 'white', flexShrink: 0 }}>
+                      {abbr}
+                    </div>
+                    {sidebarOpen && (
+                      <>
+                        <span style={{ fontSize: 12.5, fontWeight: isActive ? 600 : 400, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {proj.displayName}
                         </span>
-                      )}
-                    </>
-                  )}
-                </div>
-              </Link>
-            )
-          })}
+                        {count > 0 && (
+                          <span style={{ fontSize: 10, fontWeight: 600, color: isActive ? '#7B3FF2' : '#9CA3AF', background: isActive ? '#EDE9FE' : '#F3F4F6', borderRadius: 999, padding: '1px 6px', flexShrink: 0 }}>
+                            {count}
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </Link>
+              )
+            }
 
-          {sidebarOpen && !spacesCollapsed && projects.length === 0 && (
-            <p style={{ fontSize: 11.5, color: '#9CA3AF', padding: '4px 10px' }}>No spaces yet</p>
-          )}
+            if (!multiCompany) {
+              // Flat list — same as before, single "Projects" header
+              const flatCollapsed = companyCollapsed['__projects__'] ?? false
+              return (
+                <>
+                  {sidebarOpen && (
+                    <SectionHeader
+                      label="Projects"
+                      collapsed={flatCollapsed}
+                      onToggle={() => setCompanyCollapsed((prev) => ({ ...prev, __projects__: !prev['__projects__'] }))}
+                    />
+                  )}
+                  {(!sidebarOpen || !flatCollapsed) && projects.map(renderProjectRow)}
+                  {sidebarOpen && !flatCollapsed && projects.length === 0 && (
+                    <p style={{ fontSize: 11.5, color: '#9CA3AF', padding: '4px 10px' }}>No spaces yet</p>
+                  )}
+                </>
+              )
+            }
+
+            // Grouped by company — outer "Projects" header + company sub-sections
+            const outerCollapsed = companyCollapsed['__projects__'] ?? false
+            return (
+              <>
+                {sidebarOpen && (
+                  <SectionHeader
+                    label="Projects"
+                    collapsed={outerCollapsed}
+                    onToggle={() => setCompanyCollapsed((prev) => ({ ...prev, __projects__: !prev['__projects__'] }))}
+                  />
+                )}
+                {(!sidebarOpen || !outerCollapsed) && Object.entries(groupedProjects).map(([company, companyProjects]) => {
+                  const isCollapsed = companyCollapsed[company] ?? false
+                  return (
+                    <div key={company}>
+                      {sidebarOpen && (
+                        <SectionHeader
+                          label={companyProjects[0]?.companyAbbr || projInitials(company, 4)}
+                          collapsed={isCollapsed}
+                          onToggle={() => setCompanyCollapsed((prev) => ({ ...prev, [company]: !prev[company] }))}
+                        />
+                      )}
+                      {(!sidebarOpen || !isCollapsed) && companyProjects.map(renderProjectRow)}
+                    </div>
+                  )
+                })}
+              </>
+            )
+          })()}
 
 
         </nav>

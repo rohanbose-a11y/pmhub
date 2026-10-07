@@ -9,6 +9,8 @@ export interface Project {
   expectedEndDate: string | null
   owner?: string | null
   department?: string | null
+  company?: string | null
+  companyAbbr?: string | null
   members?: string[]
   updatedAt?: string | null
   notes?: string | null
